@@ -210,8 +210,8 @@ export async function exportProjectToPdf(project: Project, plans: Plan[], conten
     }
   }
 
-  // After the finishes: the structural aggregates and their by-plan tables (no item schedules here).
-  writeBlocks(report, buildProjectStructuralPdfLayout(structural, x, { concrete: content.concrete, rebar: content.rebar }));
+  // After the finishes: concrete aggregates and Rebar item/level tables with plan context.
+  writeBlocks(report, buildProjectStructuralPdfLayout(structural, x, plans, { concrete: content.concrete, rebar: content.rebar }));
   if (!content.finishes && !(content.concrete && structural.concrete) && !(content.rebar && structural.rebar)) throw new Error('The selected content has nothing to export.');
 
   const bytes = await pdfDoc.save();

@@ -7,10 +7,11 @@
  */
 
 import { round } from './geometry';
+import type { Plan } from '../types';
 import { markLabel } from './structuralMarks';
 import type { ExportContext } from './exportLanguage';
 import { basisText, concreteStatusText, levelQuantity, levelSpecification, levelStatus, levelText, sheetConfigText } from './structuralExportText';
-import type { ProjectStructural, StructuralReport } from './structuralQuantities';
+import { buildRebarLevelRows, type ProjectStructural, type RebarLevelRow, type StructuralReport } from './structuralQuantities';
 
 export interface PdfTableRow {
   cells: string[];
@@ -173,15 +174,10 @@ function rebarBlocks(rebar: NonNullable<StructuralReport['rebar']>, x: ExportCon
   ];
 }
 
-// ---------- project report: compact, no item schedules ----------
+// ---------- project report ----------
 
-/**
- * The structural part of the project PDF: per domain ONE compact table with a total row - concrete
- * by type and grade, rebar by diameter (weights, with the Exact / Includes estimate status) - and,
- * for meshes, the physical sheets per sheet configuration (never one number over different sizes).
- * The item-by-item schedules are in the plan PDF and the Excel workbooks.
- */
-export function buildProjectStructuralPdfLayout(project: ProjectStructural, x: ExportContext, include: StructuralInclude = { concrete: true, rebar: true }): PdfBlock[] {
+/** Concrete remains grouped by type and grade; Rebar uses the existing plan item/level rows. */
+export function buildProjectStructuralPdfLayout(project: ProjectStructural, x: ExportContext, plans: Plan[], include: StructuralInclude = { concrete: true, rebar: true }): PdfBlock[] {
   const blocks: PdfBlock[] = [];
   const { t } = x;
   const fmt = (v: number | null, estimated = false) => (v === null ? DASH : `${estimated ? ESTIMATE_PREFIX : ''}${x.number(round(v, 2))}`);
@@ -216,46 +212,56 @@ export function buildProjectStructuralPdfLayout(project: ProjectStructural, x: E
     );
   }
 
-  if (project.rebar && include.rebar) {
-    const r = project.rebar;
-    const kg = t('units.kg');
-    const estimated = r.basis === 'estimated';
+  if (project.rebar && include.rebar) blocks.push(...projectRebarBlocks(plans, x));
+  return blocks;
+}
+
+/** Separate product tables keep mesh procurement quantities and manual bar lengths meaningful. */
+function projectRebarBlocks(plans: Plan[], x: ExportContext): PdfBlock[] {
+  const { t } = x;
+  const fmt = (v: number | null, estimated = false) => (v === null ? DASH : `${estimated ? ESTIMATE_PREFIX : ''}${x.number(round(v, 2))}`);
+  const kg = t('units.kg');
+  const m = t('units.m');
+  const rows = plans.flatMap((plan) => buildRebarLevelRows(plan).map((row) => ({ planId: plan.id, planName: plan.name, row })));
+  const blocks: PdfBlock[] = [];
+  for (const kind of ['mesh', 'bars'] as const) {
+    const items = rows.filter(({ row }) => row.kind === kind);
+    if (items.length === 0) continue;
+    const mesh = kind === 'mesh';
+    const commonHeaders = [t('exports.common.plan'), t('exports.structural.headers.page'), t('exports.structural.headers.type'), t('exports.structural.headers.mark')];
+    const headers = [
+      ...commonHeaders,
+      ...(mesh ? [t('exports.structural.headers.levelShort'), t('exports.structural.headers.specification'), t('exports.structural.headers.sheetsCount'), t('exports.structural.headers.sheetSize')]
+        : [t('exports.structural.headers.diameter'), t('rebar.barCount'), `${t('rebar.barLength')} (${m})`, `${t('rebar.totalLength')} (${m})`]),
+      t('exports.structural.headers.netWeight', { unit: kg }), t('exports.projectPdf.orderUnit', { unit: kg }), t('exports.structural.headers.status'),
+    ];
+    const calculated = items.filter(({ row }) => row.netWeightKg !== null && row.orderWeightKg !== null);
+    const estimatedCount = calculated.filter(({ row }) => row.estimated).length;
+    const basis = calculated.length === 0 ? null : estimatedCount === 0 ? 'exact' : estimatedCount === calculated.length ? 'estimated' : 'mixed';
+    // Missing levels of one mesh still represent one missing item; IDs are scoped to their plan.
+    const missing = new Set(items.filter(({ row }) => row.status !== 'ok').map(({ planId, row }) => JSON.stringify([planId, row.itemId]))).size;
+    const sum = (value: (row: RebarLevelRow) => number | null) => calculated.length === 0 ? null : calculated.reduce((total, { row }) => total + (value(row) ?? 0), 0);
     blocks.push(
-      { type: 'section', title: t('exports.structural.rebar') },
+      { type: 'section', title: `${t('exports.structural.rebar')} - ${t(mesh ? 'rebar.mesh' : 'rebar.bars')}` },
       {
-        type: 'table',
-        headers: ['Ø', t('exports.structural.headers.netWeight', { unit: kg }), t('exports.projectPdf.orderUnit', { unit: kg }), t('exports.structural.headers.status')],
-        weights: [10, 20, 20, 24],
+        type: 'table', headers,
+        weights: mesh ? [13, 5, 7, 11, 8, 23, 8, 16, 10, 10, 13] : [13, 5, 7, 11, 9, 9, 10, 10, 10, 10, 13],
         rows: [
-          ...r.rows.map((row) => {
-            const est = row.basis === 'estimated';
-            return { cells: [`${row.diameterMm}`, fmt(row.weightKg, est), fmt(row.orderWeightKg, est), basisText(row.basis, x)] };
-          }),
+          ...items.map(({ planName, row: d }) => ({ cells: [
+            planName, `${d.pageNumber}`, t(mesh ? 'rebar.mesh' : 'rebar.bars'), markLabel(d, t),
+            ...(mesh ? [levelText(d.level, x) || DASH, levelSpecification(d, x), levelQuantity(d, x), d.sheets?.count != null ? sheetConfigText(d.sheets.settings, x) : DASH]
+              : [fmt(d.parts[0].diameterMm), fmt(d.parts[0].barCount), fmt(d.parts[0].barLengthM), fmt(d.parts[0].netLengthM)]),
+            fmt(d.netWeightKg, d.estimated), fmt(d.orderWeightKg, d.estimated), levelStatus(d, x),
+          ] })),
           {
-            cells: [
-              t('rebar.summary.total'),
-              r.basis === null ? DASH : fmt(r.weightKg, estimated),
-              r.basis === null ? DASH : fmt(r.orderWeightKg, estimated),
-              [r.basis ? basisText(r.basis, x) : '', r.missingItemCount > 0 ? t('exports.structural.missingShort', { count: r.missingItemCount }) : ''].filter(Boolean).join(' · ') || DASH,
-            ],
-            bg: C_GRAND,
-            bold: true,
+            cells: ['', '', t('rebar.summary.total'), '', '', '', '', mesh ? '' : fmt(sum((d) => d.parts[0].netLengthM)),
+              fmt(sum((d) => d.netWeightKg), basis === 'estimated'), fmt(sum((d) => d.orderWeightKg), basis === 'estimated'),
+              [basis ? basisText(basis, x) : '', missing > 0 ? t('exports.structural.missingShort', { count: missing }) : ''].filter(Boolean).join(' · ') || DASH],
+            bg: C_GRAND, bold: true,
           },
         ],
       }
     );
-    // Sheets per configuration: different sheet sizes or overlaps are separate lines, never one total.
-    if (r.sheetGroups.length > 0) {
-      blocks.push(
-        { type: 'section', title: t('exports.structural.meshSheets') },
-        {
-          type: 'table',
-          headers: [t('exports.structural.headers.sheetSize'), t('exports.structural.headers.sheetsCount')],
-          weights: [30, 14],
-          rows: r.sheetGroups.map((g) => ({ cells: [sheetConfigText(g, x), `${g.sheets}`] })),
-        }
-      );
-    }
   }
   return blocks;
 }

@@ -1,6 +1,5 @@
 // Export Part B: the plan Excel (content selection, item-first Concrete and Rebar sheets), the project
-// Excel (same rows behind a Plan column) and the project PDF (compact aggregates, sheets per
-// configuration). Every structural sheet is DETAIL rows then ONE total row - no summary blocks.
+// Excel (same rows behind a Plan column) and the project PDF (Mesh levels and Straight Bars behind a Plan column). Every structural sheet is DETAIL rows then ONE total row - no summary blocks.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import ExcelJS from 'exceljs';
@@ -248,45 +247,107 @@ test('project Excel content: structural-only selection, structural-only project,
 
 type Table = Extract<ReturnType<typeof buildProjectStructuralPdfLayout>[number], { type: 'table' }>;
 
-test('project PDF: one compact table per domain with a total row, mixed sheet configurations stay separate, no obsolete wording', () => {
+test('project PDF: Mesh levels and Straight Bars items with plan context, procurement on each mesh, separate totals', () => {
   const a = plan('a', 'Plan A', [slab({ autoNumber: 1, grade: 'B30' }), slab({ autoNumber: 2, depthM: undefined })], [mesh({ autoNumber: 1, top: u(10, 0.15) }), bars({ autoNumber: 1 })]);
   const b = plan('b', 'Plan B', [slab({ autoNumber: 1, grade: 'B30', depthM: 0.3 })], [mesh({ autoNumber: 1, points: L_SHAPE }), mesh({ autoNumber: 2, sheets: { lengthM: 4, widthM: 2, overlapM: 0.5 } }), mesh({ autoNumber: 3 })]);
   const structural = buildProjectStructural([a, b]);
-  const blocks = buildProjectStructuralPdfLayout(structural, exportContext('en'));
-  assert.deepEqual(blocks.filter((x) => x.type === 'section').map((x) => (x as { title: string }).title), ['Concrete', 'Rebar', 'Mesh sheets']);
+  const blocks = buildProjectStructuralPdfLayout(structural, exportContext('en'), [a, b]);
+  assert.deepEqual(blocks.filter((x) => x.type === 'section').map((x) => (x as { title: string }).title), ['Concrete', 'Rebar - Mesh', 'Rebar - Bars']);
   assert.equal(blocks.filter((x) => x.type === 'note').length, 0);
-  const [concrete, rebar, sheets] = blocks.filter((x): x is Table => x.type === 'table');
-  for (const t of [concrete, rebar, sheets]) for (const r of t.rows) assert.equal(r.cells.length, t.headers.length);
-
-  // concrete: by type and grade, then a total; the missing element is counted, not zero
+  const [concrete, meshes, straight] = blocks.filter((x): x is Table => x.type === 'table');
+  for (const table of [concrete, meshes, straight]) {
+    assert.equal(table.weights.length, table.headers.length);
+    for (const r of table.rows) assert.equal(r.cells.length, table.headers.length);
+  }
+  // Concrete remains grouped by type and grade; missing data is still counted.
   assert.deepEqual(concrete.rows.map((r) => r.cells[0]), ['Slab', 'Slab', 'Total']);
   assert.equal(concrete.rows.at(-1)!.cells[5], 'Missing data: 1');
-  // rebar: by diameter + total with the Includes estimate status
-  assert.equal(rebar.rows.at(-1)!.cells[0], 'Total');
-  assert.equal(rebar.rows.at(-1)!.cells[3], 'Includes estimate');
-  assert.ok(rebar.headers.includes('Net weight (kg)'));
-  // mesh sheets per configuration: default 6.00 × 2.50 m · 80 cm = A: Bottom + Top (4 + 4) + B: Mesh 03 (4) = 12; custom 4 × 2 m, 50 cm: the 10 × 4 m zone needs 7 (2 m sheets along the long side, 4 m across)
-  assert.deepEqual(sheets.rows.map((r) => r.cells), [['6.00 × 2.50 m · 80 cm', '12'], ['4.00 × 2.00 m · 50 cm', '7']]);
-  assert.ok(!sheets.rows.some((r) => r.bold)); // no combined total over different configurations
-
+  assert.deepEqual(meshes.headers, ['Plan', 'Page', 'Type', 'Mark', 'Level', 'Specification', 'Sheets', 'Sheet size · overlap', 'Net weight (kg)', 'To order (kg)', 'Status']);
+  assert.equal(meshes.rows.length, 6); // five levels and their weight total
+  assert.deepEqual(meshes.rows[0].cells.slice(0, 8), ['Plan A', '1', 'Mesh', 'Mesh 01', 'Bottom', 'Ø12 @ 20 cm - Both directions', '4 sheets', '6.00 × 2.50 m · 80 cm']);
+  assert.deepEqual(meshes.rows[1].cells.slice(0, 8), ['Plan A', '1', 'Mesh', 'Mesh 01', 'Top', 'Ø10 @ 15 cm - Both directions', '4 sheets', '6.00 × 2.50 m · 80 cm']);
+  assert.deepEqual(meshes.rows[2].cells.slice(0, 5), ['Plan B', '1', 'Mesh', 'Mesh 01', 'Bottom']);
+  assert.deepEqual(meshes.rows[2].cells.slice(6, 8), ['-', '-']); // free polygon: no procurement count
+  assert.equal(meshes.rows[2].cells[10], 'Estimate');
+  assert.ok(meshes.rows[2].cells[8].startsWith('~ '));
+  assert.deepEqual(meshes.rows[3].cells.slice(6, 8), ['7 sheets', '4.00 × 2.00 m · 50 cm']);
+  assert.deepEqual(meshes.rows[4].cells.slice(6, 8), ['4 sheets', '6.00 × 2.50 m · 80 cm']);
+  const meshTotal = meshes.rows.at(-1)!;
+  assert.deepEqual(meshTotal.cells.slice(3, 8), ['', '', '', '', '']); // no total sheets or mesh lengths
+  assert.equal(meshTotal.cells[10], 'Includes estimate');
+  assert.ok(meshTotal.bold);
+  assert.deepEqual(straight.headers, ['Plan', 'Page', 'Type', 'Mark', 'Diameter (mm)', 'Number of bars', 'Length per bar (m)', 'Total length (m)', 'Net weight (kg)', 'To order (kg)', 'Status']);
+  assert.deepEqual(straight.rows[0].cells.slice(0, 8), ['Plan A', '1', 'Bars', 'Bars 01', '16', '10', '6', '60']);
+  assert.equal(straight.rows.length, 2);
+  assert.equal(straight.rows.at(-1)!.cells[7], '60');
+  assert.equal(straight.rows.at(-1)!.cells[10], 'Exact');
+  // Both product totals sum unrounded existing level weights; no quantities are lost.
+  const levels = [a, b].flatMap((p) => buildStructuralReport(p).rebar!.levels);
+  for (const [kind, table] of [['mesh', meshes], ['bars', straight]] as const) {
+    for (const [field, column] of [['netWeightKg', 8], ['orderWeightKg', 9]] as const) {
+      const expected = levels.filter((d) => d.kind === kind).reduce((total, d) => total + (d[field] ?? 0), 0);
+      assert.equal(table.rows.at(-1)!.cells[column], exportContext('en').number(Math.round(expected * 100) / 100));
+    }
+  }
   const printed = JSON.stringify(blocks);
-  assert.ok(!/Bar lines|layer/i.test(printed));
-  assert.ok(!/שורות זיון/.test(JSON.stringify(buildProjectStructuralPdfLayout(structural, exportContext('he')))));
-  const he = buildProjectStructuralPdfLayout(structural, exportContext('he'));
-  assert.equal((he[0] as { title: string }).title, 'בטון');
-  assert.equal((he.at(-2) as { title: string }).title, 'יריעות רשת');
+  assert.ok(!/Mesh sheets|Bar lines|layer|reinforcement length|order length/i.test(printed));
+  const he = buildProjectStructuralPdfLayout(structural, exportContext('he'), [a, b]);
+  assert.deepEqual(he.filter((b) => b.type === 'section').map((b) => (b as { title: string }).title), ['בטון', 'זיון - רשת', 'זיון - מוטות']);
+  assert.ok(!/יריעות רשת|שורות זיון/.test(JSON.stringify(he)));
+
 });
 
 test('project PDF selection: only the chosen domains; structural-only and estimate-only projects; no structural data gives nothing', () => {
   const a = plan('a', 'Plan A', [slab({ autoNumber: 1 })], [mesh({ autoNumber: 1, points: L_SHAPE })]);
   const structural = buildProjectStructural([a]);
   const x = exportContext('en');
-  const titles = (include: { concrete: boolean; rebar: boolean }) => buildProjectStructuralPdfLayout(structural, x, include).filter((b) => b.type === 'section').map((b) => (b as { title: string }).title);
+  const titles = (include: { concrete: boolean; rebar: boolean }) => buildProjectStructuralPdfLayout(structural, x, [a], include).filter((b) => b.type === 'section').map((b) => (b as { title: string }).title);
   assert.deepEqual(titles({ concrete: true, rebar: false }), ['Concrete']);
-  assert.deepEqual(titles({ concrete: false, rebar: true }), ['Rebar']); // an estimate-only mesh has no sheet group
+  assert.deepEqual(titles({ concrete: false, rebar: true }), ['Rebar - Mesh']); // only the Mesh product table
   assert.deepEqual(titles({ concrete: false, rebar: false }), []);
-  const rebar = buildProjectStructuralPdfLayout(structural, x).filter((b): b is Table => b.type === 'table')[1];
-  assert.equal(rebar.rows.at(-1)!.cells[3], 'Estimate');
-  assert.ok(rebar.rows.at(-1)!.cells[1].startsWith('~ '));
-  assert.deepEqual(buildProjectStructuralPdfLayout(buildProjectStructural([PLAN_A]), x), []);
+  const rebar = buildProjectStructuralPdfLayout(structural, x, [a]).filter((b): b is Table => b.type === 'table')[1];
+  assert.equal(rebar.rows.at(-1)!.cells[10], 'Estimate');
+  assert.ok(rebar.rows.at(-1)!.cells[8].startsWith('~ '));
+  assert.deepEqual(buildProjectStructuralPdfLayout(buildProjectStructural([PLAN_A]), x, [PLAN_A]), []);
+});
+
+
+test('project PDF: directional and legacy Mesh reuse level rows; missing items stay visible and excluded from separate totals', () => {
+  const a = plan('a', 'Plan A', [], [
+    mesh({ autoNumber: 1, mark: 'M-custom', markManual: true, pageNumber: 2, bottom: { mode: 'directional', long: { diameterMm: 12, spacingM: 0.2 }, short: { diameterMm: 10, spacingM: 0.15 } }, wastePercent: 10 }),
+    mesh({ id: 'missing', autoNumber: 2, bottom: u(0, 0), top: u(12, 0.2) }),
+    mesh({ autoNumber: 3, bottom: undefined, layers: [{ id: 'l1', diameterMm: 12, spacingM: 0.2, direction: 'long' }, { id: 'l2', diameterMm: 12, spacingM: 0.2, direction: 'short' }] }),
+    bars({ autoNumber: 1, count: 3, lengthM: 2.5, wastePercent: 20 }),
+    bars({ autoNumber: 2, diameterMm: 0 }),
+  ]);
+  const b = plan('b', 'Plan B', [], [mesh({ id: 'missing', autoNumber: 1, pageNumber: 3 })]); // no calibration
+  const x = exportContext('en');
+  const [meshes, straight] = buildProjectStructuralPdfLayout(buildProjectStructural([a, b]), x, [a, b]).filter((b): b is Table => b.type === 'table');
+  const dir = meshes.rows.find((r) => r.cells[3] === 'M-custom')!;
+  assert.equal(dir.cells[1], '2');
+  assert.equal(dir.cells[5], 'Long side Ø12 @ 20 | Short side Ø10 @ 15');
+  assert.equal(meshes.rows.filter((r) => r.cells[3] === 'M-custom').length, 1);
+  assert.equal(meshes.rows.find((r) => r.cells[3] === 'Mesh 03')!.cells[5], 'Ø12 @ 20 cm - Both directions');
+  assert.equal(meshes.rows.at(-1)!.cells[10], 'Exact · Missing data: 2'); // two bad levels of one item counted once
+  assert.deepEqual(straight.rows[0].cells.slice(5, 8), ['3', '2.5', '7.5']);
+  assert.equal(straight.rows.at(-1)!.cells[7], '7.5');
+  assert.equal(straight.rows.at(-1)!.cells[10], 'Exact · Missing data: 1');
+  for (const [kind, table] of [['mesh', meshes], ['bars', straight]] as const) {
+    const levels = [a, b].flatMap((p) => buildStructuralReport(p).rebar!.levels).filter((d) => d.kind === kind);
+    for (const [field, column] of [['netWeightKg', 8], ['orderWeightKg', 9]] as const) {
+      assert.equal(table.rows.at(-1)!.cells[column], x.number(Math.round(levels.reduce((n, d) => n + (d[field] ?? 0), 0) * 100) / 100));
+    }
+  }
+  const missingOnly = plan('c', 'Missing only', [], [mesh({ bottom: u(0, 0) }), bars({ diameterMm: 0 })]);
+  const missingTables = buildProjectStructuralPdfLayout(buildProjectStructural([missingOnly]), x, [missingOnly]).filter((b): b is Table => b.type === 'table');
+  for (const table of missingTables) {
+    assert.deepEqual(table.rows.at(-1)!.cells.slice(8, 11), ['-', '-', 'Missing data: 1']);
+  }
+  assert.equal(missingTables[1].rows.at(-1)!.cells[7], '-');
+  const barsOnly = plan('d', 'Bars only', [], [bars({ count: 0 })]);
+  const barsBlocks = buildProjectStructuralPdfLayout(buildProjectStructural([barsOnly]), x, [barsOnly]);
+  const zeroBars = barsBlocks.find((b): b is Table => b.type === 'table')!;
+  assert.deepEqual(zeroBars.rows[0].cells.slice(5, 10), ['0', '6', '0', '0', '0']);
+  assert.deepEqual(zeroBars.rows.at(-1)!.cells.slice(7, 11), ['0', '0', '0', 'Exact']);
+  assert.deepEqual(barsBlocks.filter((b) => b.type === 'section').map((b) => (b as { title: string }).title), ['Rebar - Bars']);
 });

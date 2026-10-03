@@ -195,7 +195,7 @@ test('a real project PDF page set is produced with the report writer, in both la
     const [hr, hb, lr, lb] = await Promise.all([embed('hebrew-400'), embed('hebrew-700'), embed('latin-400'), embed('latin-700')]);
     const x = exportContext(lang);
     const writer = new ReportWriter(doc, { regular: { hebrew: hr, latin: lr }, bold: { hebrew: hb, latin: lb } }, 'Project', x.today(), x);
-    writeBlocks(writer, buildProjectStructuralPdfLayout(buildProjectStructural([a]), x));
+    writeBlocks(writer, buildProjectStructuralPdfLayout(buildProjectStructural([a]), x, [a]));
     assert.ok(doc.getPageCount() >= 1);
     assert.ok((await doc.save()).length > 1000);
   }
@@ -212,7 +212,7 @@ test('every character the structural PDF layouts print has a glyph in the report
   const b = plan('b', 'Plan B', [el({})], [mesh([layer({ diameterMm: 12 })], { points: L_SHAPE })]);
   for (const lang of ['he', 'en'] as const) {
     const x = exportContext(lang);
-    const blocks = [...buildProjectStructuralPdfLayout(buildProjectStructural([a, b]), x), ...buildStructuralPdfLayout(buildStructuralReport(a), x)];
+    const blocks = [...buildProjectStructuralPdfLayout(buildProjectStructural([a, b]), x, [a, b]), ...buildStructuralPdfLayout(buildStructuralReport(a), x)];
     const printed = blocks.flatMap((blk) => (blk.type === 'section' ? [blk.title] : blk.type === 'note' ? [blk.text] : [...blk.headers, ...blk.rows.flatMap((r) => r.cells)]));
     for (const text of printed) for (const ch of text) assert.ok(covered(ch), `U+${ch.codePointAt(0)!.toString(16)} (${ch}) in "${text}" [${lang}]`);
   }
