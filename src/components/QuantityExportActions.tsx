@@ -8,7 +8,7 @@ import { exportQuantitiesToExcel } from '../lib/exportExcel';
 import { exportQuantitiesToPdf, getExportablePageNumbers } from '../lib/exportQuantitiesPdf';
 import { quantityExportDetails, trackedExport } from '../lib/analytics';
 import { notifyExportFailed } from '../lib/exportFailure';
-import { hasStructuralData, withStructuralPages } from '../lib/structuralPlan';
+import { withStructuralPages } from '../lib/structuralPlan';
 import { EXPORT_SECTIONS, availableContent, everything, hasAnyContent, type ExportContent } from '../lib/exportContent';
 import { useLanguage, useT } from '../i18n';
 
@@ -42,12 +42,14 @@ export default function QuantityExportActions({ variant, onPicked }: { variant: 
   if (!project) return null;
 
   const hasAreaMeasurements = (project.measurements ?? []).some((m) => m.tool === 'area' && m.areaKind);
-  // Concrete and rebar are exportable on their own: a plan with only those still has a report.
-  const canExport = summaries.length > 0 || hasAreaMeasurements || hasStructuralData(project);
   const exportablePages = getExportablePageNumbers(project);
   const available = availableContent(project, summaries.length > 0 || hasAreaMeasurements, exportablePages.length > 0);
   // The workbook has no plan drawing: only the three quantity domains.
   const excelAvailable: ExportContent = { ...available, plan: false };
+  // A button is actionable whenever its dialog has something to offer: the PDF can carry the plan pages
+  // (markups and measurements count) on their own; the workbook needs a quantity domain.
+  const canExportPdf = hasAnyContent(available);
+  const canExportExcel = hasAnyContent(excelAvailable);
   const surface = variant === 'menu' ? 'topbar_menu' : 'quantities_panel';
 
   const runExportExcel = async (pageNumbers: number[], content: ExportContent) => {
@@ -110,13 +112,13 @@ export default function QuantityExportActions({ variant, onPicked }: { variant: 
     <>
       {variant === 'menu' ? (
         <>
-          <button className="menu-item" onClick={handleExportExcel} disabled={!canExport || exportingExcel}>
+          <button className="menu-item" onClick={handleExportExcel} disabled={!canExportExcel || exportingExcel}>
             <span className="menu-check">
               <Icon name="sheet" size={13} />
             </span>
             {exportingExcel ? t('common.exporting') : t('quantityExport.excelMenu')}
           </button>
-          <button className="menu-item" onClick={handleExportPdf} disabled={!canExport || exportingPdf}>
+          <button className="menu-item" onClick={handleExportPdf} disabled={!canExportPdf || exportingPdf}>
             <span className="menu-check">
               <Icon name="file" size={13} />
             </span>
@@ -125,11 +127,11 @@ export default function QuantityExportActions({ variant, onPicked }: { variant: 
         </>
       ) : (
         <>
-          <button className="btn-secondary small" onClick={handleExportPdf} disabled={!canExport || exportingPdf}>
+          <button className="btn-secondary small" onClick={handleExportPdf} disabled={!canExportPdf || exportingPdf}>
             <Icon name="file" />
             {exportingPdf ? t('common.exporting') : t('quantityExport.pdfButton')}
           </button>
-          <button className="btn-primary small" onClick={handleExportExcel} disabled={!canExport || exportingExcel}>
+          <button className="btn-primary small" onClick={handleExportExcel} disabled={!canExportExcel || exportingExcel}>
             <Icon name="sheet" />
             {exportingExcel ? t('common.exporting') : t('quantityExport.excelButton')}
           </button>
