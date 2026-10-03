@@ -1,12 +1,11 @@
 import type { RebarItem, RebarMesh } from '../types/structural';
 import { polygonCentroid } from '../lib/geometry';
-import { meshLevels, specNotation } from '../lib/rebarMesh';
 import { labelDirection } from '../lib/textDirection';
 import { markLabel } from '../lib/structuralMarks';
+import { REBAR_COLOR, rebarZoneRows } from '../lib/structuralOverlay';
 import { useLanguage, useT } from '../i18n';
 
-/** One colour for every rebar zone: a rust orange, apart from the room and concrete colours. */
-export const REBAR_COLOR = '#c2410c';
+export { REBAR_COLOR };
 
 /**
  * Rebar mesh zones of the page on screen: a lightweight dotted outline with a faint tint and a
@@ -15,33 +14,6 @@ export const REBAR_COLOR = '#c2410c';
  * B / T tag. Individual bars are never drawn. Purely visual and not interactive: selecting happens through the
  * viewer's click handler, in the Rebar tab only. Manual bars have no shape, so no overlay.
  */
-type T = ReturnType<typeof useT>;
-
-/** Keeps a bar notation (`Ø12 @ 20`) reading left-to-right inside a right-to-left line, so its numbers do not reorder. */
-const ltr = (text: string) => `\u2066${text}\u2069`;
-
-/** One line per level: `Bottom: Ø12 @ 20 — 2 directions` or `Top: Long Ø12@20 | Short Ø10@15`. Levels with nothing entered yet have no line. */
-function levelLines(mesh: RebarMesh, t: T): { tag: string; text: string }[] {
-  const out: { tag: string; text: string }[] = [];
-  for (const { level, reinforcement: r } of meshLevels(mesh)) {
-    const word = t(level === 'bottom' ? 'rebar.overlay.bottom' : 'rebar.overlay.top');
-    const tag = t(level === 'bottom' ? 'rebar.overlay.bottomShort' : 'rebar.overlay.topShort');
-    let body: string | null;
-    if (r.mode === 'uniform') {
-      const n = specNotation(r.spec);
-      body = n ? `${ltr(n)} - ${t('rebar.overlay.both')}` : null;
-    } else {
-      const parts = [
-        specNotation(r.long) && `${t('rebar.overlay.long')} ${ltr(specNotation(r.long)!.replace(' @ ', '@'))}`,
-        specNotation(r.short) && `${t('rebar.overlay.short')} ${ltr(specNotation(r.short)!.replace(' @ ', '@'))}`,
-      ].filter(Boolean);
-      body = parts.length > 0 ? parts.join(' | ') : null;
-    }
-    out.push({ tag, text: body ? `${word}: ${body}` : `${word}:` });
-  }
-  return out;
-}
-
 export default function RebarZones({
   items,
   selectedId,
@@ -66,13 +38,11 @@ export default function RebarZones({
         const c = polygonCentroid(m.points);
         const mark = markLabel(m, t);
         const size = 10.5 / zoom;
-        const lines = levelLines(m, t);
         // A zone narrower than about 130 screen pixels cannot hold the full lines: show a B / T tag.
         const xs = m.points.map((p) => p.x);
         const widthPx = (Math.max(...xs) - Math.min(...xs)) * zoom;
         const compact = widthPx < 130;
-        const body = compact ? [lines.map((l) => l.tag).join('+')].filter(Boolean) : lines.map((l) => l.text);
-        const rows = [mark, ...body];
+        const rows = rebarZoneRows(m, t, compact);
         const lineH = size * 1.2;
         const top = c.y - ((rows.length - 1) * lineH) / 2;
         const halo = { paintOrder: 'stroke', stroke: '#fff', strokeWidth: 3 / zoom, strokeLinejoin: 'round' as const };

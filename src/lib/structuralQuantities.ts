@@ -16,6 +16,7 @@ import type { Plan } from '../types';
 import type { ConcreteKind, RebarLevel } from '../types/structural';
 import { calculateConcrete, type ConcreteStatus } from './concrete';
 import { calculateRebar, incompleteSpecCount, type RebarLayerCalc, type RebarStatus } from './rebar';
+import { calculateMeshSheets, type MeshSheetsResult, type ResolvedSheetSettings } from './meshSheets';
 import { round } from './geometry';
 import { CONCRETE_KINDS } from './structuralMutations';
 import { concreteOf, rebarOf } from './structuralPlan';
@@ -424,10 +425,28 @@ export interface RebarLevelRow {
   orderWeightKg: number | null;
   estimated: boolean;
   status: RebarStatus;
+  /**
+   * Mesh levels: the physical sheets this level needs (lib/meshSheets) and the sheet size / overlap
+   * they were counted with; `count` is null when there is no layout (free polygon, no size, bad
+   * settings). Null for manual bars and for a mesh without a level.
+   */
+  sheets: { count: number | null; settings: ResolvedSheetSettings } | null;
 }
 
 export function buildRebarLevelRows(plan: Plan, pages?: ReadonlySet<number>): RebarLevelRow[] {
   const out: RebarLevelRow[] = [];
+  const meshes = new Map(rebarOf(plan).flatMap((i) => (i.kind === 'mesh' ? [[i.id, i] as const] : [])));
+  const sheetsOf = new Map<string, MeshSheetsResult>();
+  const sheetsFor = (itemId: string, level: RebarLevel | null): RebarLevelRow['sheets'] => {
+    const mesh = meshes.get(itemId);
+    if (!mesh || level === null) return null;
+    let result = sheetsOf.get(itemId);
+    if (!result) {
+      result = calculateMeshSheets(mesh, plan.pages[mesh.pageNumber]?.calibration ?? null);
+      sheetsOf.set(itemId, result);
+    }
+    return { count: result.levels.find((l) => l.level === level)?.sheets ?? null, settings: result.settings };
+  };
   for (const r of buildRebarItems(plan, pages)) {
     const last = out.at(-1);
     if (last && r.kind === 'mesh' && last.itemId === r.itemId && last.level === r.level) {
@@ -437,7 +456,7 @@ export function buildRebarLevelRows(plan: Plan, pages?: ReadonlySet<number>): Re
       last.estimated ||= r.estimated;
       continue;
     }
-    out.push({ key: `${r.itemId}|${r.level ?? ''}`, itemId: r.itemId, pageNumber: r.pageNumber, mark: r.mark, autoNumber: r.autoNumber, kind: r.kind, level: r.level, parts: [r], netWeightKg: r.netWeightKg, orderWeightKg: r.orderWeightKg, estimated: r.estimated, status: r.status });
+    out.push({ key: `${r.itemId}|${r.level ?? ''}`, itemId: r.itemId, pageNumber: r.pageNumber, mark: r.mark, autoNumber: r.autoNumber, kind: r.kind, level: r.level, parts: [r], netWeightKg: r.netWeightKg, orderWeightKg: r.orderWeightKg, estimated: r.estimated, status: r.status, sheets: sheetsFor(r.itemId, r.level) });
   }
   return out;
 }
@@ -448,7 +467,8 @@ export function buildRebarLevelRows(plan: Plan, pages?: ReadonlySet<number>): Re
  */
 export interface StructuralReport {
   concrete: { items: ConcreteItemRow[]; summary: ConcreteSummary } | null;
-  rebar: { items: RebarItemRow[]; summary: RebarSummary } | null;
+  /** `items` are the directional rows (Excel); `levels` one row per mesh level / manual-bars item (PDF). */
+  rebar: { items: RebarItemRow[]; levels: RebarLevelRow[]; summary: RebarSummary } | null;
 }
 
 export function buildStructuralReport(plan: Plan, pages?: ReadonlySet<number>): StructuralReport {
@@ -456,7 +476,7 @@ export function buildStructuralReport(plan: Plan, pages?: ReadonlySet<number>): 
   const rebarItems = buildRebarItems(plan, pages);
   return {
     concrete: concreteItems.length > 0 ? { items: concreteItems, summary: buildConcreteSummary(plan, pages) } : null,
-    rebar: rebarItems.length > 0 ? { items: rebarItems, summary: buildRebarSummary(plan, pages) } : null,
+    rebar: rebarItems.length > 0 ? { items: rebarItems, levels: buildRebarLevelRows(plan, pages), summary: buildRebarSummary(plan, pages) } : null,
   };
 }
 

@@ -2,8 +2,6 @@ import { useMemo } from 'react';
 import { formatNumber, useT } from '../i18n';
 import type { Plan } from '../types';
 import { buildConcreteItems, buildConcreteSummary, buildRebarLevelRows, buildRebarSummary, type RebarItemRow, type RebarLevelRow } from '../lib/structuralQuantities';
-import { calculateMeshSheets } from '../lib/meshSheets';
-import { rebarOf } from '../lib/structuralPlan';
 import { markLabel } from '../lib/structuralMarks';
 import { metersToCm } from '../lib/structuralUnits';
 import { round } from '../lib/geometry';
@@ -109,12 +107,6 @@ export function RebarQuantityTable({ plan }: { plan: Plan }) {
   const t = useT();
   const details = useMemo(() => buildRebarLevelRows(plan), [plan]);
   const summary = useMemo(() => buildRebarSummary(plan), [plan]);
-  // The physical sheet count of every mesh, per level (lib/meshSheets).
-  const sheets = useMemo(() => {
-    const byItem = new Map<string, ReturnType<typeof calculateMeshSheets>>();
-    for (const item of rebarOf(plan)) if (item.kind === 'mesh') byItem.set(item.id, calculateMeshSheets(item, plan.pages[item.pageNumber]?.calibration ?? null));
-    return byItem;
-  }, [plan]);
   if (details.length === 0) return null;
 
   const weight = (v: number | null, estimated: boolean) => (v === null ? DASH : <span dir="ltr">{`${estimated ? '≈ ' : ''}${formatNumber(round(v, 2))}`}</span>);
@@ -134,8 +126,8 @@ export function RebarQuantityTable({ plan }: { plan: Plan }) {
       const count = d.parts[0].barCount;
       return count === null ? DASH : t('quantitiesPanel.barsQty', { count });
     }
-    const n = d.level === null ? undefined : sheets.get(d.itemId)?.levels.find((l) => l.level === d.level)?.sheets;
-    return n === undefined ? DASH : t('quantitiesPanel.sheetsQty', { count: n });
+    const n = d.sheets?.count;
+    return n === null || n === undefined ? DASH : t('quantitiesPanel.sheetsQty', { count: n });
   };
   const statusCell = (d: RebarLevelRow) =>
     d.status === 'ok' ? (

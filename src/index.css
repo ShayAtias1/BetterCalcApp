@@ -607,6 +607,18 @@ button:disabled,
   gap: 8px;
   cursor: pointer;
 }
+.page-checkbox-list input[type='checkbox'] {
+  width: auto;
+  flex: none;
+}
+.export-content-list {
+  max-height: none;
+}
+.export-content-all {
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+}
 
 /* ---------- workspace layout ---------- */
 .workspace {

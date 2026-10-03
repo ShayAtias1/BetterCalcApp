@@ -8,8 +8,15 @@ import { exportQuantitiesToPdf, getExportablePageNumbers } from '../lib/exportQu
 import { quantityExportDetails, trackedExport } from '../lib/analytics';
 import { notifyExportFailed } from '../lib/exportFailure';
 import { hasStructuralData, withStructuralPages } from '../lib/structuralPlan';
-import { exportAnnotationsVisible } from '../lib/overlayVisibility';
+import { EXPORT_SECTIONS, availableContent, everything, hasAnyContent, isEverything, NO_CONTENT, type ExportContent, type ExportSection } from '../lib/exportContent';
 import { useLanguage, useT } from '../i18n';
+
+const CONTENT_LABEL = {
+  plan: 'quantityExport.contentPlan',
+  finishes: 'quantityExport.contentFinishes',
+  concrete: 'quantityExport.contentConcrete',
+  rebar: 'quantityExport.contentRebar',
+} as const;
 
 /**
  * The two actions that produce BetterCalc's main deliverable — the quantity report — plus their
@@ -27,11 +34,10 @@ export default function QuantityExportActions({ variant, onPicked }: { variant: 
   const projectName = useAppStore((s) => s.currentProject?.name);
   const currentPage = useAppStore((s) => s.currentPage);
   const overlayVisible = useAppStore((s) => s.overlayVisible);
-  const annotationsVisible = exportAnnotationsVisible(overlayVisible);
-  const measurementsVisible = overlayVisible.measurements;
   const [exportingExcel, setExportingExcel] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
-  const [pageDialogPages, setPageDialogPages] = useState<Set<number> | null>(null);
+  // The PDF dialog: what to export (sections) and which pages - two separate choices.
+  const [pdfDialog, setPdfDialog] = useState<{ pages: Set<number>; content: ExportContent } | null>(null);
   const [excelDialog, setExcelDialog] = useState<{ mode: 'specific' | 'all'; page: number } | null>(null);
 
   const summaries = useMemo(() => (project ? buildRoomSummaries(project) : []), [project]);
@@ -74,7 +80,9 @@ export default function QuantityExportActions({ variant, onPicked }: { variant: 
     setExcelDialog({ mode: 'specific', page: exportablePages.includes(currentPage) ? currentPage : exportablePages[0] });
   };
 
-  const runExportPdf = async (pageNumbers: number[]) => {
+  const available = availableContent(project, summaries.length > 0 || hasAreaMeasurements, exportablePages.length > 0);
+
+  const runExportPdf = async (pageNumbers: number[], content: ExportContent) => {
     setExportingPdf(true);
     try {
       const roomPageById = new Map(project.rooms.map((r) => [r.id, r.pageNumber]));
@@ -83,7 +91,7 @@ export default function QuantityExportActions({ variant, onPicked }: { variant: 
       const filteredTotals = buildReportCategoryTotals(project, filteredSummaries);
       await trackedExport(
         { export_kind: 'quantity_pdf', surface, ...quantityExportDetails(project, filteredSummaries, pageNumbers, exportablePages.length) },
-        () => exportQuantitiesToPdf(planForReport(project, projectName), filteredSummaries, filteredTotals, annotationsVisible, pageNumbers, measurementsVisible, language)
+        () => exportQuantitiesToPdf(planForReport(project, projectName), filteredSummaries, filteredTotals, overlayVisible, pageNumbers, content, language)
       );
     } catch (err) {
       notifyExportFailed(err);
@@ -92,13 +100,13 @@ export default function QuantityExportActions({ variant, onPicked }: { variant: 
     }
   };
 
+  // Always asks what to export; the page list is only shown when there is more than one page.
   const handleExportPdf = () => {
     onPicked?.();
-    if (exportablePages.length <= 1) {
-      void runExportPdf(exportablePages);
-      return;
-    }
-    setPageDialogPages(new Set(exportablePages.includes(currentPage) ? [currentPage] : exportablePages));
+    setPdfDialog({
+      pages: new Set(exportablePages.length > 1 && exportablePages.includes(currentPage) ? [currentPage] : exportablePages),
+      content: everything(available),
+    });
   };
 
   return (
@@ -131,49 +139,81 @@ export default function QuantityExportActions({ variant, onPicked }: { variant: 
         </>
       )}
 
-      {pageDialogPages && (
+      {pdfDialog && (
         <div className="modal-backdrop">
           <div className="modal">
-            <h3>{t('quantityExport.whichPages')}</h3>
-            <p>{t('quantityExport.pdfPagesIntro')}</p>
-            <div className="modal-actions" style={{ justifyContent: 'flex-start', marginTop: 0 }}>
-              <button className="btn-secondary small" onClick={() => setPageDialogPages(new Set(exportablePages))}>
-                {t('quantityExport.selectAll')}
-              </button>
-              <button className="btn-secondary small" onClick={() => setPageDialogPages(new Set())}>
-                {t('quantityExport.clearSelection')}
-              </button>
-            </div>
-            <ul className="page-checkbox-list">
-              {exportablePages.map((p) => (
-                <li key={p}>
+            <h3>{t('quantityExport.pdfTitle')}</h3>
+            <span className="section-label">{t('quantityExport.whatToExport')}</span>
+            <ul className="page-checkbox-list export-content-list">
+              {EXPORT_SECTIONS.map((section: ExportSection) => (
+                <li key={section}>
                   <label>
                     <input
                       type="checkbox"
-                      checked={pageDialogPages.has(p)}
-                      onChange={(e) => {
-                        const next = new Set(pageDialogPages);
-                        if (e.target.checked) next.add(p);
-                        else next.delete(p);
-                        setPageDialogPages(next);
-                      }}
+                      disabled={!available[section]}
+                      checked={pdfDialog.content[section]}
+                      onChange={(e) => setPdfDialog({ ...pdfDialog, content: { ...pdfDialog.content, [section]: e.target.checked } })}
                     />
-                    {p === currentPage ? t('quantityExport.pageCurrent', { page: p }) : t('quantityExport.page', { page: p })}
+                    {t(CONTENT_LABEL[section])}
                   </label>
                 </li>
               ))}
+              <li className="export-content-all">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={isEverything(pdfDialog.content, available)}
+                    onChange={(e) => setPdfDialog({ ...pdfDialog, content: e.target.checked ? everything(available) : NO_CONTENT })}
+                  />
+                  {t('quantityExport.contentEverything')}
+                </label>
+              </li>
             </ul>
+            <p className="muted">{t('quantityExport.contentHint')}</p>
+            {exportablePages.length > 1 && (
+              <>
+                <span className="section-label">{t('quantityExport.whichPages')}</span>
+                <div className="modal-actions" style={{ justifyContent: 'flex-start', marginTop: 0 }}>
+                  <button className="btn-secondary small" onClick={() => setPdfDialog({ ...pdfDialog, pages: new Set(exportablePages) })}>
+                    {t('quantityExport.selectAll')}
+                  </button>
+                  <button className="btn-secondary small" onClick={() => setPdfDialog({ ...pdfDialog, pages: new Set() })}>
+                    {t('quantityExport.clearSelection')}
+                  </button>
+                </div>
+                <ul className="page-checkbox-list">
+                  {exportablePages.map((p) => (
+                    <li key={p}>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={pdfDialog.pages.has(p)}
+                          onChange={(e) => {
+                            const next = new Set(pdfDialog.pages);
+                            if (e.target.checked) next.add(p);
+                            else next.delete(p);
+                            setPdfDialog({ ...pdfDialog, pages: next });
+                          }}
+                        />
+                        {p === currentPage ? t('quantityExport.pageCurrent', { page: p }) : t('quantityExport.page', { page: p })}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
             <div className="modal-actions">
-              <button className="btn-secondary" onClick={() => setPageDialogPages(null)}>
+              <button className="btn-secondary" onClick={() => setPdfDialog(null)}>
                 {t('common.cancel')}
               </button>
               <button
                 className="btn-primary"
-                disabled={pageDialogPages.size === 0}
+                disabled={!hasAnyContent(pdfDialog.content) || pdfDialog.pages.size === 0}
                 onClick={() => {
-                  const pages = Array.from(pageDialogPages).sort((a, b) => a - b);
-                  setPageDialogPages(null);
-                  void runExportPdf(pages);
+                  const pages = Array.from(pdfDialog.pages).sort((a, b) => a - b);
+                  const content = pdfDialog.content;
+                  setPdfDialog(null);
+                  void runExportPdf(pages, content);
                 }}
               >
                 {t('common.export')}

@@ -9,8 +9,8 @@
 import { round } from './geometry';
 import { markLabel } from './structuralMarks';
 import type { ExportContext } from './exportLanguage';
-import { basisText, concreteStatusText, levelText, rebarStatusText, reinforcementDescription } from './structuralExportText';
-import type { ProjectStructural, StructuralReport } from './structuralQuantities';
+import { basisText, concreteStatusText, levelText, rebarStatusText } from './structuralExportText';
+import type { ProjectStructural, RebarLevelRow, StructuralReport } from './structuralQuantities';
 
 export interface PdfTableRow {
   cells: string[];
@@ -46,10 +46,21 @@ const pdfSafe = (text: string) => text.replace(/³/g, '3').replace(/²/g, '2');
 const DASH = '-';
 const C_GRAND = '#D5F5E3';
 
-export function buildStructuralPdfLayout(report: StructuralReport, x: ExportContext): PdfBlock[] {
+/** Which structural sections of the report to print - the user's choice in the export dialog. */
+export interface StructuralInclude {
+  concrete: boolean;
+  rebar: boolean;
+}
+
+/**
+ * One bill of quantities per domain: a detail row per item, then one total row - no separate
+ * summary table. Concrete is a row per element; rebar a row per mesh level (its two directions are
+ * one specification) or per manual-bars item.
+ */
+export function buildStructuralPdfLayout(report: StructuralReport, x: ExportContext, include: StructuralInclude = { concrete: true, rebar: true }): PdfBlock[] {
   const blocks: PdfBlock[] = [];
-  if (report.concrete) blocks.push(...concreteBlocks(report.concrete, x));
-  if (report.rebar) blocks.push(...rebarBlocks(report.rebar, x));
+  if (report.concrete && include.concrete) blocks.push(...concreteBlocks(report.concrete, x));
+  if (report.rebar && include.rebar) blocks.push(...rebarBlocks(report.rebar, x));
   return blocks;
 }
 
@@ -58,93 +69,126 @@ function concreteBlocks(concrete: NonNullable<StructuralReport['concrete']>, x: 
   const fmt = (v: number | null) => (v === null ? DASH : x.number(round(v, 2)));
   const m3 = pdfSafe(t('units.m3'));
   const { items, summary } = concrete;
-  const noGrade = t('concrete.summary.noGrade');
-  const title = t('exports.structural.concrete');
+  // A slab's thickness is read in centimetres (as it is typed); a wall, beam or column's height in metres.
+  const dimension = (it: (typeof items)[number]) =>
+    it.depthM === null ? DASH : it.kind === 'slab' ? `${x.number(round(it.depthM * 100, 2))} ${t('units.cm')}` : `${x.number(round(it.depthM, 2))} ${t('units.m')}`;
+  const totalOk = summary.elementCount > summary.missingCount;
 
-  const blocks: PdfBlock[] = [
-    { type: 'section', title: `${title} - ${t('exports.structural.concreteByGrade')}` },
+  return [
+    { type: 'section', title: t('exports.structural.concrete') },
     {
       type: 'table',
       headers: [
         t('exports.structural.headers.page'),
         t('exports.structural.headers.type'),
-        t('exports.structural.headers.grade'),
-        t('exports.structural.headers.elements'),
-        t('exports.projectPdf.netUnit', { unit: m3 }),
-        t('exports.projectPdf.orderUnit', { unit: m3 }),
-        t('exports.structural.headers.notCalculable'),
-      ],
-      weights: [8, 14, 16, 10, 14, 14, 14],
-      rows: [
-        ...summary.rows.map((r) => {
-          const calculable = r.elementCount > r.missingCount;
-          return { cells: [`${r.pageNumber}`, t(`concrete.kinds.${r.kind}`), r.grade || noGrade, `${r.elementCount}`, calculable ? fmt(r.volumeM3) : DASH, calculable ? fmt(r.orderM3) : DASH, r.missingCount > 0 ? `${r.missingCount}` : ''] };
-        }),
-        { cells: [t('exports.common.grandTotal'), '', '', `${summary.elementCount}`, fmt(summary.volumeM3), fmt(summary.orderM3), summary.missingCount > 0 ? `${summary.missingCount}` : ''], bg: C_GRAND, bold: true },
-      ],
-    },
-    { type: 'section', title: `${title} - ${t('exports.structural.concreteItems')}` },
-    {
-      type: 'table',
-      headers: [
         t('exports.structural.headers.mark'),
-        t('exports.structural.headers.type'),
         t('exports.structural.headers.grade'),
-        t('exports.structural.headers.page'),
-        t('exports.structural.headers.footprint', { unit: pdfSafe(t('units.m2')) }),
-        t('exports.structural.headers.thicknessHeight', { unit: t('units.m') }),
+        t('exports.structural.headers.dimension'),
         t('exports.projectPdf.netUnit', { unit: m3 }),
         t('exports.projectPdf.orderUnit', { unit: m3 }),
         t('exports.structural.headers.status'),
       ],
-      weights: [10, 12, 14, 8, 12, 14, 12, 12, 18],
-      rows: items.map((it) => ({
-        cells: [markLabel(it, t), t(`concrete.kinds.${it.kind}`), it.grade || noGrade, `${it.pageNumber}`, fmt(it.footprintM2), fmt(it.depthM), fmt(it.netM3), fmt(it.orderM3), it.status === 'ok' ? '' : concreteStatusText(it.status, it.kind, x)],
-      })),
+      weights: [7, 11, 17, 14, 12, 13, 13, 20],
+      rows: [
+        ...items.map((it, i) => ({
+          cells: [
+            i === 0 || items[i - 1].pageNumber !== it.pageNumber ? `${it.pageNumber}` : '',
+            t(`concrete.kinds.${it.kind}`),
+            markLabel(it, t),
+            it.grade || DASH,
+            dimension(it),
+            fmt(it.netM3),
+            fmt(it.orderM3),
+            it.status === 'ok' ? '' : concreteStatusText(it.status, it.kind, x),
+          ],
+        })),
+        {
+          cells: ['', t('concrete.summary.total'), '', '', '', totalOk ? fmt(summary.volumeM3) : DASH, totalOk ? fmt(summary.orderM3) : DASH, summary.missingCount > 0 ? t('exports.structural.missingShort', { count: summary.missingCount }) : ''],
+          bg: C_GRAND,
+          bold: true,
+        },
+      ],
     },
   ];
-  if (summary.missingCount > 0) blocks.push({ type: 'note', text: t('exports.structural.missing', { count: summary.missingCount }) });
-  return blocks;
+}
+
+/** `6.00 × 2.50 m · 80 cm` - the sheet size and overlap a sheet count was made with. */
+export function sheetConfigText(settings: { lengthM: number; widthM: number; overlapM: number }, x: ExportContext): string {
+  const m = (v: number) => v.toFixed(2);
+  const cm = Math.round(settings.overlapM * 1000) / 10;
+  return `${m(settings.lengthM)} × ${m(settings.widthM)} ${x.t('units.m')} · ${x.number(cm)} ${x.t('units.cm')}`;
 }
 
 function rebarBlocks(rebar: NonNullable<StructuralReport['rebar']>, x: ExportContext): PdfBlock[] {
   const { t } = x;
-  const lm = t('units.lm');
   const kg = t('units.kg');
-  const { items, summary } = rebar;
-  const title = t('exports.structural.rebar');
+  const { levels, summary } = rebar;
   const fmt = (v: number | null, estimated = false) => (v === null ? DASH : `${estimated ? ESTIMATE_PREFIX : ''}${x.number(round(v, 2))}`);
+  const notation = (r: RebarLevelRow['parts'][number]) => (r.diameterMm === null ? null : r.spacingCm === null ? `Ø${r.diameterMm}` : `Ø${r.diameterMm} @ ${x.number(r.spacingCm)}`);
+  const specification = (d: RebarLevelRow): string => {
+    if (d.kind === 'bars') return notation(d.parts[0]) ?? DASH;
+    const first = d.parts[0];
+    if (first.level === null) return DASH;
+    if (first.direction === 'both') {
+      const n = notation(first);
+      return n ? `${n} ${t('units.cm')} - ${t('exports.structural.bothDirections')}` : DASH;
+    }
+    return d.parts.map((p) => `${t(p.direction === 'short' ? 'exports.structural.shortSide' : 'exports.structural.longSide')} ${notation(p) ?? DASH}`).join(' | ');
+  };
+  const quantity = (d: RebarLevelRow): string => {
+    if (d.kind === 'bars') {
+      const count = d.parts[0].barCount;
+      return count === null ? DASH : t('exports.structural.barsQty', { count });
+    }
+    return d.sheets?.count == null ? DASH : t('exports.structural.sheetsQty', { count: d.sheets.count });
+  };
+  const status = (d: RebarLevelRow) => (d.status === 'ok' ? basisText(d.estimated ? 'estimated' : 'exact', x) : rebarStatusText(d.status, x));
 
-  const blocks: PdfBlock[] = [
-    { type: 'section', title: `${title} - ${t('exports.structural.rebarByDiameter')}` },
+  return [
+    { type: 'section', title: t('exports.structural.rebar') },
     {
       type: 'table',
       headers: [
         t('exports.structural.headers.page'),
-        'Ø',
-        t('exports.projectPdf.netUnit', { unit: lm }),
-        t('exports.projectPdf.netUnit', { unit: kg }),
-        t('exports.projectPdf.orderUnit', { unit: lm }),
+        t('exports.structural.headers.type'),
+        t('exports.structural.headers.mark'),
+        t('exports.structural.headers.levelShort'),
+        t('exports.structural.headers.specification'),
+        t('exports.structural.headers.quantity'),
+        t('exports.structural.headers.sheetSize'),
+        t('exports.structural.headers.netWeight', { unit: kg }),
         t('exports.projectPdf.orderUnit', { unit: kg }),
-        t('exports.structural.headers.basis'),
+        t('exports.structural.headers.status'),
       ],
-      weights: [8, 8, 14, 14, 14, 14, 18],
+      weights: [5, 7, 11, 8, 20, 10, 15, 9, 9, 12],
       rows: [
-        ...summary.pages.flatMap((page) =>
-          page.rows.map((r) => {
-            const est = r.basis === 'estimated';
-            return { cells: [`${r.pageNumber}`, `${r.diameterMm}`, fmt(r.lengthM, est), fmt(r.weightKg, est), fmt(r.orderLengthM, est), fmt(r.orderWeightKg, est), basisText(r.basis, x)] };
-          })
-        ),
+        ...levels.map((d, i) => ({
+          cells: [
+            i === 0 || levels[i - 1].pageNumber !== d.pageNumber ? `${d.pageNumber}` : '',
+            t(d.kind === 'mesh' ? 'rebar.mesh' : 'rebar.bars'),
+            markLabel(d, t),
+            levelText(d.level, x) || DASH,
+            specification(d),
+            quantity(d),
+            // Only a counted mesh needs its sheet size to be read.
+            d.sheets && d.sheets.count !== null ? sheetConfigText(d.sheets.settings, x) : DASH,
+            fmt(d.netWeightKg, d.estimated),
+            fmt(d.orderWeightKg, d.estimated),
+            status(d),
+          ],
+        })),
         {
           cells: [
-            t('exports.common.grandTotal'),
             '',
-            fmt(summary.lengthM, summary.basis === 'estimated'),
-            fmt(summary.weightKg, summary.basis === 'estimated'),
-            fmt(summary.orderLengthM, summary.basis === 'estimated'),
-            fmt(summary.orderWeightKg, summary.basis === 'estimated'),
-            summary.basis ? basisText(summary.basis, x) : DASH,
+            t('rebar.summary.total'),
+            '',
+            '',
+            '',
+            '',
+            '',
+            summary.basis === null ? DASH : fmt(summary.weightKg, summary.basis === 'estimated'),
+            summary.basis === null ? DASH : fmt(summary.orderWeightKg, summary.basis === 'estimated'),
+            [summary.basis ? basisText(summary.basis, x) : '', summary.missingItemCount > 0 ? t('exports.structural.missingShort', { count: summary.missingItemCount }) : ''].filter(Boolean).join(' · '),
           ],
           bg: C_GRAND,
           bold: true,
@@ -152,54 +196,6 @@ function rebarBlocks(rebar: NonNullable<StructuralReport['rebar']>, x: ExportCon
       ],
     },
   ];
-  if (summary.basis === 'mixed') {
-    blocks.push({
-      type: 'note',
-      text: t('exports.structural.estimateNote', { length: `${x.number(round(summary.estimatedLengthM, 2))} ${lm}`, weight: `${x.number(round(summary.estimatedWeightKg, 2))} ${kg}` }),
-    });
-  } else if (summary.basis === 'estimated') {
-    blocks.push({ type: 'note', text: t('exports.structural.estimateOnlyNote') });
-  }
-
-  blocks.push(
-    { type: 'section', title: `${title} - ${t('exports.structural.rebarItems')}` },
-    {
-      type: 'table',
-      headers: [
-        t('exports.structural.headers.page'),
-        t('exports.structural.headers.mark'),
-        t('exports.structural.headers.reinforcement'),
-        t('exports.structural.headers.barsTimes'),
-        t('exports.projectPdf.netUnit', { unit: lm }),
-        t('exports.projectPdf.netUnit', { unit: kg }),
-        t('exports.projectPdf.orderUnit', { unit: kg }),
-        `${t('exports.structural.headers.basis')} / ${t('exports.structural.headers.status')}`,
-      ],
-      weights: [6, 17, 25, 14, 11, 11, 11, 18],
-      rows: items.map((it) => {
-        // A mesh line names its reinforcement level next to the mark, and says which direction(s)
-        // its specification covers — so Top and Bottom are never two unexplained rows.
-        const markText = markLabel(it, t);
-        const level = levelText(it.level, x);
-        const description = reinforcementDescription(it, x);
-        const calculable = it.netLengthM !== null;
-        return {
-          cells: [
-            `${it.pageNumber}`,
-            level ? `${markText} - ${level}` : markText,
-            description ?? DASH,
-            it.barCount !== null && it.barLengthM !== null ? `${it.barCount} × ${x.number(round(it.barLengthM, 2))}` : DASH,
-            fmt(it.netLengthM, it.estimated),
-            fmt(it.netWeightKg, it.estimated),
-            fmt(it.orderWeightKg, it.estimated),
-            calculable ? basisText(it.estimated ? 'estimated' : 'exact', x) : rebarStatusText(it.status, x),
-          ],
-        };
-      }),
-    }
-  );
-  if (summary.missingItemCount > 0) blocks.push({ type: 'note', text: t('exports.structural.missing', { count: summary.missingItemCount }) });
-  return blocks;
 }
 
 // ---------- project report: summarized, no item schedules ----------

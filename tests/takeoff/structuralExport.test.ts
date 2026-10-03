@@ -355,43 +355,42 @@ test('concrete and rebar together: both sheets, selected-page filtering applies 
 
 // ---------- PDF ----------
 
-test('PDF layout: summary and item tables, ~ on estimates, dashes and a missing note, nothing for no data', () => {
+test('PDF layout: one BOQ per domain (items then a total row), ~ on estimates, dashes and short statuses, nothing for no data', () => {
   const p = structuralOnly(
-    [el({ mark: 'S01', grade: 'B30' }), el({ mark: 'S02', depthM: undefined })],
-    [mesh([layer()], { mark: 'M01', points: L_SHAPE }), mesh([layer()], { mark: 'M02' }), bars({ mark: 'R01' }), mesh([layer({ diameterMm: 0 })], { mark: 'M03' })]
+    [el({ mark: 'S01', markManual: true, grade: 'B30' }), el({ mark: 'S02', markManual: true, depthM: undefined })],
+    [mesh([layer()], { mark: 'M01', markManual: true, points: L_SHAPE }), mesh([layer()], { mark: 'M02', markManual: true }), bars({ mark: 'R01', markManual: true }), mesh([layer({ diameterMm: 0 })], { mark: 'M03', markManual: true })]
   );
   const blocks = buildStructuralPdfLayout(buildStructuralReport(p), exportContext('en'));
-  const sections = blocks.filter((b) => b.type === 'section').map((b) => (b as { title: string }).title);
-  assert.deepEqual(sections, ['Concrete - Summary by type and grade', 'Concrete - Concrete elements', 'Rebar - Summary by diameter', 'Rebar - Rebar items']);
+  assert.deepEqual(blocks.filter((b) => b.type === 'section').map((b) => (b as { title: string }).title), ['Concrete', 'Rebar']);
   const tables = blocks.filter((b) => b.type === 'table') as Extract<(typeof blocks)[number], { type: 'table' }>[];
-  assert.equal(tables.length, 4);
+  assert.equal(tables.length, 2); // no separate summary tables
+  assert.equal(blocks.filter((b) => b.type === 'note').length, 0);
   for (const t of tables) for (const r of t.rows) assert.equal(r.cells.length, t.headers.length);
 
-  const [cSummary, cItems, rSummary, rItems] = tables;
-  assert.deepEqual(cSummary.rows.at(-1)!.cells.slice(0, 4), ['Grand total', '', '', '2']);
-  assert.equal(cSummary.rows.at(-1)!.cells[6], '1'); // one not calculable
-  assert.equal(cItems.rows[1].cells[6], '-'); // net of the missing one: a dash
-  assert.equal(cItems.rows[1].cells[8], 'Height missing'.replace('Height', 'Thickness')); // slab → thickness
-  assert.equal(cItems.rows[0].cells[8], ''); // OK rows stay quiet
+  const [concrete, rebar] = tables;
+  assert.deepEqual(concrete.headers.slice(0, 5), ['Page', 'Type', 'Mark', 'Concrete grade', 'Dimension']);
+  assert.equal(concrete.rows.length, 3); // two elements + the total
+  assert.deepEqual(concrete.rows[0].cells.slice(0, 5), ['1', 'Slab', 'S01', 'B30', '20 cm']);
+  assert.deepEqual(concrete.rows[1].cells.slice(3, 8), ['-', '-', '-', '-', 'Thickness missing']); // a missing element stays a row: dashes and a reason
+  assert.equal(concrete.rows[0].cells[7], ''); // OK rows stay quiet
+  assert.deepEqual([concrete.rows[2].cells[1], concrete.rows[2].cells[5], concrete.rows[2].cells[7]], ['Total', '16', 'Missing data: 1']);
 
-  const mixedTotal = rSummary.rows.at(-1)!;
-  assert.equal(mixedTotal.cells[6], 'Includes estimate');
-  const est = rItems.rows.find((r) => r.cells[1] === 'Mesh 01 - Bottom')!;
-  assert.ok(est.cells[4].startsWith('~ ')); // the printed estimate is marked
-  assert.equal(est.cells[3], '-'); // no bar count
-  assert.equal(est.cells[7], 'Estimate');
-  assert.equal(rItems.rows.find((r) => r.cells[1] === 'Mesh 02 - Bottom')!.cells[3], '41 × 10');
-  assert.equal(rItems.rows.find((r) => r.cells[1] === 'Mesh 03 - Bottom')!.cells[7], 'Data missing');
-  const notes = blocks.filter((b) => b.type === 'note').map((b) => (b as { text: string }).text);
-  assert.ok(notes.some((t) => t.startsWith('Includes estimate: ')));
-  assert.ok(notes.some((t) => t === 'Missing data: 1 - not included in the totals.'));
+  assert.equal(rebar.rows.length, 5); // four items + the total
+  const byMark = (mark: string) => rebar.rows.find((r) => r.cells[2] === mark)!;
+  assert.ok(byMark('M01').cells[7].startsWith('~ ')); // the printed estimate is marked
+  assert.deepEqual([byMark('M01').cells[5], byMark('M01').cells[6], byMark('M01').cells[9]], ['-', '-', 'Estimate']); // free polygon: no sheet layout
+  assert.deepEqual([byMark('M02').cells[1], byMark('M02').cells[3], byMark('M02').cells[5], byMark('M02').cells[6], byMark('M02').cells[9]], ['Mesh', 'Bottom', '10 sheets', '6.00 × 2.50 m · 80 cm', 'Exact']);
+  assert.deepEqual([byMark('R01').cells[1], byMark('R01').cells[3], byMark('R01').cells[4], byMark('R01').cells[5]], ['Bars', '-', 'Ø16', '10 bars']);
+  assert.equal(byMark('M03').cells[9], 'Data missing');
+  assert.deepEqual([rebar.rows.at(-1)!.cells[1], rebar.rows.at(-1)!.cells[5], rebar.rows.at(-1)!.cells[9]], ['Total', '', 'Includes estimate · Missing data: 1']);
+  assert.ok(!JSON.stringify(blocks).includes('Bar lines'));
 
   assert.deepEqual(buildStructuralPdfLayout(buildStructuralReport(PLAN_A), exportContext('he')), []);
 });
 
 test('PDF layout in Hebrew uses the Hebrew words', () => {
   const blocks = buildStructuralPdfLayout(buildStructuralReport(structuralOnly([el({})])), exportContext('he'));
-  assert.deepEqual(blocks.filter((b) => b.type === 'section').map((b) => (b as { title: string }).title), ['בטון - סיכום לפי סוג ודרגה', 'בטון - אלמנטי בטון']);
+  assert.deepEqual(blocks.filter((b) => b.type === 'section').map((b) => (b as { title: string }).title), ['בטון']);
 });
 
 test('a real PDF is produced for both sections in both languages, and none for a plan without structural data', async () => {

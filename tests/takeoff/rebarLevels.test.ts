@@ -243,20 +243,20 @@ test('Excel: a level column (Bottom / Top), "both directions" for uniform, numer
 
 // ---------- PDF ----------
 
-test('PDF: Top and Bottom are distinct, uniform says "both directions", directional lists long and short', () => {
+test('PDF: Top and Bottom are separate level rows of one mark; uniform says "both directions", directional lists long and short', () => {
   const p = planWith([mesh({ autoNumber: 1, bottom: uniform(12, 0.2), top: directional([12, 0.2], [10, 0.15]) })]);
   const blocks = buildStructuralPdfLayout(buildStructuralReport(p), exportContext('en'));
-  const items = blocks.filter((b) => b.type === 'table').at(-1) as Extract<(typeof blocks)[number], { type: 'table' }>;
-  assert.deepEqual(items.rows.map((r) => [r.cells[1], r.cells[2]]), [
-    ['Mesh 01 - Bottom', 'Ø12 @ 20 cm - Both directions'],
-    ['Mesh 01 - Top', 'Long side: Ø12 @ 20 cm'],
-    ['Mesh 01 - Top', 'Short side: Ø10 @ 15 cm'],
+  const table = blocks.filter((b) => b.type === 'table').at(-1) as Extract<(typeof blocks)[number], { type: 'table' }>;
+  // Mark, level, specification: one row per level - the two directions of Top are one row.
+  assert.deepEqual(table.rows.slice(0, 2).map((r) => [r.cells[2], r.cells[3], r.cells[4]]), [
+    ['Mesh 01', 'Bottom', 'Ø12 @ 20 cm - Both directions'],
+    ['Mesh 01', 'Top', 'Long side Ø12 @ 20 | Short side Ø10 @ 15'],
   ]);
   const he = buildStructuralPdfLayout(buildStructuralReport(p), exportContext('he'));
-  const hItems = he.filter((b) => b.type === 'table').at(-1) as Extract<(typeof he)[number], { type: 'table' }>;
-  assert.equal(hItems.rows[0].cells[1], 'רשת 01 - תחתון');
-  assert.equal(hItems.rows[0].cells[2], 'Ø12 @ 20 ס"מ - שני הכיוונים');
-  assert.equal(hItems.rows[1].cells[2], 'צלע ארוכה: Ø12 @ 20 ס"מ');
+  const hTable = he.filter((b) => b.type === 'table').at(-1) as Extract<(typeof he)[number], { type: 'table' }>;
+  assert.deepEqual([hTable.rows[0].cells[1], hTable.rows[0].cells[2], hTable.rows[0].cells[3]], ['רשת', 'רשת 01', 'תחתון']);
+  assert.equal(hTable.rows[0].cells[4], 'Ø12 @ 20 ס"מ - שני הכיוונים');
+  assert.equal(hTable.rows[1].cells[4], 'צלע ארוכה Ø12 @ 20 | צלע קצרה Ø10 @ 15');
 });
 
 test('every character the level texts print has a glyph in the report fonts', () => {

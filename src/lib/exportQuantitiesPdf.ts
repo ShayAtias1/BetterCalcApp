@@ -23,7 +23,10 @@ import { numberAreaMeasurements } from './areaMeasurements';
 import { drawAreaMeasurementTable } from './areaMeasurementTable';
 import { drawStructuralPdfPages } from './exportStructuralPdf';
 import { buildStructuralReport } from './structuralQuantities';
-import { structuralPageNumbers } from './structuralPlan';
+import { concreteOf, rebarOf, structuralPageNumbers } from './structuralPlan';
+import { drawConcreteZonesOnCanvas, drawRebarZonesOnCanvas } from './drawStructuralZones';
+import type { OverlayVisibility } from './overlayVisibility';
+import type { ExportContent } from './exportContent';
 
 const DASH = '-';
 const FONT = "'Segoe UI', sans-serif";
@@ -47,6 +50,29 @@ const C_NONE = '#A0AEC0';
 const C_WARN = '#92400E';
 
 /**
+ * Concrete and rebar zones of one page on the export canvas, each only when its View switch is on.
+ * Lightweight outlines with their mark and notation - never individual bars or mesh sheets.
+ */
+export function drawStructuralOverlays(
+  ctx: CanvasRenderingContext2D,
+  project: Plan,
+  pageNumber: number,
+  mult: number,
+  headerH: number,
+  overlays: OverlayVisibility,
+  language: Language
+) {
+  if (overlays.concrete) {
+    const elements = concreteOf(project).filter((e) => e.pageNumber === pageNumber);
+    if (elements.length > 0) drawConcreteZonesOnCanvas(ctx, elements, mult, headerH, exportContext(language));
+  }
+  if (overlays.rebar) {
+    const meshes = rebarOf(project).filter((i): i is Extract<typeof i, { kind: 'mesh' }> => i.kind === 'mesh' && i.pageNumber === pageNumber);
+    if (meshes.length > 0) drawRebarZonesOnCanvas(ctx, meshes, mult, headerH, exportContext(language));
+  }
+}
+
+/**
  * Renders one PDF-source page (the plan itself) with its rooms overlaid, as a standalone framed
  * image. The header band on top is left blank: its title and date are drawn as vector text by the
  * caller, so only the plan and its annotations are raster.
@@ -55,8 +81,7 @@ async function renderFramedPlanPage(
   project: Plan,
   pageNumber: number,
   mult: number,
-  showMarkings: boolean,
-  showMeasurements: boolean,
+  overlays: OverlayVisibility,
   areaNumbers: Map<string, number>,
   language: Language
 ): Promise<{ dataUrl: string; width: number; height: number; headerH: number } | null> {
@@ -84,7 +109,7 @@ async function renderFramedPlanPage(
 
   ctx.drawImage(planCanvas, 0, headerH);
 
-  if (showMarkings) {
+  if (overlays.finishes) {
     const rooms = project.rooms.filter((r) => r.pageNumber === pageNumber && r.points.length >= 3);
     for (const r of rooms) {
       ctx.beginPath();
@@ -119,10 +144,14 @@ async function renderFramedPlanPage(
       ctx.direction = 'rtl';
       ctx.textBaseline = 'alphabetic';
     }
-
   }
 
-  if (showMeasurements) {
+  drawStructuralOverlays(ctx, project, pageNumber, mult, headerH, overlays, language);
+  ctx.direction = 'rtl';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'alphabetic';
+
+  if (overlays.measurements) {
     const areaKindColors = project.areaKindColors ?? DEFAULT_AREA_KIND_COLORS;
     const measurements = (project.measurements ?? []).filter((m) => m.pageNumber === pageNumber);
     if (measurements.length > 0) {
@@ -135,7 +164,7 @@ async function renderFramedPlanPage(
     }
   }
 
-  if (showMarkings) {
+  if (overlays.markups) {
     const markups = (project.markups ?? []).filter((m) => m.pageNumber === pageNumber);
     if (markups.length > 0) {
       ctx.save();
@@ -586,13 +615,19 @@ export function getExportablePageNumbers(project: Plan): number[] {
   ).sort((a, b) => a - b);
 }
 
+/**
+ * The plan PDF: the chosen sections, always in one order - plan pages with their overlays, the
+ * finishes quantities, the concrete BOQ, the rebar BOQ. `overlays` (the View menu state) decides what
+ * is drawn on the plan pages only; the quantity sections never depend on it. `pageNumbers` filters
+ * pages for every section.
+ */
 export async function exportQuantitiesToPdf(
   project: Plan,
   summaries: RoomQuantitySummary[],
   totals: ReportCategoryTotal[],
-  showRoomMarkings: boolean = true,
+  overlays: OverlayVisibility,
   pageNumbers: number[] | undefined,
-  showMeasurements: boolean,
+  content: ExportContent,
   language: Language
 ) {
   const x = exportContext(language);
@@ -602,16 +637,15 @@ export async function exportQuantitiesToPdf(
   const mult = 2;
 
   const allAreaMeasurements = (project.measurements ?? []).filter((m) => m.tool === 'area' && m.areaKind && typeof m.areaM2 === 'number');
+  const pagesInScope = getExportablePageNumbers(project).filter((p) => !pageNumbers || pageNumbers.includes(p));
+  const areaTablesOf = (pageNumber: number) => allAreaMeasurements.filter((m) => m.pageNumber === pageNumber);
 
-  const pageNumbersWithContent = getExportablePageNumbers(project).filter((p) => !pageNumbers || pageNumbers.includes(p));
-  // Each page gets its own area/wall breakdown table, numbered independently, right after that page's plan image —
-  // rather than one combined table for the whole multi-page project.
-  for (const pageNumber of pageNumbersWithContent) {
-    const pageAreaMeasurements = allAreaMeasurements.filter((m) => m.pageNumber === pageNumber);
-    const pageAreaNumbers = numberAreaMeasurements(pageAreaMeasurements);
-
-    const framed = await renderFramedPlanPage(project, pageNumber, mult, showRoomMarkings, showMeasurements, pageAreaNumbers, language);
-    if (framed) {
+  // 1. Plan pages with the overlays the View menu shows.
+  if (content.plan) {
+    for (const pageNumber of pagesInScope) {
+      // Each page's area measurements are numbered independently, so the badges match the Finishes table.
+      const framed = await renderFramedPlanPage(project, pageNumber, mult, overlays, numberAreaMeasurements(areaTablesOf(pageNumber)), language);
+      if (!framed) continue;
       const pngBytes = await fetch(framed.dataUrl).then((r) => r.arrayBuffer());
       const pngImage = await pdfDoc.embedPng(pngBytes);
       const page = pdfDoc.addPage([framed.width, framed.height]);
@@ -632,16 +666,27 @@ export async function exportQuantitiesToPdf(
       });
       drawLogo(pt, x.rtl ? 16 * mult : framed.width - 16 * mult - logoWidth(REPORT_LOGO_HEIGHT * mult), 14 * mult, REPORT_LOGO_HEIGHT * mult);
     }
-
-    if (showMeasurements && pageAreaMeasurements.length > 0) {
-      drawAreaMeasurementTable(pdfDoc, fonts, t('exports.quantityPdf.planPageTitle', { name: project.name, page: pageNumber }), pageAreaMeasurements, { showLogo: true }, language);
-    }
   }
 
-  if (summaries.length > 0) drawQuantityTablePages(pdfDoc, fonts, project, summaries, totals, x);
+  // 2. Finishes quantities: the area breakdown per page, then the room table.
+  if (content.finishes) {
+    for (const pageNumber of pagesInScope) {
+      const pageAreas = areaTablesOf(pageNumber);
+      if (pageAreas.length > 0) drawAreaMeasurementTable(pdfDoc, fonts, t('exports.quantityPdf.planPageTitle', { name: project.name, page: pageNumber }), pageAreas, { showLogo: true }, language);
+    }
+    if (summaries.length > 0) drawQuantityTablePages(pdfDoc, fonts, project, summaries, totals, x);
+  }
 
-  // Concrete and rebar tables, after the finishes — only when the plan has such items on the chosen pages.
-  drawStructuralPdfPages(pdfDoc, fonts, project.name, buildStructuralReport(project, pageNumbers ? new Set(pageNumbers) : undefined), language);
+  // 3-4. Concrete and rebar: one BOQ each (items, then a total row), independent of the View menu.
+  if (content.concrete || content.rebar) {
+    drawStructuralPdfPages(pdfDoc, fonts, project.name, buildStructuralReport(project, pageNumbers ? new Set(pageNumbers) : undefined), language, {
+      concrete: content.concrete,
+      rebar: content.rebar,
+    });
+  }
+
+  // A selection that matches nothing on the chosen pages would save an empty file.
+  if (pdfDoc.getPageCount() === 0) throw new Error('The selected content has nothing to export on the selected pages.');
 
   const bytes = await pdfDoc.save();
   const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], {

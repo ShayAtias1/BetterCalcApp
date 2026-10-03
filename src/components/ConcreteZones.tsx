@@ -1,12 +1,10 @@
 import type { ConcreteElement } from '../types/structural';
 import { polygonCentroid } from '../lib/geometry';
 import { labelDirection } from '../lib/textDirection';
-import { markLabel } from '../lib/structuralMarks';
-import { metersToCm } from '../lib/structuralUnits';
+import { CONCRETE_COLOR, concreteZoneLabel } from '../lib/structuralOverlay';
 import { formatNumber, useLanguage, useT } from '../i18n';
 
-/** One colour for every concrete zone: a warm stone grey, apart from the room palette. */
-export const CONCRETE_COLOR = '#78716c';
+export { CONCRETE_COLOR };
 
 const HATCH_ID = 'bc-concrete-hatch';
 
@@ -43,14 +41,7 @@ export default function ConcreteZones({
         const selected = el.id === selectedId;
         const pts = el.points.map((p) => `${p.x},${p.y}`).join(' ');
         const c = polygonCentroid(el.points);
-        const mark = markLabel(el, t);
-        const parts = [mark];
-        if (typeof el.depthM === 'number' && Number.isFinite(el.depthM) && el.depthM > 0) {
-          // A slab's thickness is read in centimetres; a wall, beam or column's height in metres.
-          parts.push(el.kind === 'slab' ? `${formatNumber(metersToCm(el.depthM)!)} ${t('units.cm')}` : `${formatNumber(el.depthM)} ${t('units.m')}`);
-        }
-        if (el.grade?.trim()) parts.push(el.grade.trim());
-        const label = parts.join(' · ');
+        const label = concreteZoneLabel(el, t, formatNumber);
         return (
           <g key={el.id}>
             <polygon points={pts} fill={CONCRETE_COLOR} fillOpacity={selected ? 0.22 : 0.1} stroke="none" />
