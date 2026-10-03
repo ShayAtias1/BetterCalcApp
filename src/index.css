@@ -3098,3 +3098,29 @@ html[dir='rtl'] .qty-table .col-room {
 .project-structural-block {
   max-width: 560px;
 }
+
+/* Quantities panel: Finishes / Concrete / Rebar switch, and the structural summaries inside it */
+.qty-domains {
+  display: flex;
+  gap: 4px;
+  padding: var(--s-1) var(--s-4);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.qty-domain-count {
+  margin-inline-start: 6px;
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--bg-subtle);
+  font: var(--t-label);
+  color: var(--muted);
+}
+.qty-structural {
+  max-width: 640px;
+}
+.qty-structural .concrete-summary {
+  margin-top: 0;
+}
+.qty-domain-empty {
+  margin: var(--s-4);
+}

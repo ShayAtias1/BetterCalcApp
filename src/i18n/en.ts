@@ -408,6 +408,9 @@ export const en: Dictionary = {
   },
 
   quantitiesPanel: {
+    domains: 'Quantity domains',
+    emptyConcrete: 'No concrete zones yet. Mark concrete in the Concrete tab to see its quantities here.',
+    emptyRebar: 'No rebar yet. Add rebar in the Rebar tab to see its quantities here.',
     open: 'Open the quantities table',
     title: 'Quantities',
     rooms: '{count} {count|room|rooms}',

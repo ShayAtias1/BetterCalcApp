@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../store/appStore';
 import QuantityTable from './QuantityTable';
 import QuantityExportActions from './QuantityExportActions';
+import ConcreteSummary from './ConcreteSummary';
+import RebarSummary from './RebarSummary';
+import { concreteOf, rebarOf } from '../lib/structuralPlan';
 import Icon from './Icon';
 import { useT } from '../i18n';
 
@@ -32,6 +35,8 @@ export default function QuantitiesPanel() {
   const toggleMaximized = useAppStore((s) => s.toggleQuantitiesMaximized);
   const project = useAppStore((s) => s.project);
 
+  // Which domain the panel shows. Finishes, Concrete and Rebar stay separate tables, never one merged report.
+  const [domain, setDomain] = useState<'finishes' | 'concrete' | 'rebar'>('finishes');
   const [resizing, setResizing] = useState(false);
   // Calculation defaults: a secondary toggle in the header, deliberately not competing with export.
   const [showDefaults, setShowDefaults] = useState(false);
@@ -80,6 +85,8 @@ export default function QuantitiesPanel() {
   if (!project) return null;
 
   const roomCount = project.rooms.length;
+  const counts = { finishes: roomCount, concrete: concreteOf(project).length, rebar: rebarOf(project).length };
+  const domainLabel = { finishes: 'workspace.tabs.rooms', concrete: 'workspace.tabs.concrete', rebar: 'workspace.tabs.rebar' } as const;
 
   if (!open) {
     return (
@@ -114,6 +121,7 @@ export default function QuantitiesPanel() {
         <h2 className="qty-panel-title">{t('quantitiesPanel.title')}</h2>
         <span className="qty-panel-meta">{t('quantitiesPanel.roomsInProject', { count: roomCount })}</span>
         <div className="qty-panel-actions">
+          {domain === 'finishes' && (
           <button
             className={`btn-ghost small ${showDefaults ? 'active' : ''}`}
             onClick={() => setShowDefaults((v) => !v)}
@@ -122,6 +130,7 @@ export default function QuantitiesPanel() {
             <Icon name="settings" />
             <span className="btn-label">{t('quantitiesPanel.defaults')}</span>
           </button>
+          )}
           <span className="top-bar-sep" />
           <QuantityExportActions variant="buttons" />
           <button
@@ -136,8 +145,20 @@ export default function QuantitiesPanel() {
           </button>
         </div>
       </header>
+      <div className="qty-domains" role="tablist" aria-label={t('quantitiesPanel.domains')}>
+        {(['finishes', 'concrete', 'rebar'] as const).map((d) => (
+          <button key={d} role="tab" aria-selected={domain === d} className={`btn-ghost small ${domain === d ? 'active' : ''}`} onClick={() => setDomain(d)}>
+            {t(domainLabel[d])}
+            {counts[d] > 0 && <span className="qty-domain-count">{counts[d]}</span>}
+          </button>
+        ))}
+      </div>
       <div className="qty-panel-body">
-        <QuantityTable showDefaults={showDefaults} />
+        {domain === 'finishes' && <QuantityTable showDefaults={showDefaults} />}
+        {domain === 'concrete' &&
+          (counts.concrete === 0 ? <p className="muted qty-domain-empty">{t('quantitiesPanel.emptyConcrete')}</p> : <div className="qty-structural"><ConcreteSummary plan={project} /></div>)}
+        {domain === 'rebar' &&
+          (counts.rebar === 0 ? <p className="muted qty-domain-empty">{t('quantitiesPanel.emptyRebar')}</p> : <div className="qty-structural"><RebarSummary plan={project} /></div>)}
       </div>
     </section>
   );

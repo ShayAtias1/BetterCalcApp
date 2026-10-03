@@ -159,10 +159,8 @@ export default function PdfViewer() {
   const currentPage = useAppStore((s) => s.currentPage);
   const setNumPages = useAppStore((s) => s.setNumPages);
   const toolMode = useAppStore((s) => s.toolMode);
-  const annotationsVisible = useAppStore((s) => s.annotationsVisible);
+  const overlayVisible = useAppStore((s) => s.overlayVisible);
   const drawTarget = useAppStore((s) => s.drawTarget);
-  // One switch for every structural overlay: the existing "area markings and notes" View option.
-  const structuralVisible = annotationsVisible;
   const selectedConcreteId = useAppStore((s) => s.selectedConcreteId);
   const setSelectedConcreteId = useAppStore((s) => s.setSelectedConcreteId);
   const selectedRebarId = useAppStore((s) => s.selectedRebarId);
@@ -170,7 +168,7 @@ export default function PdfViewer() {
   const gridEnabled = useGridStore((s) => s.enabled);
   const gridSpacingM = useGridStore((s) => s.spacingM);
   const gridOpacity = useGridStore((s) => s.opacity);
-  const measurementsVisible = useAppStore((s) => s.measurementsVisible);
+  const measurementsVisible = overlayVisible.measurements;
   const markupFontScale = useAppStore((s) => s.markupFontScale);
   const undo = useAppStore((s) => s.undo);
   const redo = useAppStore((s) => s.redo);
@@ -749,19 +747,20 @@ export default function PdfViewer() {
       // is the original room hit-test, untouched.
       if (drawTarget === 'concrete') {
         // Hidden zones are not hit-tested: an invisible zone must not catch clicks.
-        const zone = !structuralVisible ? undefined : [...concreteOf(project)].reverse().find((z) => z.pageNumber === currentPage && polygonAreaPx(z.points) > 0 && pointInPolygon(native, z.points));
+        const zone = !overlayVisible.concrete ? undefined : [...concreteOf(project)].reverse().find((z) => z.pageNumber === currentPage && polygonAreaPx(z.points) > 0 && pointInPolygon(native, z.points));
         setSelectedConcreteId(zone ? zone.id : null);
         return;
       }
       // Same for the Rebar tab: only mesh zones (manual bars have no shape) and only while visible.
       if (drawTarget === 'rebar') {
-        const mesh = !structuralVisible
+        const mesh = !overlayVisible.rebar
           ? undefined
           : [...rebarOf(project)].reverse().find((m) => m.kind === 'mesh' && m.pageNumber === currentPage && polygonAreaPx(m.points) > 0 && pointInPolygon(native, m.points));
         setSelectedRebarId(mesh ? mesh.id : null);
         return;
       }
-      const hit = [...project.rooms].reverse().find((r) => r.pageNumber === currentPage && polygonAreaPx(r.points) > 0 && pointInPolygon(native, r.points));
+      // A hidden Finishes overlay is not hit-tested either.
+      const hit = !overlayVisible.finishes ? undefined : [...project.rooms].reverse().find((r) => r.pageNumber === currentPage && polygonAreaPx(r.points) > 0 && pointInPolygon(native, r.points));
       setSelectedRoomId(hit ? hit.id : null);
     }
   };
@@ -804,7 +803,7 @@ export default function PdfViewer() {
                 rest of the overlay, so it pans and zooms with the plan; the spacing is the real-world
                 one over the page's own scale and does not depend on zoom or UI direction. */}
             {gridEnabled && grid && <GridLayer grid={grid} width={pageSize.width} height={pageSize.height} zoom={zoom} opacity={gridOpacity} />}
-            {annotationsVisible &&
+            {overlayVisible.finishes &&
               project.rooms
                 .filter((r) => r.pageNumber === currentPage)
                 .map((r) => {
@@ -836,9 +835,9 @@ export default function PdfViewer() {
                 );
               })}
 
-            {/* Structural zones (concrete now, rebar later) follow the View menu's "area markings and
-                notes" switch: hidden means not drawn here and not selectable (see handleClick). */}
-            {structuralVisible && (
+            {/* Concrete and rebar zones each follow their own View switch: hidden means not drawn here and
+                not selectable (see handleClick). */}
+            {overlayVisible.concrete && (
               <ConcreteZones
                 elements={concreteOf(project).filter((z) => z.pageNumber === currentPage)}
                 selectedId={selectedConcreteId}
@@ -846,7 +845,7 @@ export default function PdfViewer() {
                 zoom={zoom}
               />
             )}
-            {structuralVisible && (
+            {overlayVisible.rebar && (
               <RebarZones items={rebarOf(project).filter((m) => m.pageNumber === currentPage)} selectedId={selectedRebarId} strokeW={strokeW} zoom={zoom} />
             )}
 
@@ -1083,7 +1082,7 @@ export default function PdfViewer() {
             )}
 
             {/* Finished markups on this page */}
-            {annotationsVisible &&
+            {overlayVisible.markups &&
               orderMarkups((project.markups ?? []).filter((m) => m.pageNumber === currentPage)).map((m) => (
                 <MarkupShape key={m.id} markup={m} strokeW={strokeW} draggable={toolMode === 'select'} />
               ))}

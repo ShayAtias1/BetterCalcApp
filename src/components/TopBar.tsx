@@ -11,6 +11,15 @@ import { planForReport } from '../lib/reportTitle';
 import { trackedExport } from '../lib/analytics';
 import { notifyExportFailed } from '../lib/exportFailure';
 import { useLanguage, useT } from '../i18n';
+import { OVERLAY_KEYS, exportAnnotationsVisible } from '../lib/overlayVisibility';
+
+const OVERLAY_LABEL = {
+  finishes: 'workspace.tabs.rooms',
+  concrete: 'workspace.tabs.concrete',
+  rebar: 'workspace.tabs.rebar',
+  measurements: 'workspace.tabs.measure',
+  markups: 'workspace.tabs.markup',
+} as const;
 
 export default function TopBar() {
   const t = useT();
@@ -27,10 +36,12 @@ export default function TopBar() {
   const setCurrentPage = useAppStore((s) => s.setCurrentPage);
   const updateProjectMeta = useAppStore((s) => s.updateProjectMeta);
   const saveState = useAppStore(selectSaveState);
-  const annotationsVisible = useAppStore((s) => s.annotationsVisible);
-  const toggleAnnotationsVisible = useAppStore((s) => s.toggleAnnotationsVisible);
-  const measurementsVisible = useAppStore((s) => s.measurementsVisible);
-  const toggleMeasurementsVisible = useAppStore((s) => s.toggleMeasurementsVisible);
+  const overlayVisible = useAppStore((s) => s.overlayVisible);
+  const setOverlayVisible = useAppStore((s) => s.setOverlayVisible);
+  // The plan exports have one switch for rooms and markups together: hidden only when both are.
+  const annotationsVisible = exportAnnotationsVisible(overlayVisible);
+  const measurementsVisible = overlayVisible.measurements;
+  const allVisible = OVERLAY_KEYS.every((k) => overlayVisible[k]);
   const canUndo = useAppStore((s) => s.history.length > 0);
   const canRedo = useAppStore((s) => s.future.length > 0);
   const undo = useAppStore((s) => s.undo);
@@ -243,20 +254,18 @@ export default function TopBar() {
           id="view"
           openId={openMenu}
           setOpenId={setOpenMenu}
-          icon={annotationsVisible && measurementsVisible ? 'eye' : 'eye-off'}
+          icon={allVisible ? 'eye' : 'eye-off'}
           label={t('topBar.view')}
           variant="ghost"
           title={t('topBar.viewHint')}
-          highlighted={!annotationsVisible || !measurementsVisible}
+          highlighted={!allVisible}
         >
-          <button className="menu-item" onClick={toggleAnnotationsVisible}>
-            <span className="menu-check">{annotationsVisible && <Icon name="check" size={13} />}</span>
-            {t('topBar.annotations')}
-          </button>
-          <button className="menu-item" onClick={toggleMeasurementsVisible}>
-            <span className="menu-check">{measurementsVisible && <Icon name="check" size={13} />}</span>
-            {t('topBar.measurements')}
-          </button>
+          {OVERLAY_KEYS.map((key) => (
+            <button key={key} className="menu-item" onClick={() => setOverlayVisible(key, !overlayVisible[key])}>
+              <span className="menu-check">{overlayVisible[key] && <Icon name="check" size={13} />}</span>
+              {t(OVERLAY_LABEL[key])}
+            </button>
+          ))}
           <p className="menu-hint">{t('topBar.viewNote')}</p>
           <GridMenuSection />
         </TopBarMenu>

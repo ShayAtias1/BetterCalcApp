@@ -8,6 +8,7 @@ import { exportQuantitiesToPdf, getExportablePageNumbers } from '../lib/exportQu
 import { quantityExportDetails, trackedExport } from '../lib/analytics';
 import { notifyExportFailed } from '../lib/exportFailure';
 import { hasStructuralData, withStructuralPages } from '../lib/structuralPlan';
+import { exportAnnotationsVisible } from '../lib/overlayVisibility';
 import { useLanguage, useT } from '../i18n';
 
 /**
@@ -25,8 +26,9 @@ export default function QuantityExportActions({ variant, onPicked }: { variant: 
   const project = useAppStore((s) => s.project);
   const projectName = useAppStore((s) => s.currentProject?.name);
   const currentPage = useAppStore((s) => s.currentPage);
-  const annotationsVisible = useAppStore((s) => s.annotationsVisible);
-  const measurementsVisible = useAppStore((s) => s.measurementsVisible);
+  const overlayVisible = useAppStore((s) => s.overlayVisible);
+  const annotationsVisible = exportAnnotationsVisible(overlayVisible);
+  const measurementsVisible = overlayVisible.measurements;
   const [exportingExcel, setExportingExcel] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [pageDialogPages, setPageDialogPages] = useState<Set<number> | null>(null);

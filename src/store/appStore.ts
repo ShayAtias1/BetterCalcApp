@@ -40,6 +40,7 @@ import {
   type RebarPatch,
 } from '../lib/structuralMutations';
 import { polygonAreaPx } from '../lib/geometry';
+import { overlayForTool, readOverlayVisibility, OVERLAY_STORAGE_KEY, type OverlayKey, type OverlayVisibility } from '../lib/overlayVisibility';
 import { createHistoryTracker } from '../lib/undoHistory';
 import { loadPdfPlanSource } from '../lib/planSource';
 import { runRoomDetection, type DetectionSummary } from '../lib/roomDetection';
@@ -234,10 +235,9 @@ interface AppState {
   pendingAreaKind: AreaKind | null;
   /** When on, each new polygon vertex (or the second point of a distance measurement) snaps to a horizontal/vertical line from the previous one. */
   orthoSnap: boolean;
-  /** Manual show/hide toggle for the room area markings drawn over the plan. */
-  annotationsVisible: boolean;
-  /** Manual show/hide toggle for the measurements drawn over the plan — independent of the markings toggle. */
-  measurementsVisible: boolean;
+  /** View menu: one independent show/hide switch per overlay domain (persisted per browser, see lib/overlayVisibility). */
+  overlayVisible: OverlayVisibility;
+  setOverlayVisible: (key: OverlayKey, visible: boolean) => void;
   /** True from the moment a mutation happens until the next successful persist. */
   dirty: boolean;
   /** True while a persist is in flight. */
@@ -377,8 +377,6 @@ interface AppState {
   setQuantitiesHeight: (px: number) => void;
   toggleQuantitiesMaximized: () => void;
 
-  toggleAnnotationsVisible: () => void;
-  toggleMeasurementsVisible: () => void;
   addMeasurePoint: (p: Point) => void;
   clearMeasurePoints: () => void;
   finishMeasurement: (m: Measurement) => void;
@@ -525,6 +523,34 @@ export function selectSaveState(s: AppState): SaveState {
   return s.dirty ? 'unsaved' : 'saved';
 }
 
+function loadOverlayVisibility(): OverlayVisibility {
+  try {
+    return readOverlayVisibility(typeof window !== 'undefined' ? window.localStorage.getItem(OVERLAY_STORAGE_KEY) : null);
+  } catch {
+    return readOverlayVisibility(null);
+  }
+}
+
+function saveOverlayVisibility(v: OverlayVisibility) {
+  try {
+    window.localStorage.setItem(OVERLAY_STORAGE_KEY, JSON.stringify(v));
+  } catch {
+    // still applies for this session
+  }
+}
+
+/** Turns on just one overlay domain (when the user starts working in it) and leaves the others as they are. */
+function ensureOverlayVisible(
+  key: OverlayKey | null,
+  get: () => { overlayVisible: OverlayVisibility },
+  set: (patch: { overlayVisible: OverlayVisibility }) => void
+) {
+  if (!key || get().overlayVisible[key]) return;
+  const next = { ...get().overlayVisible, [key]: true };
+  set({ overlayVisible: next });
+  saveOverlayVisibility(next);
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   project: null,
   currentProject: null,
@@ -557,8 +583,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   quantitiesOpen: false,
   quantitiesHeight: 320,
   quantitiesMaximized: false,
-  annotationsVisible: true,
-  measurementsVisible: true,
+  overlayVisible: loadOverlayVisibility(),
+  setOverlayVisible: (key, visible) => {
+    const next = { ...get().overlayVisible, [key]: visible };
+    set({ overlayVisible: next });
+    saveOverlayVisibility(next);
+  },
   dirty: false,
   saving: false,
   saveError: null,
@@ -918,14 +948,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
   setNumPages: (n) => set({ numPages: n }),
-  setToolMode: (m) =>
+  setToolMode: (m) => {
     set({
       toolMode: m,
       calibrationPoints: [],
       drawingPoints: [],
       measurePoints: [],
       markupPoints: [],
-    }),
+    });
+    ensureOverlayVisible(overlayForTool(m, get().drawTarget), get, set);
+  },
   setSelectedRoomId: (id) => set({ selectedRoomId: id }),
 
   addCalibrationPoint: (p) => {
@@ -961,6 +993,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setDrawTarget: (target) => {
     if (get().drawTarget === target) return;
     set({ drawTarget: target, drawingPoints: [] });
+    ensureOverlayVisible(overlayForTool(get().toolMode, target), get, set);
   },
   setSelectedConcreteId: (id) => set({ selectedConcreteId: id }),
   setConcreteKind: (kind) => set({ concreteKind: kind }),
@@ -986,6 +1019,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const wanted = new Set(roomIds);
     const { plan, created } = addConcreteFromRooms(project, project.rooms.filter((r) => wanted.has(r.id)), concreteKind);
     if (created.length === 0) return 0;
+    ensureOverlayVisible('concrete', get, set);
     historyTracker.push(get, set, project);
     set({ project: { ...plan, updatedAt: Date.now() } });
     if (created.length === 1) {
@@ -1051,6 +1085,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const wanted = new Set(roomIds);
     const { plan, created } = addRebarMeshFromRooms(project, project.rooms.filter((r) => wanted.has(r.id)));
     if (created.length === 0) return 0;
+    ensureOverlayVisible('rebar', get, set);
     historyTracker.push(get, set, project);
     set({ project: { ...plan, updatedAt: Date.now() } });
     if (created.length === 1) {
@@ -1117,8 +1152,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   setQuantitiesHeight: (px) => set({ quantitiesHeight: px }),
   toggleQuantitiesMaximized: () => set((s) => ({ quantitiesMaximized: !s.quantitiesMaximized })),
 
-  toggleAnnotationsVisible: () => set((s) => ({ annotationsVisible: !s.annotationsVisible })),
-  toggleMeasurementsVisible: () => set((s) => ({ measurementsVisible: !s.measurementsVisible })),
   addMeasurePoint: (p) => set({ measurePoints: [...get().measurePoints, p] }),
   clearMeasurePoints: () => set({ measurePoints: [] }),
   finishMeasurement: (m) => {
@@ -1146,7 +1179,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
 
-  setMarkupTool: (t) => set({ toolMode: t ? 'markup' : 'select', markupTool: t, markupPoints: [] }),
+  setMarkupTool: (t) => {
+    set({ toolMode: t ? 'markup' : 'select', markupTool: t, markupPoints: [] });
+    if (t) ensureOverlayVisible('markups', get, set);
+  },
   setMarkupColor: (c) => set({ markupColor: c }),
   setMarkupOrtho: (v) => set({ markupOrtho: v }),
   setMarkupFontScale: (v) => set({ markupFontScale: v }),

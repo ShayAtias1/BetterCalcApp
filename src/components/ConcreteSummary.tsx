@@ -60,8 +60,8 @@ export default function ConcreteSummary({ plan }: { plan: Plan }) {
       <div className="concrete-summary-grid concrete-summary-total">
         <span>{t('concrete.summary.total')}</span>
         <span>{summary.elementCount}</span>
-        <span>{formatNumber(summary.volumeM3)}</span>
-        <span>{formatNumber(summary.orderM3)}</span>
+        <span>{volume(summary.volumeM3, summary.elementCount > summary.missingCount)}</span>
+        <span>{volume(summary.orderM3, summary.elementCount > summary.missingCount)}</span>
       </div>
       {summary.missingCount > 0 && (
         <div className="concrete-summary-missing">

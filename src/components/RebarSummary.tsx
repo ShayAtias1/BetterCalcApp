@@ -8,7 +8,7 @@ import Icon from './Icon';
 type T = ReturnType<typeof useT>;
 
 /** An estimate is shown with "≈" so it can never be read as an exact count; mixed rows say so on their own line. */
-const num = (v: number, basis: RebarBasis | null, decimals: number) => `${basis === 'estimated' ? '≈ ' : ''}${formatNumber(round(v, decimals))}`;
+const num = (v: number, basis: RebarBasis | null, decimals: number) => basis === null ? '-' : `${basis === 'estimated' ? '≈ ' : ''}${formatNumber(round(v, decimals))}`;
 
 function RowNote({ row, t }: { row: Pick<RebarSummaryRow, 'basis' | 'estimatedLengthM' | 'estimatedWeightKg'>; t: T }) {
   if (row.basis === 'exact') return null;
