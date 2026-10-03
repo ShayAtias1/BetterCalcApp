@@ -14,8 +14,8 @@
 
 import type { Plan } from '../types';
 import type { ConcreteKind } from '../types/structural';
-import { calculateConcrete } from './concrete';
-import { calculateRebar } from './rebar';
+import { calculateConcrete, type ConcreteStatus } from './concrete';
+import { calculateRebar, type RebarStatus } from './rebar';
 import { round } from './geometry';
 import { CONCRETE_KINDS } from './structuralMutations';
 import { concreteOf, rebarOf } from './structuralPlan';
@@ -45,13 +45,13 @@ export interface ConcreteSummary {
 
 const KIND_ORDER = new Map(CONCRETE_KINDS.map((k, i) => [k, i]));
 
-export function buildConcreteSummary(plan: Plan): ConcreteSummary {
+export function buildConcreteSummary(plan: Plan, pages?: ReadonlySet<number>): ConcreteSummary {
   const groups = new Map<string, { row: ConcreteSummaryRow; volume: number; order: number }>();
   let volume = 0;
   let order = 0;
   let missing = 0;
 
-  const elements = concreteOf(plan);
+  const elements = concreteOf(plan).filter((e) => !pages || pages.has(e.pageNumber));
   for (const el of elements) {
     const grade = el.grade?.trim() ?? '';
     const key = JSON.stringify([el.pageNumber, el.kind, grade]);
@@ -164,13 +164,13 @@ const basisOf = (a: Acc): RebarBasis | null => (a.lines === 0 ? null : a.estimat
  * Sums are of unrounded values; each result is rounded once at the end (lengths and weights to 2
  * decimals), so rounding never accumulates.
  */
-export function buildRebarSummary(plan: Plan): RebarSummary {
+export function buildRebarSummary(plan: Plan, onlyPages?: ReadonlySet<number>): RebarSummary {
   const perPage = new Map<number, { rows: Map<number, Acc>; missingItems: number; incompleteLayers: number }>();
   const total = emptyAcc();
   let missingItems = 0;
   let incompleteLayers = 0;
 
-  const items = rebarOf(plan);
+  const items = rebarOf(plan).filter((i) => !onlyPages || onlyPages.has(i.pageNumber));
   for (const item of items) {
     let page = perPage.get(item.pageNumber);
     if (!page) {
@@ -247,5 +247,153 @@ export function buildRebarSummary(plan: Plan): RebarSummary {
     estimatedLengthM: round(total.estimatedLength, 2),
     estimatedWeightKg: round(total.estimatedWeight, 2),
     basis: basisOf(total),
+  };
+}
+
+// ---------- item rows and the structural report (what exports print) ----------
+
+/** One concrete element as an export row. Numbers are null where they cannot be known — never 0. */
+export interface ConcreteItemRow {
+  id: string;
+  pageNumber: number;
+  mark: string;
+  kind: ConcreteKind;
+  /** As typed (trimmed); '' = unspecified. */
+  grade: string;
+  footprintM2: number | null;
+  /** Thickness (slab) or height; null when not entered. */
+  depthM: number | null;
+  quantity: number;
+  wastePercent: number;
+  netM3: number | null;
+  orderM3: number | null;
+  status: ConcreteStatus;
+}
+
+/** Items on `pages` (all when omitted), by page and then in the order they were made. */
+export function buildConcreteItems(plan: Plan, pages?: ReadonlySet<number>): ConcreteItemRow[] {
+  return concreteOf(plan)
+    .map((el, index) => ({ el, index }))
+    .filter(({ el }) => !pages || pages.has(el.pageNumber))
+    .sort((a, b) => a.el.pageNumber - b.el.pageNumber || a.index - b.index)
+    .map(({ el }) => {
+      const calc = calculateConcrete(el, plan.pages[el.pageNumber]?.calibration ?? null);
+      return {
+        id: el.id,
+        pageNumber: el.pageNumber,
+        mark: el.mark,
+        kind: el.kind,
+        grade: el.grade?.trim() ?? '',
+        footprintM2: calc.footprintM2,
+        depthM: typeof el.depthM === 'number' && Number.isFinite(el.depthM) && el.depthM > 0 ? el.depthM : null,
+        quantity: calc.quantity,
+        wastePercent: calc.wastePercent,
+        netM3: calc.volumeM3,
+        orderM3: calc.orderM3,
+        status: calc.status,
+      };
+    });
+}
+
+/**
+ * One rebar line as an export row: a mesh layer, or a manual-bars row. A mesh with several layers
+ * gives several rows (same mark); a mesh with none gives one empty row so it is still listed.
+ * Quantities are null when the item is not calculable; `barCount` / `barLengthM` are also null for
+ * an estimated layer (it has no bars to count).
+ */
+export interface RebarItemRow {
+  itemId: string;
+  pageNumber: number;
+  mark: string;
+  kind: 'mesh' | 'bars';
+  diameterMm: number | null;
+  spacingMm: number | null;
+  /** Mesh layers only. */
+  direction: 'long' | 'short' | null;
+  barCount: number | null;
+  barLengthM: number | null;
+  netLengthM: number | null;
+  netWeightKg: number | null;
+  wastePercent: number;
+  orderLengthM: number | null;
+  orderWeightKg: number | null;
+  /** The numbers are an area-based estimate, not a bar count. */
+  estimated: boolean;
+  status: RebarStatus;
+}
+
+const positiveOrNull = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null);
+
+export function buildRebarItems(plan: Plan, pages?: ReadonlySet<number>): RebarItemRow[] {
+  const rows: RebarItemRow[] = [];
+  const ordered = rebarOf(plan)
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => !pages || pages.has(item.pageNumber))
+    .sort((a, b) => a.item.pageNumber - b.item.pageNumber || a.index - b.index);
+
+  for (const { item } of ordered) {
+    const calc = calculateRebar(item, plan.pages[item.pageNumber]?.calibration ?? null);
+    const ok = calc.status === 'ok';
+    const factor = 1 + calc.wastePercent / 100;
+    const base = { itemId: item.id, pageNumber: item.pageNumber, mark: item.mark, kind: item.kind, wastePercent: calc.wastePercent, status: calc.status };
+
+    if (item.kind === 'bars') {
+      const l = calc.layers[0];
+      rows.push({
+        ...base,
+        diameterMm: positiveOrNull(item.diameterMm),
+        spacingMm: null,
+        direction: null,
+        barCount: ok ? l.barCount : null,
+        barLengthM: ok ? l.cutLengthM : null,
+        netLengthM: ok ? l.totalLengthM : null,
+        netWeightKg: ok ? l.weightKg : null,
+        orderLengthM: ok ? l.totalLengthM! * factor : null,
+        orderWeightKg: ok ? l.weightKg! * factor : null,
+        estimated: false,
+      });
+      continue;
+    }
+
+    if (item.layers.length === 0) {
+      rows.push({ ...base, diameterMm: null, spacingMm: null, direction: null, barCount: null, barLengthM: null, netLengthM: null, netWeightKg: null, orderLengthM: null, orderWeightKg: null, estimated: false });
+      continue;
+    }
+    item.layers.forEach((layer, i) => {
+      const l = calc.layers[i];
+      const spacing = positiveOrNull(layer.spacingM);
+      rows.push({
+        ...base,
+        diameterMm: positiveOrNull(layer.diameterMm),
+        spacingMm: spacing === null ? null : Math.round(spacing * 1000),
+        direction: layer.direction === 'short' ? 'short' : 'long',
+        barCount: ok ? l.barCount : null,
+        barLengthM: ok ? l.cutLengthM : null,
+        netLengthM: ok ? l.totalLengthM : null,
+        netWeightKg: ok ? l.weightKg : null,
+        orderLengthM: ok ? l.totalLengthM! * factor : null,
+        orderWeightKg: ok ? l.weightKg! * factor : null,
+        estimated: ok && l.estimated,
+      });
+    });
+  }
+  return rows;
+}
+
+/**
+ * Everything a plan's structural report prints. A section is null when the plan (on those pages) has
+ * no item of that kind, so a report of a plan without concrete or rebar has no structural part at all.
+ */
+export interface StructuralReport {
+  concrete: { items: ConcreteItemRow[]; summary: ConcreteSummary } | null;
+  rebar: { items: RebarItemRow[]; summary: RebarSummary } | null;
+}
+
+export function buildStructuralReport(plan: Plan, pages?: ReadonlySet<number>): StructuralReport {
+  const concreteItems = buildConcreteItems(plan, pages);
+  const rebarItems = buildRebarItems(plan, pages);
+  return {
+    concrete: concreteItems.length > 0 ? { items: concreteItems, summary: buildConcreteSummary(plan, pages) } : null,
+    rebar: rebarItems.length > 0 ? { items: rebarItems, summary: buildRebarSummary(plan, pages) } : null,
   };
 }

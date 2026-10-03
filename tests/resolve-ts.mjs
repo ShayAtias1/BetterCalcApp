@@ -10,7 +10,8 @@ const STUBS = { 'file-saver': new URL('./stubs/file-saver.mjs', import.meta.url)
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (Object.hasOwn(STUBS, specifier)) return { url: STUBS[specifier], shortCircuit: true };
-    // Vite asset imports (`file.js?url`) have no meaning in Node.
+    // Vite asset imports (`file.js?url`, `file.svg?raw`) have no meaning in Node.
+    if (specifier.endsWith('?raw')) return { url: new URL('./stubs/vite-raw.mjs', import.meta.url).href, shortCircuit: true };
     if (specifier.endsWith('?url')) return { url: new URL('./stubs/vite-url.mjs', import.meta.url).href, shortCircuit: true };
     try {
       return nextResolve(specifier, context);

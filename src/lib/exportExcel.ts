@@ -6,6 +6,8 @@ import { columnWidths, exportContext, type ExportContext } from './exportLanguag
 import { numberAreaMeasurements } from './areaMeasurements';
 import { usedExtraCategories } from './quantities';
 import { sheetRef } from './excelSheetRef';
+import { addStructuralSheets } from './exportStructuralExcel';
+import { buildStructuralReport, type StructuralReport } from './structuralQuantities';
 
 const DASH = '—';
 
@@ -224,7 +226,9 @@ export async function exportQuantitiesToExcel(
   areaMeasurements: Measurement[],
   language: Language
 ) {
-  const workbook = buildQuantitiesWorkbook(summaries, areaMeasurements, language);
+  // Concrete and rebar come from the plan itself; the caller has already limited them to the pages
+  // being exported (withStructuralPages), as it limits the summaries and the area measurements.
+  const workbook = buildQuantitiesWorkbook(summaries, areaMeasurements, language, buildStructuralReport(project));
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/octet-stream' });
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, '_');
@@ -232,7 +236,13 @@ export async function exportQuantitiesToExcel(
 }
 
 /** The plan workbook exactly as `exportQuantitiesToExcel` saves it — built apart so tests can read it. */
-export function buildQuantitiesWorkbook(summaries: RoomQuantitySummary[], areaMeasurements: Measurement[], language: Language): ExcelJS.Workbook {
+export function buildQuantitiesWorkbook(
+  summaries: RoomQuantitySummary[],
+  areaMeasurements: Measurement[],
+  language: Language,
+  /** Concrete and rebar sheets, added after the others and only for the sections that have items. Omitted: none. */
+  structural?: StructuralReport
+): ExcelJS.Workbook {
   const x = exportContext(language);
   const { t } = x;
   const workbook = new ExcelJS.Workbook();
@@ -561,6 +571,8 @@ export function buildQuantitiesWorkbook(summaries: RoomQuantitySummary[], areaMe
   if (areaMeasurements.length > 0) {
     addAreaMeasurementSheet(workbook, areaMeasurements, x);
   }
+
+  if (structural) addStructuralSheets(workbook, structural, x);
 
   return workbook;
 }

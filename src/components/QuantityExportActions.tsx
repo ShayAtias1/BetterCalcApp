@@ -7,6 +7,7 @@ import { exportQuantitiesToExcel } from '../lib/exportExcel';
 import { exportQuantitiesToPdf, getExportablePageNumbers } from '../lib/exportQuantitiesPdf';
 import { quantityExportDetails, trackedExport } from '../lib/analytics';
 import { notifyExportFailed } from '../lib/exportFailure';
+import { hasStructuralData, withStructuralPages } from '../lib/structuralPlan';
 import { useLanguage, useT } from '../i18n';
 
 /**
@@ -36,7 +37,8 @@ export default function QuantityExportActions({ variant, onPicked }: { variant: 
   if (!project) return null;
 
   const hasAreaMeasurements = (project.measurements ?? []).some((m) => m.tool === 'area' && m.areaKind);
-  const canExport = summaries.length > 0 || hasAreaMeasurements;
+  // Concrete and rebar are exportable on their own: a plan with only those still has a report.
+  const canExport = summaries.length > 0 || hasAreaMeasurements || hasStructuralData(project);
   const exportablePages = getExportablePageNumbers(project);
   const surface = variant === 'menu' ? 'topbar_menu' : 'quantities_panel';
 
@@ -52,7 +54,7 @@ export default function QuantityExportActions({ variant, onPicked }: { variant: 
       );
       await trackedExport(
         { export_kind: 'quantity_excel', surface, ...quantityExportDetails(project, filteredSummaries, pageNumbers, exportablePages.length) },
-        () => exportQuantitiesToExcel(planForReport(project, projectName), filteredSummaries, filteredTotals, filteredAreaMeasurements, language)
+        () => exportQuantitiesToExcel(withStructuralPages(planForReport(project, projectName), pageSet), filteredSummaries, filteredTotals, filteredAreaMeasurements, language)
       );
     } catch (err) {
       notifyExportFailed(err);

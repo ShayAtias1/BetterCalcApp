@@ -25,7 +25,7 @@ const C_ZEBRA_B = '#FDFEFE';
 const C_TOTAL = '#D6E4F0';
 const C_BORDER = '#E2E8F0';
 
-interface TableRow {
+export interface TableRow {
   cells: string[];
   bg?: string;
   bold?: boolean;
@@ -33,7 +33,7 @@ interface TableRow {
 
 
 /** Paginated vector writer: section titles and tables, a new page whenever one fills up. */
-class ReportWriter {
+export class ReportWriter {
   private pt!: PdfPainter;
   private y = 0;
   private doc: PDFDocument;

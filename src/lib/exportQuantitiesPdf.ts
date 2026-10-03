@@ -21,6 +21,9 @@ import { drawMarkupOnCanvas, orderMarkups } from './drawMarkup';
 import { drawMeasurementOnCanvas } from './drawMeasurement';
 import { numberAreaMeasurements } from './areaMeasurements';
 import { drawAreaMeasurementTable } from './areaMeasurementTable';
+import { drawStructuralPdfPages } from './exportStructuralPdf';
+import { buildStructuralReport } from './structuralQuantities';
+import { structuralPageNumbers } from './structuralPlan';
 
 const DASH = '—';
 const FONT = "'Segoe UI', sans-serif";
@@ -577,6 +580,8 @@ export function getExportablePageNumbers(project: Plan): number[] {
       ...project.rooms.map((r) => r.pageNumber),
       ...(project.markups ?? []).map((m) => m.pageNumber),
       ...(project.measurements ?? []).map((m) => m.pageNumber),
+      // A page that carries only concrete or rebar is a page of the report too.
+      ...structuralPageNumbers(project),
     ])
   ).sort((a, b) => a - b);
 }
@@ -634,6 +639,9 @@ export async function exportQuantitiesToPdf(
   }
 
   if (summaries.length > 0) drawQuantityTablePages(pdfDoc, fonts, project, summaries, totals, x);
+
+  // Concrete and rebar tables, after the finishes — only when the plan has such items on the chosen pages.
+  drawStructuralPdfPages(pdfDoc, fonts, project.name, buildStructuralReport(project, pageNumbers ? new Set(pageNumbers) : undefined), language);
 
   const bytes = await pdfDoc.save();
   const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], {
