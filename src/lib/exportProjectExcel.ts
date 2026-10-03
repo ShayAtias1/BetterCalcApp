@@ -17,7 +17,7 @@ const C_ZEBRA_A = 'FFEBF5FB';
 const C_ZEBRA_B = 'FFFDFEFE';
 const C_GRAND = 'FFD5F5E3';
 const NUM_FMT = '#,##0.00';
-const DASH = '—';
+const DASH = '-';
 
 function colLetter(n: number): string {
   let out = '';

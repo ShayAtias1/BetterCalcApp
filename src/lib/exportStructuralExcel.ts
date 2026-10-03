@@ -21,7 +21,7 @@ import type { ConcreteKind } from '../types/structural';
  * dash (text, which SUM ignores), never 0. Totals are live SUM formulas over the item rows.
  */
 
-const DASH = '—';
+const DASH = '-';
 const NUM_FMT = '#,##0.00';
 const PCT_FMT = '#,##0.##';
 /** Same number, shown with ≈ — the cell value stays numeric. */

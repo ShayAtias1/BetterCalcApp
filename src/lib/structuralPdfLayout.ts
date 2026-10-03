@@ -43,7 +43,7 @@ export function writeBlocks(writer: BlockWriter, blocks: PdfBlock[]): void {
 export const ESTIMATE_PREFIX = '~ ';
 /** The report font has no ² or ³: print "m2" / "m3" rather than a missing glyph. */
 const pdfSafe = (text: string) => text.replace(/³/g, '3').replace(/²/g, '2');
-const DASH = '—';
+const DASH = '-';
 const C_GRAND = '#D5F5E3';
 
 export function buildStructuralPdfLayout(report: StructuralReport, x: ExportContext): PdfBlock[] {

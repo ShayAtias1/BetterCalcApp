@@ -9,7 +9,7 @@ import { sheetRef } from './excelSheetRef';
 import { addStructuralSheets } from './exportStructuralExcel';
 import { buildStructuralReport, type StructuralReport } from './structuralQuantities';
 
-const DASH = '—';
+const DASH = '-';
 
 // Fill palette (matches the reference workbook "מטריצה מיכשווילי 2").
 const C_HEADER = 'FF1F4E79'; // dark blue header (white bold text)

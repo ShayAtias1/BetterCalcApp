@@ -44,8 +44,8 @@ export default function ProjectStructuralSummary({ structural }: { structural: P
                   {t(`concrete.kinds.${r.kind}`)} · {r.grade ? <span dir="auto">{r.grade}</span> : <span className="muted">{noGrade}</span>}
                 </span>
                 <span>{r.elementCount}</span>
-                <span>{calculable ? formatNumber(r.volumeM3) : '—'}</span>
-                <span>{calculable ? formatNumber(r.orderM3) : '—'}</span>
+                <span>{calculable ? formatNumber(r.volumeM3) : '-'}</span>
+                <span>{calculable ? formatNumber(r.orderM3) : '-'}</span>
               </div>
             );
           })}

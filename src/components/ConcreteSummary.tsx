@@ -15,7 +15,7 @@ export default function ConcreteSummary({ plan }: { plan: Plan }) {
   if (summary.elementCount === 0) return null;
 
   const m3 = t('units.m3');
-  const volume = (v: number, calculable: boolean) => (calculable ? formatNumber(v) : '—');
+  const volume = (v: number, calculable: boolean) => (calculable ? formatNumber(v) : '-');
 
   const pages = [...new Set(summary.rows.map((r) => r.pageNumber))];
   const rowCalculable = (r: ConcreteSummaryRow) => r.elementCount > r.missingCount;

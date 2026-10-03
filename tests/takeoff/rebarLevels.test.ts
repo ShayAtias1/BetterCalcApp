@@ -230,7 +230,7 @@ test('Excel: a level column (Bottom / Top), "both directions" for uniform, numer
     assert.equal(typeof r[10], 'number');
   }
   near(rows[0][9], LONG_200 + SHORT_200);
-  assert.equal(rows[0][8], '—'); // bar length: the two directions differ
+  assert.equal(rows[0][8], '-'); // bar length: the two directions differ
   // the totals row sums the numeric cells
   const total = sheet.getRow(6).getCell(10).value as { formula: string; result: number };
   assert.equal(total.formula, 'ROUND(SUM(J2:J5),2)');

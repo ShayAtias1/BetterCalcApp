@@ -147,7 +147,7 @@ export default function RebarPanel() {
                   {markLabel(item, t)} · <span dir="ltr">{itemSummary(item, t)}</span>
                 </span>
                 {item.pageNumber !== currentPage && <span className="room-list-page">{t('concrete.page', { page: item.pageNumber })}</span>}
-                <span className="room-list-apt">{calc.weightKg === null ? '—' : `${calc.estimated ? '≈ ' : ''}${kg(calc.weightKg, t)}`}</span>
+                <span className="room-list-apt">{calc.weightKg === null ? '-' : `${calc.estimated ? '≈ ' : ''}${kg(calc.weightKg, t)}`}</span>
               </li>
             );
           })}
@@ -322,7 +322,7 @@ function LevelSection({
             <div className="rebar-direction" key={l.id}>
               <div className="rebar-direction-head">
                 <span dir="ltr">
-                  {t('rebar.legacyExtra', { dir: t(l.direction === 'short' ? 'rebar.shortSide' : 'rebar.longSide'), spec: specNotation(l) ?? '—' })}
+                  {t('rebar.legacyExtra', { dir: t(l.direction === 'short' ? 'rebar.shortSide' : 'rebar.longSide'), spec: specNotation(l) ?? '-' })}
                 </span>
                 <button className="btn-ghost small danger" onClick={() => onChange(withoutExtra(reinforcement, l.id))}>
                   {t('rebar.removeLegacyExtra')}

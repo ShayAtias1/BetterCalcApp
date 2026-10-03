@@ -25,7 +25,7 @@ import { drawStructuralPdfPages } from './exportStructuralPdf';
 import { buildStructuralReport } from './structuralQuantities';
 import { structuralPageNumbers } from './structuralPlan';
 
-const DASH = '—';
+const DASH = '-';
 const FONT = "'Segoe UI', sans-serif";
 
 // Same palette as the Excel export, for a consistent look across formats.

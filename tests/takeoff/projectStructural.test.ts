@@ -211,7 +211,7 @@ test('project workbook: Plan column first, one row per element/layer, project su
   assert.deepEqual([rowOf(cs, 2)[0], rowOf(cs, 2)[2], rowOf(cs, 3)[0], rowOf(cs, 3)[11]], ['Plan A', 'תקרה 01', 'Plan A', 'חסר גובה']);
   assert.equal(rowOf(cs, 4)[0], 'Plan B');
   assert.equal(typeof rowOf(cs, 2)[8], 'number');
-  assert.equal(rowOf(cs, 3)[8], '—'); // missing: a dash, not 0
+  assert.equal(rowOf(cs, 3)[8], '-'); // missing: a dash, not 0
   const total = cs.getRow(5);
   assert.equal(total.getCell(1).value, 'סה"כ כללי');
   const net = total.getCell(9).value as { formula: string; result: number };

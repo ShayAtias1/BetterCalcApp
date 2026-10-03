@@ -224,9 +224,9 @@ test('concrete sheet: a structural-only plan gets just that sheet; values are nu
   near(c01[7], 1.92); // 0.16 m² × 3 × 4
   assert.equal(c01[3], 'ללא דרגה');
   // not calculable: dashes, a reason, never 0
-  assert.deepEqual([w01[7], w01[9], w01[10]], ['—', '—', 'חסר גובה']);
+  assert.deepEqual([w01[7], w01[9], w01[10]], ['-', '-', 'חסר גובה']);
   assert.equal((w01[4] as number) > 0, true); // the footprint is still known
-  assert.deepEqual([s02[4], s02[5] === 0.2, s02[7], s02[9], s02[10]], ['—', true, '—', '—', 'העמוד לא מכויל']);
+  assert.deepEqual([s02[4], s02[5] === 0.2, s02[7], s02[9], s02[10]], ['-', true, '-', '-', 'העמוד לא מכויל']);
   // manual size works on the uncalibrated page
   near(c02[7], 1);
   assert.equal(c02[10], 'תקין');
@@ -290,19 +290,19 @@ test('rebar sheet: numbers stay numbers, estimates are marked by format and Basi
   assert.equal(typeof est[9], 'number');
   assert.equal(typeof est[10], 'number');
   near(est[9], 180);
-  assert.deepEqual([est[7], est[8]], ['—', '—']);
+  assert.deepEqual([est[7], est[8]], ['-', '-']);
   assert.equal(est[14], 'הערכה');
   for (const addr of ['J4', 'K4', 'M4', 'N4']) assert.ok(sheet.getCell(addr).numFmt.includes('≈'), addr);
   assert.equal(sheet.getCell('J2').numFmt, '#,##0.00'); // an exact row has no ≈
 
   // manual bars: no level, spacing or direction
-  assert.deepEqual([man[1], man[2], man[3], man[4], man[5], man[6]], ['מוטות 01', 'מוטות', '—', 16, '—', '—']);
+  assert.deepEqual([man[1], man[2], man[3], man[4], man[5], man[6]], ['מוטות 01', 'מוטות', '-', 16, '-', '-']);
   assert.equal(man[7], 10);
   near(man[9], 60);
   near(man[12], 66);
 
   // not calculable: dashes and the reason, not 0
-  assert.deepEqual([bad[9], bad[10], bad[12], bad[13], bad[14], bad[15]], ['—', '—', '—', '—', '—', 'נתונים חסרים']);
+  assert.deepEqual([bad[9], bad[10], bad[12], bad[13], bad[14], bad[15]], ['-', '-', '-', '-', '-', 'נתונים חסרים']);
 
   // manual size on the uncalibrated page is calculated
   assert.equal(size[0], 3);
@@ -370,7 +370,7 @@ test('PDF layout: summary and item tables, ~ on estimates, dashes and a missing 
   const [cSummary, cItems, rSummary, rItems] = tables;
   assert.deepEqual(cSummary.rows.at(-1)!.cells.slice(0, 4), ['Grand total', '', '', '2']);
   assert.equal(cSummary.rows.at(-1)!.cells[6], '1'); // one not calculable
-  assert.equal(cItems.rows[1].cells[6], '—'); // net of the missing one: a dash
+  assert.equal(cItems.rows[1].cells[6], '-'); // net of the missing one: a dash
   assert.equal(cItems.rows[1].cells[8], 'Height missing'.replace('Height', 'Thickness')); // slab → thickness
   assert.equal(cItems.rows[0].cells[8], ''); // OK rows stay quiet
 
@@ -378,7 +378,7 @@ test('PDF layout: summary and item tables, ~ on estimates, dashes and a missing 
   assert.equal(mixedTotal.cells[6], 'Includes estimate');
   const est = rItems.rows.find((r) => r.cells[1] === 'Mesh 01 - Bottom')!;
   assert.ok(est.cells[4].startsWith('~ ')); // the printed estimate is marked
-  assert.equal(est.cells[3], '—'); // no bar count
+  assert.equal(est.cells[3], '-'); // no bar count
   assert.equal(est.cells[7], 'Estimate');
   assert.equal(rItems.rows.find((r) => r.cells[1] === 'Mesh 02 - Bottom')!.cells[3], '41 × 10');
   assert.equal(rItems.rows.find((r) => r.cells[1] === 'Mesh 03 - Bottom')!.cells[7], 'Data missing');

@@ -27,7 +27,7 @@ export interface AreaTableOptions {
   showLogo?: boolean;
 }
 
-const DASH = '—';
+const DASH = '-';
 
 const C_HEADER = '#1F4E79';
 const C_ZEBRA_A = '#EBF5FB';

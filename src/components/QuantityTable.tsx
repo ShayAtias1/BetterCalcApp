@@ -17,7 +17,7 @@ import {
 } from '../types';
 import Icon from './Icon';
 
-const DASH = '—';
+const DASH = '-';
 
 /**
  * The contractor-facing quantity report. Lives inside the bottom quantities panel; `showDefaults` is

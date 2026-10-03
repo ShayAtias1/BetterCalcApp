@@ -101,7 +101,7 @@ export default function ChangesPanel() {
           {t('compare.changes.title')}
         </button>
         <span className="muted">
-          {t('compare.changes.collapsedMeta', { count: all.length })} <Icon name="link" size={12} /> {activeRevision?.label ?? '—'}
+          {t('compare.changes.collapsedMeta', { count: all.length })} <Icon name="link" size={12} /> {activeRevision?.label ?? '-'}
         </span>
       </div>
     );
@@ -124,7 +124,7 @@ export default function ChangesPanel() {
         <h2 className="qty-panel-title">{t('compare.changes.title')}</h2>
         {/* The context, at meta weight: what is being reviewed against what. */}
         <span className="qty-panel-meta">
-          {t('compare.changes.source')} <Icon name="link" size={12} /> {activeRevision?.label ?? '—'} · {t('compare.changes.marks', { count: rows.length })}
+          {t('compare.changes.source')} <Icon name="link" size={12} /> {activeRevision?.label ?? '-'} · {t('compare.changes.marks', { count: rows.length })}
         </span>
         <div className="qty-panel-actions">
           {/* All pages of this revision, or just the page on screen. */}
@@ -232,7 +232,7 @@ export default function ChangesPanel() {
                       </td>
                       <td className="num">{m.pageNumber}</td>
                       <td>{isWall ? t('measure.calcModes.wall') : t('measure.calcModes.footprint')}</td>
-                      <td className="num">{isWall ? round(m.wallLengthM ?? 0, 2) : '—'}</td>
+                      <td className="num">{isWall ? round(m.wallLengthM ?? 0, 2) : '-'}</td>
                       <td className="num">
                         {isWall ? (
                           <input
@@ -249,7 +249,7 @@ export default function ChangesPanel() {
                             }}
                           />
                         ) : (
-                          '—'
+                          '-'
                         )}
                       </td>
                       <td className="num order">{round(m.areaM2 ?? 0, 2)}</td>

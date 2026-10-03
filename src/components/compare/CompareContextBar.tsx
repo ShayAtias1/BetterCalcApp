@@ -119,7 +119,7 @@ export default function CompareContextBar() {
         <span className="muted">{t('compare.context.alignmentLabel')}</span>
         <span className={`status-chip ${alignmentStatus}`}>{t(`compare.context.alignment.${alignmentStatus}`)}</span>
         <span className="muted compare-context-scope">
-          {t('compare.context.scope', { page: currentPageKey, revision: activeRevision?.label ?? '—' })}
+          {t('compare.context.scope', { page: currentPageKey, revision: activeRevision?.label ?? '-' })}
         </span>
       </div>
     </div>

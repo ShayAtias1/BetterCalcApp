@@ -18,7 +18,7 @@ const PAGE_W = 1600;
 const PAGE_H = 1132;
 const MARGIN = 40;
 const ROW_H = 30;
-const DASH = '—';
+const DASH = '-';
 
 // Same palette as the other exports.
 const C_HEADER = '#1F4E79';

@@ -25,11 +25,11 @@ exports[`plan workbook with area measurements only 1`] = `
       "C2": "הריסה",
       "D2": "שטח בפועל",
       "E2": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "F2": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "G2": {
@@ -57,11 +57,11 @@ exports[`plan workbook with area measurements only 1`] = `
       "C4": "הריסה",
       "D4": "שטח בפועל",
       "E4": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "F4": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "G4": {
@@ -514,11 +514,11 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "D2": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "E2": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "F2": {
@@ -526,33 +526,33 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "G2": 5,
-      "H2": "—",
-      "I2": "—",
+      "H2": "-",
+      "I2": "-",
       "J2": 10,
       "K2": {
         "value": {
-          "formula": "IF(ISNUMBER(C2),ROUND(C2*(1+IF(ISNUMBER(G2),G2,0)/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(C2),ROUND(C2*(1+IF(ISNUMBER(G2),G2,0)/100),2),\\"-\\")",
           "result": 13.29
         },
         "numFmt": "#,##0.00"
       },
       "L2": {
         "value": {
-          "formula": "IF(ISNUMBER(D2),ROUND(D2*(1+IF(ISNUMBER(H2),H2,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(D2),ROUND(D2*(1+IF(ISNUMBER(H2),H2,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
       "M2": {
         "value": {
-          "formula": "IF(ISNUMBER(E2),ROUND(E2*(1+IF(ISNUMBER(I2),I2,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(E2),ROUND(E2*(1+IF(ISNUMBER(I2),I2,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
       "N2": {
         "value": {
-          "formula": "IF(ISNUMBER(F2),ROUND(F2*(1+IF(ISNUMBER(J2),J2,0)/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(F2),ROUND(F2*(1+IF(ISNUMBER(J2),J2,0)/100),2),\\"-\\")",
           "result": 1.48
         },
         "numFmt": "#,##0.00"
@@ -564,7 +564,7 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
       },
       "Q2": {
         "value": {
-          "formula": "IF(ISNUMBER(P2),ROUND(P2*(1+IF(ISNUMBER(J2),J2,0)/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(P2),ROUND(P2*(1+IF(ISNUMBER(J2),J2,0)/100),2),\\"-\\")",
           "result": 14.76
         },
         "numFmt": "#,##0.00"
@@ -576,32 +576,32 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
       "S2": 0,
       "T2": {
         "value": {
-          "formula": "IF(ISNUMBER(R2),ROUND(R2*(1+IF(ISNUMBER(S2),S2,0)/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(R2),ROUND(R2*(1+IF(ISNUMBER(S2),S2,0)/100),2),\\"-\\")",
           "result": 32.46
         },
         "numFmt": "#,##0.00"
       },
       "U2": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
-      "V2": "—",
+      "V2": "-",
       "W2": {
         "value": {
-          "formula": "IF(ISNUMBER(U2),ROUND(U2*(1+IF(ISNUMBER(V2),V2,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(U2),ROUND(U2*(1+IF(ISNUMBER(V2),V2,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
       "X2": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
-      "Y2": "—",
+      "Y2": "-",
       "Z2": {
         "value": {
-          "formula": "IF(ISNUMBER(X2),ROUND(X2*(1+IF(ISNUMBER(Y2),Y2,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(X2),ROUND(X2*(1+IF(ISNUMBER(Y2),Y2,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
@@ -612,11 +612,11 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "D3": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "E3": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "F3": {
@@ -624,33 +624,33 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "G3": 7,
-      "H3": "—",
-      "I3": "—",
+      "H3": "-",
+      "I3": "-",
       "J3": 10,
       "K3": {
         "value": {
-          "formula": "IF(ISNUMBER(C3),ROUND(C3*(1+IF(ISNUMBER(G3),G3,0)/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(C3),ROUND(C3*(1+IF(ISNUMBER(G3),G3,0)/100),2),\\"-\\")",
           "result": 13.96
         },
         "numFmt": "#,##0.00"
       },
       "L3": {
         "value": {
-          "formula": "IF(ISNUMBER(D3),ROUND(D3*(1+IF(ISNUMBER(H3),H3,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(D3),ROUND(D3*(1+IF(ISNUMBER(H3),H3,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
       "M3": {
         "value": {
-          "formula": "IF(ISNUMBER(E3),ROUND(E3*(1+IF(ISNUMBER(I3),I3,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(E3),ROUND(E3*(1+IF(ISNUMBER(I3),I3,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
       "N3": {
         "value": {
-          "formula": "IF(ISNUMBER(F3),ROUND(F3*(1+IF(ISNUMBER(J3),J3,0)/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(F3),ROUND(F3*(1+IF(ISNUMBER(J3),J3,0)/100),2),\\"-\\")",
           "result": 1.94
         },
         "numFmt": "#,##0.00"
@@ -662,20 +662,20 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
       },
       "Q3": {
         "value": {
-          "formula": "IF(ISNUMBER(P3),ROUND(P3*(1+IF(ISNUMBER(J3),J3,0)/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(P3),ROUND(P3*(1+IF(ISNUMBER(J3),J3,0)/100),2),\\"-\\")",
           "result": 16.19
         },
         "numFmt": "#,##0.00"
       },
       "R3": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
-      "S3": "—",
+      "S3": "-",
       "T3": {
         "value": {
-          "formula": "IF(ISNUMBER(R3),ROUND(R3*(1+IF(ISNUMBER(S3),S3,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(R3),ROUND(R3*(1+IF(ISNUMBER(S3),S3,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
@@ -686,20 +686,20 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
       "V3": 4,
       "W3": {
         "value": {
-          "formula": "IF(ISNUMBER(U3),ROUND(U3*(1+IF(ISNUMBER(V3),V3,0)/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(U3),ROUND(U3*(1+IF(ISNUMBER(V3),V3,0)/100),2),\\"-\\")",
           "result": 33.95
         },
         "numFmt": "#,##0.00"
       },
       "X3": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
-      "Y3": "—",
+      "Y3": "-",
       "Z3": {
         "value": {
-          "formula": "IF(ISNUMBER(X3),ROUND(X3*(1+IF(ISNUMBER(Y3),Y3,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(X3),ROUND(X3*(1+IF(ISNUMBER(Y3),Y3,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
@@ -856,7 +856,7 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "D16": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "E16": {
@@ -868,33 +868,33 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "G16": 5,
-      "H16": "—",
+      "H16": "-",
       "I16": 12,
       "J16": 0,
       "K16": {
         "value": {
-          "formula": "IF(ISNUMBER(C16),ROUND(C16*(1+IF(ISNUMBER(G16),G16,0)/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(C16),ROUND(C16*(1+IF(ISNUMBER(G16),G16,0)/100),2),\\"-\\")",
           "result": 24.67
         },
         "numFmt": "#,##0.00"
       },
       "L16": {
         "value": {
-          "formula": "IF(ISNUMBER(D16),ROUND(D16*(1+IF(ISNUMBER(H16),H16,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(D16),ROUND(D16*(1+IF(ISNUMBER(H16),H16,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
       "M16": {
         "value": {
-          "formula": "IF(ISNUMBER(E16),ROUND(E16*(1+IF(ISNUMBER(I16),I16,0)/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(E16),ROUND(E16*(1+IF(ISNUMBER(I16),I16,0)/100),2),\\"-\\")",
           "result": 21.01
         },
         "numFmt": "#,##0.00"
       },
       "N16": {
         "value": {
-          "formula": "IF(ISNUMBER(F16),ROUND(F16*(1+IF(ISNUMBER(J16),J16,0)/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(F16),ROUND(F16*(1+IF(ISNUMBER(J16),J16,0)/100),2),\\"-\\")",
           "result": 1.76
         },
         "numFmt": "#,##0.00"
@@ -906,7 +906,7 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
       },
       "Q16": {
         "value": {
-          "formula": "IF(ISNUMBER(P16),ROUND(P16*(1+IF(ISNUMBER(J16),J16,0)/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(P16),ROUND(P16*(1+IF(ISNUMBER(J16),J16,0)/100),2),\\"-\\")",
           "result": 17.63
         },
         "numFmt": "#,##0.00"
@@ -918,39 +918,39 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
       "S16": 0,
       "T16": {
         "value": {
-          "formula": "IF(ISNUMBER(R16),ROUND(R16*(1+IF(ISNUMBER(S16),S16,0)/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(R16),ROUND(R16*(1+IF(ISNUMBER(S16),S16,0)/100),2),\\"-\\")",
           "result": 50.52
         },
         "numFmt": "#,##0.00"
       },
       "U16": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
-      "V16": "—",
+      "V16": "-",
       "W16": {
         "value": {
-          "formula": "IF(ISNUMBER(U16),ROUND(U16*(1+IF(ISNUMBER(V16),V16,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(U16),ROUND(U16*(1+IF(ISNUMBER(V16),V16,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
       "X16": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
-      "Y16": "—",
+      "Y16": "-",
       "Z16": {
         "value": {
-          "formula": "IF(ISNUMBER(X16),ROUND(X16*(1+IF(ISNUMBER(Y16),Y16,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(X16),ROUND(X16*(1+IF(ISNUMBER(Y16),Y16,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
       "A17": "12",
       "B17": "חדר רחצה",
       "C17": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "D17": {
@@ -962,74 +962,74 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "F17": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
-      "G17": "—",
+      "G17": "-",
       "H17": 9,
       "I17": 8,
-      "J17": "—",
+      "J17": "-",
       "K17": {
         "value": {
-          "formula": "IF(ISNUMBER(C17),ROUND(C17*(1+IF(ISNUMBER(G17),G17,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(C17),ROUND(C17*(1+IF(ISNUMBER(G17),G17,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
       "L17": {
         "value": {
-          "formula": "IF(ISNUMBER(D17),ROUND(D17*(1+IF(ISNUMBER(H17),H17,0)/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(D17),ROUND(D17*(1+IF(ISNUMBER(H17),H17,0)/100),2),\\"-\\")",
           "result": 8.57
         },
         "numFmt": "#,##0.00"
       },
       "M17": {
         "value": {
-          "formula": "IF(ISNUMBER(E17),ROUND(E17*(1+IF(ISNUMBER(I17),I17,0)/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(E17),ROUND(E17*(1+IF(ISNUMBER(I17),I17,0)/100),2),\\"-\\")",
           "result": 26.98
         },
         "numFmt": "#,##0.00"
       },
       "N17": {
         "value": {
-          "formula": "IF(ISNUMBER(F17),ROUND(F17*(1+IF(ISNUMBER(J17),J17,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(F17),ROUND(F17*(1+IF(ISNUMBER(J17),J17,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
       "O17": "",
       "P17": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "Q17": {
         "value": {
-          "formula": "IF(ISNUMBER(P17),ROUND(P17*(1+IF(ISNUMBER(J17),J17,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(P17),ROUND(P17*(1+IF(ISNUMBER(J17),J17,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
       "R17": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
-      "S17": "—",
+      "S17": "-",
       "T17": {
         "value": {
-          "formula": "IF(ISNUMBER(R17),ROUND(R17*(1+IF(ISNUMBER(S17),S17,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(R17),ROUND(R17*(1+IF(ISNUMBER(S17),S17,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
       "U17": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
-      "V17": "—",
+      "V17": "-",
       "W17": {
         "value": {
-          "formula": "IF(ISNUMBER(U17),ROUND(U17*(1+IF(ISNUMBER(V17),V17,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(U17),ROUND(U17*(1+IF(ISNUMBER(V17),V17,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
@@ -1040,7 +1040,7 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
       "Y17": 3,
       "Z17": {
         "value": {
-          "formula": "IF(ISNUMBER(X17),ROUND(X17*(1+IF(ISNUMBER(Y17),Y17,0)/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(X17),ROUND(X17*(1+IF(ISNUMBER(Y17),Y17,0)/100),2),\\"-\\")",
           "result": 11.86
         },
         "numFmt": "#,##0.00"
@@ -1064,34 +1064,34 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "G18": 5,
-      "H18": "—",
-      "I18": "—",
+      "H18": "-",
+      "I18": "-",
       "J18": 10,
       "K18": {
         "value": {
-          "formula": "IF(ISNUMBER(C18),ROUND(C18*(1+IF(ISNUMBER(G18),G18,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(C18),ROUND(C18*(1+IF(ISNUMBER(G18),G18,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
       "L18": {
         "value": {
-          "formula": "IF(ISNUMBER(D18),ROUND(D18*(1+IF(ISNUMBER(H18),H18,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(D18),ROUND(D18*(1+IF(ISNUMBER(H18),H18,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
       "M18": {
         "value": {
-          "formula": "IF(ISNUMBER(E18),ROUND(E18*(1+IF(ISNUMBER(I18),I18,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(E18),ROUND(E18*(1+IF(ISNUMBER(I18),I18,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
       "N18": {
         "value": {
-          "formula": "IF(ISNUMBER(F18),ROUND(F18*(1+IF(ISNUMBER(J18),J18,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(F18),ROUND(F18*(1+IF(ISNUMBER(J18),J18,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
@@ -1102,8 +1102,8 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
       },
       "Q18": {
         "value": {
-          "formula": "IF(ISNUMBER(P18),ROUND(P18*(1+IF(ISNUMBER(J18),J18,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(P18),ROUND(P18*(1+IF(ISNUMBER(J18),J18,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
@@ -1111,11 +1111,11 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
         "value": "לא כויל",
         "numFmt": "#,##0.00"
       },
-      "S18": "—",
+      "S18": "-",
       "T18": {
         "value": {
-          "formula": "IF(ISNUMBER(R18),ROUND(R18*(1+IF(ISNUMBER(S18),S18,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(R18),ROUND(R18*(1+IF(ISNUMBER(S18),S18,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
@@ -1126,8 +1126,8 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
       "V18": 4,
       "W18": {
         "value": {
-          "formula": "IF(ISNUMBER(U18),ROUND(U18*(1+IF(ISNUMBER(V18),V18,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(U18),ROUND(U18*(1+IF(ISNUMBER(V18),V18,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
@@ -1135,11 +1135,11 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
         "value": "לא כויל",
         "numFmt": "#,##0.00"
       },
-      "Y18": "—",
+      "Y18": "-",
       "Z18": {
         "value": {
-          "formula": "IF(ISNUMBER(X18),ROUND(X18*(1+IF(ISNUMBER(Y18),Y18,0)/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(X18),ROUND(X18*(1+IF(ISNUMBER(Y18),Y18,0)/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
@@ -1386,11 +1386,11 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
       "C2": "הריסה",
       "D2": "שטח בפועל",
       "E2": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "F2": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "G2": {
@@ -1418,11 +1418,11 @@ exports[`plan workbook: sheets, formulas and values 1`] = `
       "C4": "הריסה",
       "D4": "שטח בפועל",
       "E4": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "F4": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "G4": {
@@ -1516,11 +1516,11 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "D5": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "E5": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "A6": "ריצוף AS",
@@ -1539,11 +1539,11 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "D6": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "E6": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "A7": "חיפוי קירות",
@@ -1562,11 +1562,11 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "D7": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "E7": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "A8": "פנלים",
@@ -1614,11 +1614,11 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "D9": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "E9": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "A10": "טיח",
@@ -1637,11 +1637,11 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "D10": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "E10": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "A11": "איטום",
@@ -1660,11 +1660,11 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "D11": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "E11": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "A13": "שים לב: 1 חדרים לא נכללו - העמוד שלהם אינו מכויל."
@@ -2039,19 +2039,19 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "H2": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "I2": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "J2": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "K2": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "L2": {
@@ -2079,19 +2079,19 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "R2": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "S2": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "T2": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "U2": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "A3": "קומה 3",
@@ -2114,19 +2114,19 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "H3": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "I3": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "J3": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "K3": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "L3": {
@@ -2146,11 +2146,11 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "P3": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "Q3": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "R3": {
@@ -2162,11 +2162,11 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "T3": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "U3": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "A4": "קומה 3",
@@ -2189,11 +2189,11 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "H4": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "I4": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "J4": {
@@ -2229,19 +2229,19 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "R4": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "S4": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "T4": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "U4": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "A5": "קומה 3",
@@ -2256,11 +2256,11 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "F5": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "G5": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "H5": {
@@ -2280,35 +2280,35 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "L5": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "M5": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "N5": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "O5": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "P5": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "Q5": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "R5": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "S5": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "T5": {
@@ -2414,19 +2414,19 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "H7": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "I7": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "J7": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "K7": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "L7": {
@@ -2446,27 +2446,27 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "P7": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "Q7": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "R7": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "S7": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "T7": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "U7": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "A8": "קומה 4",
@@ -2481,11 +2481,11 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "F8": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "G8": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "H8": {
@@ -2505,35 +2505,35 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "L8": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "M8": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "N8": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "O8": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "P8": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "Q8": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "R8": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "S8": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "T8": {
@@ -2545,7 +2545,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "A9": "קומה 4",
-      "B9": "—",
+      "B9": "-",
       "C9": "",
       "D9": {
         "value": 3.66,
@@ -2564,59 +2564,59 @@ exports[`project workbook: sheets, formulas and values 1`] = `
         "numFmt": "#,##0.00"
       },
       "H9": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "I9": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "J9": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "K9": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "L9": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "M9": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "N9": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "O9": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "P9": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "Q9": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "R9": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "S9": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "T9": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       },
       "U9": {
-        "value": "—",
+        "value": "-",
         "numFmt": "#,##0.00"
       }
     }
@@ -2670,7 +2670,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J2": {
         "value": {
-          "formula": "IF(ISNUMBER(H2),ROUND(H2*(1+I2/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H2),ROUND(H2*(1+I2/100),2),\\"-\\")",
           "result": 13.29
         },
         "numFmt": "#,##0.00"
@@ -2698,7 +2698,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J3": {
         "value": {
-          "formula": "IF(ISNUMBER(H3),ROUND(H3*(1+I3/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H3),ROUND(H3*(1+I3/100),2),\\"-\\")",
           "result": 14.76
         },
         "numFmt": "#,##0.00"
@@ -2726,7 +2726,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J4": {
         "value": {
-          "formula": "IF(ISNUMBER(H4),ROUND(H4*(1+I4/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H4),ROUND(H4*(1+I4/100),2),\\"-\\")",
           "result": 32.46
         },
         "numFmt": "#,##0.00"
@@ -2754,7 +2754,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J5": {
         "value": {
-          "formula": "IF(ISNUMBER(H5),ROUND(H5*(1+I5/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H5),ROUND(H5*(1+I5/100),2),\\"-\\")",
           "result": 13.96
         },
         "numFmt": "#,##0.00"
@@ -2782,7 +2782,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J6": {
         "value": {
-          "formula": "IF(ISNUMBER(H6),ROUND(H6*(1+I6/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H6),ROUND(H6*(1+I6/100),2),\\"-\\")",
           "result": 16.19
         },
         "numFmt": "#,##0.00"
@@ -2810,7 +2810,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J7": {
         "value": {
-          "formula": "IF(ISNUMBER(H7),ROUND(H7*(1+I7/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H7),ROUND(H7*(1+I7/100),2),\\"-\\")",
           "result": 33.95
         },
         "numFmt": "#,##0.00"
@@ -2838,7 +2838,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J8": {
         "value": {
-          "formula": "IF(ISNUMBER(H8),ROUND(H8*(1+I8/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H8),ROUND(H8*(1+I8/100),2),\\"-\\")",
           "result": 24.67
         },
         "numFmt": "#,##0.00"
@@ -2866,7 +2866,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J9": {
         "value": {
-          "formula": "IF(ISNUMBER(H9),ROUND(H9*(1+I9/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H9),ROUND(H9*(1+I9/100),2),\\"-\\")",
           "result": 21.01
         },
         "numFmt": "#,##0.00"
@@ -2894,7 +2894,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J10": {
         "value": {
-          "formula": "IF(ISNUMBER(H10),ROUND(H10*(1+I10/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H10),ROUND(H10*(1+I10/100),2),\\"-\\")",
           "result": 17.63
         },
         "numFmt": "#,##0.00"
@@ -2922,7 +2922,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J11": {
         "value": {
-          "formula": "IF(ISNUMBER(H11),ROUND(H11*(1+I11/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H11),ROUND(H11*(1+I11/100),2),\\"-\\")",
           "result": 50.52
         },
         "numFmt": "#,##0.00"
@@ -2950,7 +2950,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J12": {
         "value": {
-          "formula": "IF(ISNUMBER(H12),ROUND(H12*(1+I12/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H12),ROUND(H12*(1+I12/100),2),\\"-\\")",
           "result": 8.57
         },
         "numFmt": "#,##0.00"
@@ -2978,7 +2978,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J13": {
         "value": {
-          "formula": "IF(ISNUMBER(H13),ROUND(H13*(1+I13/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H13),ROUND(H13*(1+I13/100),2),\\"-\\")",
           "result": 26.98
         },
         "numFmt": "#,##0.00"
@@ -3006,7 +3006,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J14": {
         "value": {
-          "formula": "IF(ISNUMBER(H14),ROUND(H14*(1+I14/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H14),ROUND(H14*(1+I14/100),2),\\"-\\")",
           "result": 11.86
         },
         "numFmt": "#,##0.00"
@@ -3034,8 +3034,8 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J15": {
         "value": {
-          "formula": "IF(ISNUMBER(H15),ROUND(H15*(1+I15/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(H15),ROUND(H15*(1+I15/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
@@ -3062,8 +3062,8 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J16": {
         "value": {
-          "formula": "IF(ISNUMBER(H16),ROUND(H16*(1+I16/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(H16),ROUND(H16*(1+I16/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
@@ -3090,8 +3090,8 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J17": {
         "value": {
-          "formula": "IF(ISNUMBER(H17),ROUND(H17*(1+I17/100),2),\\"—\\")",
-          "result": "—"
+          "formula": "IF(ISNUMBER(H17),ROUND(H17*(1+I17/100),2),\\"-\\")",
+          "result": "-"
         },
         "numFmt": "#,##0.00"
       },
@@ -3118,7 +3118,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J18": {
         "value": {
-          "formula": "IF(ISNUMBER(H18),ROUND(H18*(1+I18/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H18),ROUND(H18*(1+I18/100),2),\\"-\\")",
           "result": 27.17
         },
         "numFmt": "#,##0.00"
@@ -3146,7 +3146,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J19": {
         "value": {
-          "formula": "IF(ISNUMBER(H19),ROUND(H19*(1+I19/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H19),ROUND(H19*(1+I19/100),2),\\"-\\")",
           "result": 20.68
         },
         "numFmt": "#,##0.00"
@@ -3174,7 +3174,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J20": {
         "value": {
-          "formula": "IF(ISNUMBER(H20),ROUND(H20*(1+I20/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H20),ROUND(H20*(1+I20/100),2),\\"-\\")",
           "result": 10.35
         },
         "numFmt": "#,##0.00"
@@ -3202,7 +3202,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J21": {
         "value": {
-          "formula": "IF(ISNUMBER(H21),ROUND(H21*(1+I21/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H21),ROUND(H21*(1+I21/100),2),\\"-\\")",
           "result": 28.35
         },
         "numFmt": "#,##0.00"
@@ -3230,13 +3230,13 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J22": {
         "value": {
-          "formula": "IF(ISNUMBER(H22),ROUND(H22*(1+I22/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H22),ROUND(H22*(1+I22/100),2),\\"-\\")",
           "result": 9.77
         },
         "numFmt": "#,##0.00"
       },
       "A23": "קומה 4",
-      "B23": "—",
+      "B23": "-",
       "C23": "",
       "D23": "ריצוף",
       "E23": "מ\\"ר",
@@ -3258,7 +3258,7 @@ exports[`project workbook: sheets, formulas and values 1`] = `
       },
       "J23": {
         "value": {
-          "formula": "IF(ISNUMBER(H23),ROUND(H23*(1+I23/100),2),\\"—\\")",
+          "formula": "IF(ISNUMBER(H23),ROUND(H23*(1+I23/100),2),\\"-\\")",
           "result": 3.88
         },
         "numFmt": "#,##0.00"

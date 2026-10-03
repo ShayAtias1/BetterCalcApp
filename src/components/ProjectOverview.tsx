@@ -29,7 +29,7 @@ function comparisonMeta(c: Comparison, t: TranslateFn): string {
   return parts.join(' · ');
 }
 
-const DASH = '—';
+const DASH = '-';
 const fmt = (v: number | null) => (v == null ? DASH : formatNumber(v));
 
 /** The main reading of an amount: running metres for skirting, m² for everything else. */

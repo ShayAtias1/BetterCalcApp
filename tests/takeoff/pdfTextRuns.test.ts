@@ -12,7 +12,7 @@ const HEBREW_REPORT_STRINGS = [
   'ריצוף AS',
   'עמוד תוכנית 1 · 2.10.2026',
   '12.65',
-  '—',
+  '-',
 ];
 
 test('RTL reordering is exactly the previous implementation', () => {

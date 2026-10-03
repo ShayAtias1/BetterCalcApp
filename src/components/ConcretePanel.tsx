@@ -149,7 +149,7 @@ export default function ConcretePanel() {
                   {markLabel(el, t)} · {t(`concrete.kinds.${el.kind}`)}
                 </span>
                 {el.pageNumber !== currentPage && <span className="room-list-page">{t('concrete.page', { page: el.pageNumber })}</span>}
-                <span className="room-list-apt">{calc.volumeM3 === null ? '—' : volumeText(calc, t, 'volumeM3')}</span>
+                <span className="room-list-apt">{calc.volumeM3 === null ? '-' : volumeText(calc, t, 'volumeM3')}</span>
               </li>
             );
           })}
