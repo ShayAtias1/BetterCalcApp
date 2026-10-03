@@ -37,7 +37,8 @@ import { computeGrid } from '../lib/grid';
 import { useGridStore } from '../store/gridStore';
 import GridLayer from './GridLayer';
 import ConcreteZones from './ConcreteZones';
-import { concreteOf } from '../lib/structuralPlan';
+import RebarZones from './RebarZones';
+import { concreteOf, rebarOf } from '../lib/structuralPlan';
 
 const VERTEX_HIT_RADIUS_SCREEN = 9;
 /** New masks start opaque white, the colour of the paper they hide. */
@@ -164,6 +165,8 @@ export default function PdfViewer() {
   const structuralVisible = annotationsVisible;
   const selectedConcreteId = useAppStore((s) => s.selectedConcreteId);
   const setSelectedConcreteId = useAppStore((s) => s.setSelectedConcreteId);
+  const selectedRebarId = useAppStore((s) => s.selectedRebarId);
+  const setSelectedRebarId = useAppStore((s) => s.setSelectedRebarId);
   const gridEnabled = useGridStore((s) => s.enabled);
   const gridSpacingM = useGridStore((s) => s.spacingM);
   const gridOpacity = useGridStore((s) => s.opacity);
@@ -750,6 +753,14 @@ export default function PdfViewer() {
         setSelectedConcreteId(zone ? zone.id : null);
         return;
       }
+      // Same for the Rebar tab: only mesh zones (manual bars have no shape) and only while visible.
+      if (drawTarget === 'rebar') {
+        const mesh = !structuralVisible
+          ? undefined
+          : [...rebarOf(project)].reverse().find((m) => m.kind === 'mesh' && m.pageNumber === currentPage && polygonAreaPx(m.points) > 0 && pointInPolygon(native, m.points));
+        setSelectedRebarId(mesh ? mesh.id : null);
+        return;
+      }
       const hit = [...project.rooms].reverse().find((r) => r.pageNumber === currentPage && polygonAreaPx(r.points) > 0 && pointInPolygon(native, r.points));
       setSelectedRoomId(hit ? hit.id : null);
     }
@@ -834,6 +845,9 @@ export default function PdfViewer() {
                 strokeW={strokeW}
                 zoom={zoom}
               />
+            )}
+            {structuralVisible && (
+              <RebarZones items={rebarOf(project).filter((m) => m.pageNumber === currentPage)} selectedId={selectedRebarId} strokeW={strokeW} zoom={zoom} />
             )}
 
             {/* Detection suggestions: dashed, faint and unselectable, so they never read as rooms

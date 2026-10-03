@@ -7,8 +7,8 @@
 import { v4 as uuid } from 'uuid';
 import type { Plan, Point, Room } from '../types';
 import { polygonAreaPx } from './geometry';
-import type { ConcreteElement, ConcreteKind } from '../types/structural';
-import { concreteOf } from './structuralPlan';
+import type { ConcreteElement, ConcreteKind, RebarBars, RebarItem, RebarLayer, RebarMesh } from '../types/structural';
+import { concreteOf, rebarOf } from './structuralPlan';
 
 /** The letter each kind's automatic mark starts with: S01, W01, B01, C01. */
 export const CONCRETE_MARK_PREFIX: Record<ConcreteKind, string> = { slab: 'S', wall: 'W', beam: 'B', column: 'C' };
@@ -21,12 +21,15 @@ export const CONCRETE_KINDS: ConcreteKind[] = ['slab', 'wall', 'beam', 'column']
  * deleted element's number is not reused while a higher one remains.
  */
 export function nextConcreteMark(elements: ConcreteElement[], kind: ConcreteKind): string {
-  const prefix = CONCRETE_MARK_PREFIX[kind];
+  return nextNumberedMark(elements.filter((e) => e.kind === kind).map((e) => e.mark), CONCRETE_MARK_PREFIX[kind]);
+}
+
+/** `<prefix><number>` one above the highest such mark in `marks`, padded to two digits. */
+function nextNumberedMark(marks: string[], prefix: string): string {
   const pattern = new RegExp(`^${prefix}(\\d+)$`);
   let highest = 0;
-  for (const el of elements) {
-    if (el.kind !== kind) continue;
-    const n = Number(pattern.exec(el.mark.trim())?.[1]);
+  for (const mark of marks) {
+    const n = Number(pattern.exec(mark.trim())?.[1]);
     if (Number.isFinite(n) && n > highest) highest = n;
   }
   return `${prefix}${String(highest + 1).padStart(2, '0')}`;
@@ -108,4 +111,100 @@ export function removeConcreteElement(plan: Plan, id: string): Plan {
   const elements = concreteOf(plan);
   if (!elements.some((e) => e.id === id)) return plan;
   return { ...plan, concreteElements: elements.filter((e) => e.id !== id) };
+}
+
+// ---------- rebar ----------
+
+/** The letter each rebar kind's automatic mark starts with: M01 for a mesh zone, R01 for manual bars. */
+export const REBAR_MARK_PREFIX: Record<RebarItem['kind'], string> = { mesh: 'M', bars: 'R' };
+
+export function nextRebarMark(items: RebarItem[], kind: RebarItem['kind']): string {
+  return nextNumberedMark(items.filter((i) => i.kind === kind).map((i) => i.mark), REBAR_MARK_PREFIX[kind]);
+}
+
+/** A layer the user still has to fill in: 0 means "not entered", which the engine reports as not calculable. */
+export function newRebarLayer(template: Partial<Omit<RebarLayer, 'id'>> = {}): RebarLayer {
+  return { id: uuid(), diameterMm: 0, spacingM: 0, direction: 'long', ...template };
+}
+
+/** A new mesh zone for a finished outline: geometry, page, automatic mark and one empty layer. */
+export function newRebarMesh(plan: Plan, pageNumber: number, points: Point[]): RebarMesh {
+  return {
+    id: uuid(),
+    kind: 'mesh',
+    pageNumber,
+    points: points.map((p) => ({ x: p.x, y: p.y })),
+    mark: nextRebarMark(rebarOf(plan), 'mesh'),
+    layers: [newRebarLayer()],
+    wastePercent: 0,
+  };
+}
+
+/** A new manual-bars row on a page: nothing entered yet, so nothing is calculable. */
+export function newRebarBars(plan: Plan, pageNumber: number): RebarBars {
+  return { id: uuid(), kind: 'bars', pageNumber, mark: nextRebarMark(rebarOf(plan), 'bars'), diameterMm: 0, count: 0, lengthM: 0, wastePercent: 0 };
+}
+
+export function addRebarItem(plan: Plan, item: RebarItem): Plan {
+  return { ...plan, rebarItems: [...rebarOf(plan), item] };
+}
+
+export type RebarPatch = Partial<Omit<RebarMesh, 'id' | 'kind'>> & Partial<Omit<RebarBars, 'id' | 'kind'>>;
+
+/** Merges `patch` into the item (id and kind never change); a field patched to `undefined` is removed. Unknown id: unchanged. */
+export function updateRebarItem(plan: Plan, id: string, patch: RebarPatch): Plan {
+  const items = rebarOf(plan);
+  const current = items.find((i) => i.id === id);
+  if (!current) return plan;
+  const merged: Record<string, unknown> = { ...current, ...patch, id, kind: current.kind };
+  for (const key of Object.keys(merged)) if (merged[key] === undefined) delete merged[key];
+  return { ...plan, rebarItems: items.map((i) => (i.id === id ? (merged as unknown as RebarItem) : i)) };
+}
+
+export function removeRebarItem(plan: Plan, id: string): Plan {
+  const items = rebarOf(plan);
+  if (!items.some((i) => i.id === id)) return plan;
+  return { ...plan, rebarItems: items.filter((i) => i.id !== id) };
+}
+
+function withMeshLayers(plan: Plan, id: string, change: (layers: RebarLayer[]) => RebarLayer[]): Plan {
+  const mesh = rebarOf(plan).find((i) => i.id === id);
+  if (!mesh || mesh.kind !== 'mesh') return plan;
+  return updateRebarItem(plan, id, { layers: change(mesh.layers) });
+}
+
+/** Adds a layer to a mesh; `template` pre-fills it (the "two directions" shortcut passes the first layer's values). */
+export function addRebarLayer(plan: Plan, id: string, template: Partial<Omit<RebarLayer, 'id'>> = {}): Plan {
+  return withMeshLayers(plan, id, (layers) => [...layers, newRebarLayer(template)]);
+}
+
+export function updateRebarLayer(plan: Plan, id: string, layerId: string, patch: Partial<Omit<RebarLayer, 'id'>>): Plan {
+  const mesh = rebarOf(plan).find((i) => i.id === id);
+  if (!mesh || mesh.kind !== 'mesh' || !mesh.layers.some((l) => l.id === layerId)) return plan;
+  return withMeshLayers(plan, id, (layers) => layers.map((l) => (l.id === layerId ? { ...l, ...patch, id: layerId } : l)));
+}
+
+export function removeRebarLayer(plan: Plan, id: string, layerId: string): Plan {
+  const mesh = rebarOf(plan).find((i) => i.id === id);
+  if (!mesh || mesh.kind !== 'mesh' || !mesh.layers.some((l) => l.id === layerId)) return plan;
+  return withMeshLayers(plan, id, (layers) => layers.filter((l) => l.id !== layerId));
+}
+
+/** The other direction: what the second layer of a "two directions" mesh runs along. */
+export const oppositeDirection = (d: RebarLayer['direction']): RebarLayer['direction'] => (d === 'long' ? 'short' : 'long');
+
+/**
+ * Copies the outlines of existing rooms into new mesh zones — the rebar twin of `addConcreteFromRooms`:
+ * geometry and page only, new ids, next automatic marks, rooms untouched, unusable outlines skipped.
+ */
+export function addRebarMeshFromRooms(plan: Plan, rooms: Room[]): { plan: Plan; created: RebarMesh[] } {
+  let next = plan;
+  const created: RebarMesh[] = [];
+  for (const room of rooms) {
+    if (!Array.isArray(room.points) || room.points.length < 3 || polygonAreaPx(room.points) <= 0) continue;
+    const mesh = newRebarMesh(next, room.pageNumber, room.points);
+    created.push(mesh);
+    next = addRebarItem(next, mesh);
+  }
+  return { plan: next, created };
 }

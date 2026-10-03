@@ -19,8 +19,25 @@ import {
 import { clonePlanForDuplicate } from '../lib/planDuplication';
 import { createEmptyComparison, useCompareStore } from './compareStore';
 import type { Comparison } from '../types/compare';
-import type { ConcreteElement, ConcreteKind } from '../types/structural';
-import { addConcreteElement, addConcreteFromRooms, changeConcreteKind as changeKind, newConcreteElement, removeConcreteElement, updateConcreteElement as updateConcrete } from '../lib/structuralMutations';
+import type { ConcreteElement, ConcreteKind, RebarLayer } from '../types/structural';
+import {
+  addConcreteElement,
+  addConcreteFromRooms,
+  addRebarItem,
+  addRebarLayer as addLayer,
+  addRebarMeshFromRooms,
+  changeConcreteKind as changeKind,
+  newConcreteElement,
+  newRebarBars,
+  newRebarMesh,
+  removeConcreteElement,
+  removeRebarItem,
+  removeRebarLayer as removeLayer,
+  updateConcreteElement as updateConcrete,
+  updateRebarItem as updateRebar,
+  updateRebarLayer as updateLayer,
+  type RebarPatch,
+} from '../lib/structuralMutations';
 import { polygonAreaPx } from '../lib/geometry';
 import { createHistoryTracker } from '../lib/undoHistory';
 import { loadPdfPlanSource } from '../lib/planSource';
@@ -205,6 +222,8 @@ interface AppState {
   drawTarget: DrawTarget;
   /** The concrete zone open in the Concrete tab's form. Session UI state, like `selectedRoomId`: not persisted and cleared by undo, redo, page changes and plan switches. */
   selectedConcreteId: string | null;
+  /** The rebar item open in the Rebar tab's form. Session UI state, cleared like `selectedConcreteId`. */
+  selectedRebarId: string | null;
   /** The kind the next drawn concrete zone gets (the Concrete tab's picker). Session UI state. */
   concreteKind: ConcreteKind;
   measureTool: MeasureTool | null;
@@ -321,6 +340,19 @@ interface AppState {
    * in the list. Returns how many zones were created.
    */
   copyRoomsToConcrete: (roomIds: string[]) => number;
+
+  setSelectedRebarId: (id: string | null) => void;
+  /** Debounced into one undo step per burst, like typing in a room's fields. */
+  updateRebarItem: (id: string, patch: RebarPatch) => void;
+  /** Adds a manual-bars row on the current page and selects it. */
+  addRebarBars: () => void;
+  deleteRebarItem: (id: string) => void;
+  /** Layer edits on a mesh zone. Add and remove are one undo step each; editing a layer is debounced. */
+  addRebarLayer: (id: string, template?: Partial<Omit<RebarLayer, 'id'>>) => void;
+  updateRebarLayer: (id: string, layerId: string, patch: Partial<Omit<RebarLayer, 'id'>>) => void;
+  removeRebarLayer: (id: string, layerId: string) => void;
+  /** Copies the outlines of existing rooms into new mesh zones (rooms untouched). One undo step; returns how many. */
+  copyRoomsToRebar: (roomIds: string[]) => number;
   finishDrawing: () => void;
   finishRectangle: (p1: Point, p2: Point) => void;
 
@@ -437,25 +469,36 @@ function markDirty(set: (patch: Partial<AppState>) => void) {
 export type DrawTarget = 'room' | 'concrete' | 'rebar';
 
 /**
- * Where a finished shape goes when the draw target is not 'room'. A concrete zone becomes a real
- * element — and nothing else ever creates one: a shape with fewer than three points or no area is
- * just dropped, like cancelling. The rebar target is still a placeholder that creates nothing.
+ * Where a finished shape goes when the draw target is not 'room': a concrete zone or a rebar mesh
+ * zone becomes a real item — and nothing else ever creates one. A shape with fewer than three points
+ * or no area is just dropped, like cancelling.
  */
 function commitStructuralZone(get: () => AppState, set: (patch: Partial<AppState>) => void, points: Point[]) {
   const { project, drawTarget, currentPage, concreteKind } = get();
-  if (!project || drawTarget !== 'concrete' || points.length < 3 || polygonAreaPx(points) <= 0) {
+  if (!project || (drawTarget !== 'concrete' && drawTarget !== 'rebar') || points.length < 3 || polygonAreaPx(points) <= 0) {
     set({ drawingPoints: [] });
     return;
   }
   historyTracker.push(get, set, project);
-  const element = newConcreteElement(project, currentPage, concreteKind, points);
-  set({
-    project: { ...addConcreteElement(project, element), updatedAt: Date.now() },
-    drawingPoints: [],
-    selectedConcreteId: element.id,
-    selectedRoomId: null,
-    toolMode: 'select',
-  });
+  if (drawTarget === 'rebar') {
+    const mesh = newRebarMesh(project, currentPage, points);
+    set({
+      project: { ...addRebarItem(project, mesh), updatedAt: Date.now() },
+      drawingPoints: [],
+      selectedRebarId: mesh.id,
+      selectedRoomId: null,
+      toolMode: 'select',
+    });
+  } else {
+    const element = newConcreteElement(project, currentPage, concreteKind, points);
+    set({
+      project: { ...addConcreteElement(project, element), updatedAt: Date.now() },
+      drawingPoints: [],
+      selectedConcreteId: element.id,
+      selectedRoomId: null,
+      toolMode: 'select',
+    });
+  }
   scheduleSave(get, set);
 }
 
@@ -494,6 +537,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   drawingPoints: [],
   drawTarget: 'room',
   selectedConcreteId: null,
+  selectedRebarId: null,
   concreteKind: 'slab',
   measureTool: null,
   measurePoints: [],
@@ -550,6 +594,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedRoomId: null,
       selectedMarkupId: null,
       selectedConcreteId: null,
+      selectedRebarId: null,
       drawTarget: 'room',
       exportRegions: {},
       activeApartmentNumber: '',
@@ -833,7 +878,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { project, history, future } = get();
     if (!project || history.length === 0) return;
     const previous = history[history.length - 1];
-    set({ project: previous, history: history.slice(0, -1), future: [project, ...future], selectedRoomId: null, selectedConcreteId: null });
+    set({ project: previous, history: history.slice(0, -1), future: [project, ...future], selectedRoomId: null, selectedConcreteId: null, selectedRebarId: null });
     scheduleSave(get, set);
   },
   redo: () => {
@@ -844,7 +889,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { project, history, future } = get();
     if (!project || future.length === 0) return;
     const next = future[0];
-    set({ project: next, history: [...history, project], future: future.slice(1), selectedRoomId: null, selectedConcreteId: null });
+    set({ project: next, history: [...history, project], future: future.slice(1), selectedRoomId: null, selectedConcreteId: null, selectedRebarId: null });
     scheduleSave(get, set);
   },
   setCurrentPage: (n) => {
@@ -858,6 +903,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedRoomId: null,
       selectedMarkupId: null,
       selectedConcreteId: null,
+      selectedRebarId: null,
       drawingPoints: [],
       calibrationPoints: [],
       measurePoints: [],
@@ -938,6 +984,71 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (created.length === 1) {
       get().setCurrentPage(created[0].pageNumber);
       set({ selectedConcreteId: created[0].id });
+    }
+    scheduleSave(get, set);
+    return created.length;
+  },
+  setSelectedRebarId: (id) => set({ selectedRebarId: id }),
+  updateRebarItem: (id, patch) => {
+    const { project } = get();
+    if (!project) return;
+    historyTracker.pushDebounced(get, set, project);
+    set({ project: { ...updateRebar(project, id, patch), updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
+  addRebarBars: () => {
+    const { project, currentPage } = get();
+    if (!project) return;
+    historyTracker.push(get, set, project);
+    const bars = newRebarBars(project, currentPage);
+    set({ project: { ...addRebarItem(project, bars), updatedAt: Date.now() }, selectedRebarId: bars.id });
+    scheduleSave(get, set);
+  },
+  deleteRebarItem: (id) => {
+    const { project, selectedRebarId } = get();
+    if (!project) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...removeRebarItem(project, id), updatedAt: Date.now() }, selectedRebarId: selectedRebarId === id ? null : selectedRebarId });
+    scheduleSave(get, set);
+  },
+  addRebarLayer: (id, template) => {
+    const { project } = get();
+    if (!project) return;
+    const next = addLayer(project, id, template);
+    if (next === project) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...next, updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
+  updateRebarLayer: (id, layerId, patch) => {
+    const { project } = get();
+    if (!project) return;
+    const next = updateLayer(project, id, layerId, patch);
+    if (next === project) return;
+    historyTracker.pushDebounced(get, set, project);
+    set({ project: { ...next, updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
+  removeRebarLayer: (id, layerId) => {
+    const { project } = get();
+    if (!project) return;
+    const next = removeLayer(project, id, layerId);
+    if (next === project) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...next, updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
+  copyRoomsToRebar: (roomIds) => {
+    const { project } = get();
+    if (!project) return 0;
+    const wanted = new Set(roomIds);
+    const { plan, created } = addRebarMeshFromRooms(project, project.rooms.filter((r) => wanted.has(r.id)));
+    if (created.length === 0) return 0;
+    historyTracker.push(get, set, project);
+    set({ project: { ...plan, updatedAt: Date.now() } });
+    if (created.length === 1) {
+      get().setCurrentPage(created[0].pageNumber);
+      set({ selectedRebarId: created[0].id });
     }
     scheduleSave(get, set);
     return created.length;

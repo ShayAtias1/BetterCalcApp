@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { useT, formatNumber } from '../i18n';
 import { useAppStore } from '../store/appStore';
 import type { Calibration } from '../types';
@@ -10,36 +9,9 @@ import { zoneGeometry } from '../lib/zoneGeometry';
 import { round } from '../lib/geometry';
 import { CONCRETE_COLOR } from './ConcreteZones';
 import ConcreteSummary from './ConcreteSummary';
-import ConcreteFromRooms from './ConcreteFromRooms';
+import ExistingAreaPicker from './ExistingAreaPicker';
+import NumberField from './NumberField';
 import Icon from './Icon';
-
-/** A number field that can be empty or half-typed ("0.") without fighting the stored value. */
-function NumberField({ value, onChange, step = '0.01' }: { value: number | undefined; onChange: (v: number | undefined) => void; step?: string }) {
-  const [draft, setDraft] = useState(value === undefined ? '' : String(value));
-  // Follow the stored value when it changes from elsewhere (undo, another element) — but not while
-  // the draft already parses to it, so typing "0." is never rewritten to "0".
-  useEffect(() => {
-    const parsed = draft.trim() === '' ? undefined : Number(draft);
-    if (parsed !== value) setDraft(value === undefined ? '' : String(value));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-  return (
-    <input
-      type="number"
-      inputMode="decimal"
-      min="0"
-      step={step}
-      value={draft}
-      onChange={(e) => {
-        setDraft(e.target.value);
-        const text = e.target.value.trim();
-        if (text === '') return onChange(undefined);
-        const n = Number(text);
-        if (Number.isFinite(n)) onChange(n);
-      }}
-    />
-  );
-}
 
 function volumeText(calc: ConcreteCalc, t: ReturnType<typeof useT>, field: 'volumeM3' | 'orderM3'): string {
   const v = calc[field];
@@ -60,6 +32,7 @@ export default function ConcretePanel() {
   const updateElement = useAppStore((s) => s.updateConcreteElement);
   const deleteElement = useAppStore((s) => s.deleteConcreteElement);
   const changeKind = useAppStore((s) => s.changeConcreteElementKind);
+  const copyRoomsToConcrete = useAppStore((s) => s.copyRoomsToConcrete);
 
   if (!project) return null;
   const elements = concreteOf(project);
@@ -148,7 +121,12 @@ export default function ConcretePanel() {
         </div>
       </div>
 
-      <ConcreteFromRooms />
+      <ExistingAreaPicker
+        copy={copyRoomsToConcrete}
+        willCreate={(count) => t('concrete.copy.willCreate', { count, kind: t(`concrete.kinds.${concreteKind}`) })}
+        addLabel={t('concrete.copy.add')}
+        doneLabel={(count) => t('concrete.copy.done', { count })}
+      />
 
       <div className="room-list">
         <span className="section-label">{t('concrete.zones', { count: elements.length })}</span>

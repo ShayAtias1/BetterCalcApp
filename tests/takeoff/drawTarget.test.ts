@@ -51,19 +51,23 @@ test('a polygon with fewer than three points still creates nothing and clears th
   assert.deepEqual(useAppStore.getState().drawingPoints, []);
 });
 
-test('the rebar target (not built yet) creates nothing and just drops the shape in progress', () => {
+test('the rebar target creates a mesh zone (and no room, no concrete); a degenerate shape creates nothing', () => {
   open();
   useAppStore.getState().setDrawTarget('rebar');
   useAppStore.setState({ drawingPoints: square, toolMode: 'draw' });
   useAppStore.getState().finishDrawing();
-  useAppStore.getState().finishRectangle({ x: 0, y: 0 }, { x: 50, y: 50 });
-  const s = useAppStore.getState();
+  let s = useAppStore.getState();
   assert.equal(roomCount(), PLAN_A.rooms.length);
-  assert.equal(s.history.length, 0);
-  assert.deepEqual(s.drawingPoints, []);
-  assert.equal(s.selectedRoomId, null);
   assert.equal(s.project!.concreteElements, undefined);
-  assert.equal(s.project!.rebarItems, undefined);
+  assert.equal(s.project!.rebarItems!.length, 1);
+  assert.equal(s.project!.rebarItems![0].kind, 'mesh');
+  assert.equal(s.selectedRebarId, s.project!.rebarItems![0].id);
+  assert.equal(s.toolMode, 'select');
+  assert.deepEqual(s.drawingPoints, []);
+
+  useAppStore.getState().finishRectangle({ x: 5, y: 5 }, { x: 5, y: 80 }); // no width
+  s = useAppStore.getState();
+  assert.equal(s.project!.rebarItems!.length, 1);
 });
 
 test('opening or closing a plan resets the target to room', () => {

@@ -48,6 +48,20 @@ export const STEEL_DENSITY_KG_M3 = 7850;
 /** A span / spacing ratio this close to a whole number is that whole number (see the count rule). */
 export const COUNT_EPSILON = 1e-9;
 
+/** The bar diameters offered in the UI, in millimetres. The engine itself accepts any positive diameter. */
+export const REBAR_DIAMETERS_MM = [6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 28, 32, 40] as const;
+
+/**
+ * Compact on-plan notation of a mesh's layers, e.g. `Ø12 @ 200` or `Ø12 @ 200 / Ø10 @ 250` (spacing
+ * in millimetres). Layers that are not filled in yet are left out. Not translated: it is the notation.
+ */
+export function rebarNotation(layers: RebarLayer[]): string {
+  return layers
+    .filter((l) => finitePositive(l.diameterMm) !== null && finitePositive(l.spacingM) !== null)
+    .map((l) => `Ø${l.diameterMm} @ ${Math.round(l.spacingM * 1000)}`)
+    .join(' / ');
+}
+
 /** Weight of one metre of bar, in kg, or null when the diameter is not a positive number. */
 export function rebarWeightPerMeterKg(diameterMm: number | null | undefined): number | null {
   const d = finitePositive(diameterMm);

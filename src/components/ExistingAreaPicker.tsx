@@ -12,15 +12,27 @@ const hasOutline = (r: Room) => Array.isArray(r.points) && r.points.length >= 3 
 
 /**
  * "Use existing area": copies the outline of a room — or of every room of an apartment — into new
- * concrete zones of the kind picked above, so nothing already marked has to be redrawn. An apartment
- * has no outline of its own in BetterCalc (it is just the number rooms carry), so it stands for its
- * rooms and one zone is made per room. The rooms and all their finishes data stay as they are.
+ * structural zones (concrete or rebar, per the `copy` action), so nothing already marked has to be
+ * redrawn. An apartment has no outline of its own in BetterCalc (it is just the number rooms carry),
+ * so it stands for its rooms and one zone is made per room. The rooms and all their finishes data
+ * stay as they are.
  */
-export default function ConcreteFromRooms() {
+export default function ExistingAreaPicker({
+  copy,
+  willCreate,
+  addLabel,
+  doneLabel,
+}: {
+  /** Creates the zones from these room ids and returns how many were made. */
+  copy: (roomIds: string[]) => number;
+  /** "N zones will be created …", shown before confirming. */
+  willCreate: (count: number) => string;
+  addLabel: string;
+  /** "N zones were created", shown after. */
+  doneLabel: (count: number) => string;
+}) {
   const t = useT();
   const project = useAppStore((s) => s.project);
-  const concreteKind = useAppStore((s) => s.concreteKind);
-  const copyRoomsToConcrete = useAppStore((s) => s.copyRoomsToConcrete);
   const [open, setOpen] = useState(false);
   const [source, setSource] = useState('');
   const [done, setDone] = useState<number | null>(null);
@@ -48,7 +60,7 @@ export default function ConcreteFromRooms() {
   }
 
   const run = () => {
-    const created = copyRoomsToConcrete(usable.map((r) => r.id));
+    const created = copy(usable.map((r) => r.id));
     setDone(created);
     if (created > 0) setSource('');
   };
@@ -86,20 +98,20 @@ export default function ConcreteFromRooms() {
       {source !== '' && (
         <p className="muted">
           {usable.length > 0
-            ? t('concrete.copy.willCreate', { count: usable.length, kind: t(`concrete.kinds.${concreteKind}`) })
+            ? willCreate(usable.length)
             : t('concrete.copy.nothing')}
         </p>
       )}
       <div className="concrete-from-rooms-actions">
         <button className="btn-primary small" disabled={usable.length === 0} onClick={run}>
-          {t('concrete.copy.add')}
+          {addLabel}
         </button>
         <button className="btn-ghost small" onClick={() => setOpen(false)}>
           {t('concrete.copy.close')}
         </button>
       </div>
       <p className="muted">{t('concrete.copy.note')}</p>
-      {done !== null && done > 0 && <p className="muted concrete-copy-done">{t('concrete.copy.done', { count: done })}</p>}
+      {done !== null && done > 0 && <p className="muted concrete-copy-done">{doneLabel(done)}</p>}
     </div>
   );
 }
