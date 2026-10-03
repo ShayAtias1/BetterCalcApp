@@ -1,9 +1,11 @@
 import { formatNumber, useT } from '../i18n';
 import { useAppStore } from '../store/appStore';
 import type { Calibration } from '../types';
-import type { RebarBars, RebarItem, RebarLayer, RebarMesh } from '../types/structural';
-import { REBAR_DIAMETERS_MM, calculateRebar, rebarNotation, type RebarCalc, type RebarLayerCalc } from '../lib/rebar';
-import { oppositeDirection } from '../lib/structuralMutations';
+import type { BarSpec, MeshReinforcement, RebarBars, RebarItem, RebarLayerDirection, RebarLevel, RebarMesh } from '../types/structural';
+import { REBAR_DIAMETERS_MM, calculateRebar, type RebarCalc, type RebarLayerCalc } from '../lib/rebar';
+import { levelChoice, meshLevels, specNotation, withDirection, withMode, withoutDirection, withoutExtra, withSpec } from '../lib/rebarMesh';
+import type { MeshLevelChoice } from '../lib/structuralMutations';
+import { cmToMeters, metersToCm } from '../lib/structuralUnits';
 import { rebarOf } from '../lib/structuralPlan';
 import { markLabel, markPatch } from '../lib/structuralMarks';
 import { zoneGeometry } from '../lib/zoneGeometry';
@@ -19,9 +21,21 @@ type T = ReturnType<typeof useT>;
 const metres = (v: number, t: T) => `${formatNumber(round(v, 2))} ${t('units.m')}`;
 const kg = (v: number, t: T) => `${formatNumber(round(v, 1))} ${t('units.kg')}`;
 
+/** Compact, language-neutral notation of a mesh: `B Ø12 @ 20 · T Ø10 @ 15` (one entry per level; directional sides joined with `|`). */
+function meshNotation(mesh: RebarMesh, t: T): string {
+  return meshLevels(mesh)
+    .map(({ level, reinforcement: r }) => {
+      const tag = t(level === 'bottom' ? 'rebar.overlay.bottomShort' : 'rebar.overlay.topShort');
+      const text = r.mode === 'uniform' ? specNotation(r.spec) : [specNotation(r.long), specNotation(r.short)].filter(Boolean).join(' | ');
+      return text ? `${tag} ${text}` : '';
+    })
+    .filter(Boolean)
+    .join(' · ');
+}
+
 /** What a list row says about an item: its notation (mesh) or its bars (manual). Notation is never translated. */
 function itemSummary(item: RebarItem, t: T): string {
-  if (item.kind === 'mesh') return rebarNotation(item.layers) || t('rebar.mesh');
+  if (item.kind === 'mesh') return meshNotation(item, t) || t('rebar.mesh');
   const parts = [item.diameterMm > 0 ? `Ø${item.diameterMm}` : t('rebar.bars')];
   if (item.count > 0 && item.lengthM > 0) parts.push(`${item.count} × ${formatNumber(item.lengthM)}`);
   return parts.join(' · ');
@@ -202,8 +216,8 @@ function statusMessage(calc: RebarCalc, t: T): string | null {
   }
 }
 
-/** The product-language line(s) under a layer: which side the bars run along, and how many of what length. */
-function LayerResult({ layer, result }: { layer: RebarLayer; result: RebarLayerCalc | undefined }) {
+/** The product-language line(s) under one bar group: which side the bars run along, and how many of what length. */
+function GroupResult({ direction, result }: { direction: RebarLayerDirection; result: RebarLayerCalc | undefined }) {
   const t = useT();
   if (!result || result.totalLengthM === null) return null;
   if (result.estimated) {
@@ -212,10 +226,139 @@ function LayerResult({ layer, result }: { layer: RebarLayer; result: RebarLayerC
   const side = metres(result.cutLengthM!, t);
   return (
     <p className="muted rebar-layer-result">
-      {t(layer.direction === 'short' ? 'rebar.runsAlongShort' : 'rebar.runsAlongLong', { length: side })}
+      {t(direction === 'short' ? 'rebar.runsAlongShort' : 'rebar.runsAlongLong', { length: side })}
       <br />
       {t('rebar.countTimes', { count: result.barCount!, length: side, total: metres(result.totalLengthM, t) })}
     </p>
+  );
+}
+
+/** One diameter + one spacing. The spacing is typed in centimetres and stored in metres. */
+function SpecFields({ spec, onChange }: { spec: BarSpec; onChange: (patch: Partial<BarSpec>) => void }) {
+  const t = useT();
+  return (
+    <div className="form-grid">
+      <div className="form-row">
+        <label>{t('rebar.diameter')}</label>
+        <DiameterSelect value={spec.diameterMm} onChange={(mm) => onChange({ diameterMm: mm })} />
+      </div>
+      <div className="form-row">
+        <label>{t('rebar.spacing')}</label>
+        <NumberField value={spec.spacingM > 0 ? metersToCm(spec.spacingM) : undefined} step="1" onChange={(v) => onChange({ spacingM: v ? cmToMeters(v)! : 0 })} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One reinforcement level of a mesh (Bottom or Top): its mode, its specification(s) and what they
+ * add up to. The two directions of a directional level sit in one frame — they are one level, not
+ * two layers.
+ */
+function LevelSection({
+  level,
+  reinforcement,
+  calc,
+  onChange,
+  action,
+}: {
+  level: RebarLevel;
+  reinforcement: MeshReinforcement;
+  calc: RebarCalc;
+  onChange: (next: MeshReinforcement) => void;
+  action?: React.ReactNode;
+}) {
+  const t = useT();
+  const mine = calc.layers.filter((l) => l.level === level);
+  const resultOf = (direction: RebarLayerDirection) => mine.find((l) => l.direction === direction && !l.uniform);
+  const levelOk = calc.status === 'ok' && mine.length > 0;
+  const levelLength = levelOk ? mine.reduce((a, l) => a + l.totalLengthM!, 0) : null;
+  const levelWeight = levelOk ? mine.reduce((a, l) => a + l.weightKg!, 0) : null;
+  const estimated = mine.some((l) => l.estimated);
+
+  const directionBlock = (direction: RebarLayerDirection, spec: BarSpec | undefined, canRemove: boolean) => {
+    const label = t(direction === 'long' ? 'rebar.longSide' : 'rebar.shortSide');
+    if (!spec || reinforcement.mode !== 'directional') {
+      return (
+        <div className="rebar-direction" key={direction}>
+          <div className="rebar-direction-head">
+            <span>{label}</span>
+            <button className="btn-ghost small" onClick={() => onChange(withDirection(reinforcement, direction))}>
+              <Icon name="plus" size={13} />
+              {t('rebar.addDirection', { side: label })}
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="rebar-direction" key={direction}>
+        <div className="rebar-direction-head">
+          <span>{label}</span>
+          {canRemove && (
+            <button className="icon-btn danger" title={t('rebar.removeDirection')} aria-label={t('rebar.removeDirection')} onClick={() => onChange(withoutDirection(reinforcement, direction))}>
+              <Icon name="trash" size={14} />
+            </button>
+          )}
+        </div>
+        <SpecFields spec={spec} onChange={(patch) => onChange(withSpec(reinforcement, direction, patch))} />
+        <GroupResult direction={direction} result={resultOf(direction)} />
+      </div>
+    );
+  };
+
+  return (
+    <section className={`rebar-level rebar-level-${level}`} aria-label={t(level === 'bottom' ? 'rebar.bottomReinforcement' : 'rebar.topReinforcement')}>
+      <div className="rebar-level-head">
+        <span className="rebar-level-title">{t(level === 'bottom' ? 'rebar.bottomReinforcement' : 'rebar.topReinforcement')}</span>
+        {action}
+      </div>
+
+      <div className="concrete-kinds" role="group" aria-label={t('rebar.levels')}>
+        {(['uniform', 'directional'] as const).map((mode) => (
+          <button
+            key={mode}
+            className={`btn-ghost small ${reinforcement.mode === mode ? 'active' : ''}`}
+            aria-pressed={reinforcement.mode === mode}
+            onClick={() => onChange(withMode(reinforcement, mode))}
+          >
+            {t(mode === 'uniform' ? 'rebar.modeUniform' : 'rebar.modeDirectional')}
+          </button>
+        ))}
+      </div>
+
+      {reinforcement.mode === 'uniform' ? (
+        <>
+          <SpecFields spec={reinforcement.spec} onChange={(patch) => onChange(withSpec(reinforcement, 'uniform', patch))} />
+          <p className="muted rebar-layer-result">{t('rebar.uniformHint')}</p>
+          {mine.map((l) => l.direction && <GroupResult key={l.layerId} direction={l.direction} result={l} />)}
+        </>
+      ) : (
+        <>
+          <p className="muted rebar-layer-result">{t('rebar.sameLevelHint')}</p>
+          {directionBlock('long', reinforcement.long, !!reinforcement.short)}
+          {directionBlock('short', reinforcement.short, !!reinforcement.long)}
+          {(reinforcement.extra ?? []).map((l) => (
+            <div className="rebar-direction" key={l.id}>
+              <div className="rebar-direction-head">
+                <span dir="ltr">
+                  {t('rebar.legacyExtra', { dir: t(l.direction === 'short' ? 'rebar.shortSide' : 'rebar.longSide'), spec: specNotation(l) ?? '—' })}
+                </span>
+                <button className="btn-ghost small danger" onClick={() => onChange(withoutExtra(reinforcement, l.id))}>
+                  {t('rebar.removeLegacyExtra')}
+                </button>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+
+      {levelLength !== null && (
+        <p className="muted rebar-level-total">
+          {t('rebar.levelResult', { length: `${estimated ? '≈ ' : ''}${metres(levelLength, t)}`, weight: `${estimated ? '≈ ' : ''}${kg(levelWeight!, t)}` })}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -226,12 +369,13 @@ function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calib
   const updateItem = useAppStore((s) => s.updateRebarItem);
   const plan = useAppStore((s) => s.project);
   const siblings = plan ? rebarOf(plan) : [];
-  const addLayer = useAppStore((s) => s.addRebarLayer);
-  const updateLayer = useAppStore((s) => s.updateRebarLayer);
-  const removeLayer = useAppStore((s) => s.removeRebarLayer);
+  const setLevels = useAppStore((s) => s.setRebarMeshLevels);
+  const setReinforcement = useAppStore((s) => s.setRebarMeshReinforcement);
+  const copyBottomToTop = useAppStore((s) => s.copyRebarBottomToTop);
   const calc = calculateRebar(mesh, calibration);
   const message = statusMessage(calc, t);
   const manual = !!mesh.sizeOverride;
+  const choice = levelChoice(mesh);
 
   const toggleManual = (on: boolean) => {
     if (!on) return updateItem(mesh.id, { sizeOverride: undefined });
@@ -239,9 +383,11 @@ function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calib
     updateItem(mesh.id, { sizeOverride: { lengthM: sides ? round(sides.longM, 2) : 0, widthM: sides ? round(sides.shortM, 2) : 0 } });
   };
 
-  // "Two directions": a second layer with the first one's bars, running the other way.
-  const first = mesh.layers[0];
-  const twoDirections = () => addLayer(mesh.id, { diameterMm: first.diameterMm, spacingM: first.spacingM, direction: oppositeDirection(first.direction) });
+  const choices: { id: MeshLevelChoice; label: string }[] = [
+    { id: 'bottom', label: t('rebar.levelBottom') },
+    { id: 'top', label: t('rebar.levelTop') },
+    { id: 'both', label: t('rebar.levelBoth') },
+  ];
 
   return (
     <div className="room-detail">
@@ -259,50 +405,32 @@ function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calib
         </div>
       </div>
 
-      <span className="section-label">{t('rebar.layers')}</span>
-      {mesh.layers.map((layer, i) => (
-        <div key={layer.id} className="rebar-layer">
-          <div className="rebar-layer-head">
-            <span>{t('rebar.layer', { n: i + 1 })}</span>
-            <button className="icon-btn danger" title={t('rebar.removeLayer')} aria-label={t('rebar.removeLayer')} onClick={() => removeLayer(mesh.id, layer.id)}>
-              <Icon name="trash" size={14} />
-            </button>
-          </div>
-          <div className="form-grid">
-            <div className="form-row">
-              <label>{t('rebar.diameter')}</label>
-              <DiameterSelect value={layer.diameterMm} onChange={(mm) => updateLayer(mesh.id, layer.id, { diameterMm: mm })} />
-            </div>
-            <div className="form-row">
-              <label>{t('rebar.spacing')}</label>
-              <NumberField
-                value={layer.spacingM > 0 ? round(layer.spacingM * 1000, 1) : undefined}
-                step="10"
-                onChange={(v) => updateLayer(mesh.id, layer.id, { spacingM: v ? v / 1000 : 0 })}
-              />
-            </div>
-          </div>
-          <div className="form-row">
-            <label>{t('rebar.direction')}</label>
-            <select value={layer.direction} onChange={(e) => updateLayer(mesh.id, layer.id, { direction: e.target.value as RebarLayer['direction'] })}>
-              <option value="long">{t('rebar.alongLong')}</option>
-              <option value="short">{t('rebar.alongShort')}</option>
-            </select>
-          </div>
-          <LayerResult layer={layer} result={calc.layers[i]} />
-        </div>
-      ))}
-      <div className="rebar-layer-actions">
-        <button className="btn-ghost small" onClick={() => addLayer(mesh.id)}>
-          <Icon name="plus" size={13} />
-          {t('rebar.addLayer')}
-        </button>
-        {mesh.layers.length === 1 && (
-          <button className="btn-ghost small" onClick={twoDirections} title={t('rebar.twoDirectionsHint')}>
-            {t('rebar.twoDirections')}
+      {/* Which reinforcement levels this zone has — Top and Bottom are the layers of steel. */}
+      <span className="section-label">{t('rebar.levels')}</span>
+      <div className="concrete-kinds" role="group" aria-label={t('rebar.levels')}>
+        {choices.map((c) => (
+          <button key={c.id} className={`btn-ghost small ${choice === c.id ? 'active' : ''}`} aria-pressed={choice === c.id} onClick={() => setLevels(mesh.id, c.id)}>
+            {c.label}
           </button>
-        )}
+        ))}
       </div>
+
+      {mesh.bottom && <LevelSection level="bottom" reinforcement={mesh.bottom} calc={calc} onChange={(next) => setReinforcement(mesh.id, 'bottom', next)} />}
+      {mesh.top && (
+        <LevelSection
+          level="top"
+          reinforcement={mesh.top}
+          calc={calc}
+          onChange={(next) => setReinforcement(mesh.id, 'top', next)}
+          action={
+            mesh.bottom ? (
+              <button className="btn-ghost small" onClick={() => copyBottomToTop(mesh.id)} title={t('rebar.copyBottomToTopHint')}>
+                {t('rebar.copyBottomToTop')}
+              </button>
+            ) : undefined
+          }
+        />
+      )}
 
       <label className="wi-check concrete-manual-toggle">
         <input type="checkbox" checked={manual} onChange={(e) => toggleManual(e.target.checked)} />

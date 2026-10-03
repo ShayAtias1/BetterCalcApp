@@ -1,13 +1,14 @@
 import type { Plan } from '../types';
 import type { ConcreteElement, RebarItem } from '../types/structural';
 import { withMarkFields } from './structuralMarks';
+import { normalizeMesh } from './rebarMesh';
 
 /**
  * The only way to read a plan's concrete and rebar zones. Plans saved before the feature have no
  * such arrays, and a damaged record could hold something that is not one; both read as empty, so
  * nothing downstream has to care and nothing is written to a plan just because it was opened.
- * Items saved with an older mark shape (letter marks such as `S01`) are returned in the current one;
- * see lib/structuralMarks.
+ * Items saved with an older shape are returned in the current one: letter marks such as `S01`
+ * (lib/structuralMarks) and meshes made of a flat list of layers (lib/rebarMesh).
  */
 const EMPTY_CONCRETE: ConcreteElement[] = [];
 const EMPTY_REBAR: RebarItem[] = [];
@@ -31,7 +32,7 @@ export function concreteOf(plan: Pick<Plan, 'concreteElements'>): ConcreteElemen
 }
 
 export function rebarOf(plan: Pick<Plan, 'rebarItems'>): RebarItem[] {
-  return Array.isArray(plan.rebarItems) ? normalized(plan.rebarItems, rebarCache, withMarkFields) : EMPTY_REBAR;
+  return Array.isArray(plan.rebarItems) ? normalized(plan.rebarItems, rebarCache, (item) => withMarkFields(item.kind === 'mesh' ? normalizeMesh(item) : item)) : EMPTY_REBAR;
 }
 
 /** Whether the plan has any concrete or rebar item — what makes its structural report worth writing. */

@@ -142,17 +142,17 @@ test('rebar rows: one per mesh layer or manual-bars item; exact has counts, esti
     mesh([], { mark: 'M04' }),
   ]));
   assert.deepEqual(rows.map((r) => markLabel(r, he)), ['רשת 01', 'רשת 01', 'רשת 02', 'מוטות 01', 'רשת 03', 'רשת 04']);
-  assert.deepEqual([rows[0].diameterMm, rows[0].spacingMm, rows[0].direction, rows[0].barCount], [12, 200, 'long', 41]);
+  assert.deepEqual([rows[0].level, rows[0].diameterMm, rows[0].spacingCm, rows[0].direction, rows[0].barCount], ['bottom', 12, 20, 'long', 41]);
   near(rows[0].barLengthM, 10);
   near(rows[0].netLengthM, 410);
-  assert.deepEqual([rows[1].diameterMm, rows[1].spacingMm, rows[1].direction], [10, 250, 'short']);
+  assert.deepEqual([rows[1].diameterMm, rows[1].spacingCm, rows[1].direction], [10, 25, 'short']);
   // estimate: numbers but no bars
   assert.equal(rows[2].estimated, true);
   assert.equal(rows[2].barCount, null);
   assert.equal(rows[2].barLengthM, null);
   near(rows[2].netLengthM, 27 / 0.15);
   // manual bars with waste
-  assert.deepEqual([rows[3].kind, rows[3].spacingMm, rows[3].direction, rows[3].barCount], ['bars', null, null, 10]);
+  assert.deepEqual([rows[3].kind, rows[3].level, rows[3].spacingCm, rows[3].direction, rows[3].barCount], ['bars', null, null, null, 10]);
   near(rows[3].orderLengthM, 66);
   // not calculable: listed, numbers null, reason given
   assert.equal(rows[4].netLengthM, null);
@@ -263,7 +263,7 @@ test('concrete sheet in English', async () => {
 
 test('rebar sheet: numbers stay numbers, estimates are marked by format and Basis, missing is a dash, totals are formulas', async () => {
   const p = structuralOnly(undefined, [
-    mesh([layer({ diameterMm: 12, spacingM: 0.2, direction: 'long' }), layer({ diameterMm: 12, spacingM: 0.2, direction: 'short' })], { mark: 'M01' }), // 410 + 408
+    mesh([layer({ diameterMm: 12, spacingM: 0.2, direction: 'long' }), layer({ diameterMm: 10, spacingM: 0.25, direction: 'short' })], { mark: 'M01' }), // 410 + 328 (directional Bottom)
     mesh([layer({ diameterMm: 12, spacingM: 0.15 })], { mark: 'M02', points: L_SHAPE }), // estimate 180
     bars({ mark: 'R01', diameterMm: 16, count: 10, lengthM: 6, wastePercent: 10 }), // 60 / 66
     mesh([layer({ diameterMm: 0 })], { mark: 'M03' }), // incomplete
@@ -272,50 +272,52 @@ test('rebar sheet: numbers stay numbers, estimates are marked by format and Basi
   const wb = await reread(build(p));
   assert.deepEqual(wb.worksheets.map((s) => s.name), ['זיון']);
   const sheet = wb.getWorksheet('זיון')!;
-  assert.equal(rowOf(sheet, 1).length, 15);
+  assert.equal(rowOf(sheet, 1).length, 16);
+  assert.deepEqual(rowOf(sheet, 1).slice(0, 7), ['עמוד', 'סימון', 'סוג', 'מפלס זיון', 'קוטר (מ"מ)', 'מרווח (ס"מ)', 'כיוון']);
   const rows = [2, 3, 4, 5, 6, 7].map((r) => rowOf(sheet, r));
   const [l1, l2, est, man, bad, size] = rows;
 
-  assert.deepEqual([l1[1], l1[2], l1[3], l1[4], l1[5]], ['רשת 01', 'רשת', 12, 200, 'צלע ארוכה']);
-  assert.equal(l1[6], 41); // bars (numeric)
-  near(l1[7], 10); // bar length
-  near(l1[8], 410);
-  assert.equal(l1[13], 'מדויק');
-  near(l2[8], 408);
-  assert.equal(l2[5], 'צלע קצרה');
+  // columns: 0 page, 1 mark, 2 type, 3 level, 4 diameter, 5 spacing, 6 direction, 7 bars, 8 bar length, 9 net, 10 net kg, 11 waste, 12 order, 13 order kg, 14 basis, 15 status
+  assert.deepEqual([l1[1], l1[2], l1[3], l1[4], l1[5], l1[6]], ['רשת 01', 'רשת', 'תחתון', 12, 20, 'צלע ארוכה']);
+  assert.equal(l1[7], 41); // bars (numeric)
+  near(l1[8], 10); // bar length
+  near(l1[9], 410);
+  assert.equal(l1[14], 'מדויק');
+  near(l2[9], 328);
+  assert.deepEqual([l2[3], l2[4], l2[5], l2[6]], ['תחתון', 10, 25, 'צלע קצרה']);
 
   // the estimate: still true numbers, no bar count, ≈ number format, Basis says Estimate
-  assert.equal(typeof est[8], 'number');
   assert.equal(typeof est[9], 'number');
-  near(est[8], 180);
-  assert.deepEqual([est[6], est[7]], ['—', '—']);
-  assert.equal(est[13], 'הערכה');
-  for (const addr of ['I4', 'J4', 'L4', 'M4']) assert.ok(sheet.getCell(addr).numFmt.includes('≈'), addr);
-  assert.equal(sheet.getCell('I2').numFmt, '#,##0.00'); // an exact row has no ≈
+  assert.equal(typeof est[10], 'number');
+  near(est[9], 180);
+  assert.deepEqual([est[7], est[8]], ['—', '—']);
+  assert.equal(est[14], 'הערכה');
+  for (const addr of ['J4', 'K4', 'M4', 'N4']) assert.ok(sheet.getCell(addr).numFmt.includes('≈'), addr);
+  assert.equal(sheet.getCell('J2').numFmt, '#,##0.00'); // an exact row has no ≈
 
-  // manual bars: no spacing or direction
-  assert.deepEqual([man[1], man[2], man[3], man[4], man[5]], ['מוטות 01', 'מוטות', 16, '—', '—']);
-  assert.equal(man[6], 10);
-  near(man[8], 60);
-  near(man[11], 66);
+  // manual bars: no level, spacing or direction
+  assert.deepEqual([man[1], man[2], man[3], man[4], man[5], man[6]], ['מוטות 01', 'מוטות', '—', 16, '—', '—']);
+  assert.equal(man[7], 10);
+  near(man[9], 60);
+  near(man[12], 66);
 
   // not calculable: dashes and the reason, not 0
-  assert.deepEqual([bad[8], bad[9], bad[11], bad[12], bad[13], bad[14]], ['—', '—', '—', '—', '—', 'נתונים חסרים']);
+  assert.deepEqual([bad[9], bad[10], bad[12], bad[13], bad[14], bad[15]], ['—', '—', '—', '—', '—', 'נתונים חסרים']);
 
   // manual size on the uncalibrated page is calculated
   assert.equal(size[0], 3);
-  near(size[8], 126);
-  assert.equal(size[14], 'תקין');
+  near(size[9], 126);
+  assert.equal(size[15], 'תקין');
 
   // totals: formulas over the item rows (text is skipped), exact + estimate = "includes estimate"
   const total = sheet.getRow(8);
-  const len = total.getCell(9).value as { formula: string; result: number };
-  assert.equal(len.formula, 'ROUND(SUM(I2:I7),2)');
-  near(len.result, 410 + 408 + 180 + 60 + 126);
-  assert.equal((total.getCell(10).value as { formula: string }).formula, 'ROUND(SUM(J2:J7),2)');
-  assert.equal((total.getCell(12).value as { formula: string }).formula, 'ROUND(SUM(L2:L7),2)');
+  const len = total.getCell(10).value as { formula: string; result: number };
+  assert.equal(len.formula, 'ROUND(SUM(J2:J7),2)');
+  near(len.result, 410 + 328 + 180 + 60 + 126);
+  assert.equal((total.getCell(11).value as { formula: string }).formula, 'ROUND(SUM(K2:K7),2)');
   assert.equal((total.getCell(13).value as { formula: string }).formula, 'ROUND(SUM(M2:M7),2)');
-  assert.equal(total.getCell(14).value, 'כולל הערכה');
+  assert.equal((total.getCell(14).value as { formula: string }).formula, 'ROUND(SUM(N2:N7),2)');
+  assert.equal(total.getCell(15).value, 'כולל הערכה');
 
   const texts: string[] = [];
   sheet.eachRow((row) => row.eachCell((c) => typeof c.value === 'string' && texts.push(c.value)));
@@ -328,9 +330,9 @@ test('an estimate-only rebar plan: totals carry the ≈ format, Basis says Estim
   const wb = await reread(build(structuralOnly(undefined, [mesh([layer()], { points: L_SHAPE })]), 'en'));
   const sheet = wb.getWorksheet('Rebar')!;
   const total = sheet.getRow(3);
-  assert.equal(total.getCell(14).value, 'Estimate');
-  assert.ok(total.getCell(9).numFmt.includes('≈'));
-  assert.equal(typeof (total.getCell(9).value as { result: number }).result, 'number');
+  assert.equal(total.getCell(15).value, 'Estimate');
+  assert.ok(total.getCell(10).numFmt.includes('≈'));
+  assert.equal(typeof (total.getCell(10).value as { result: number }).result, 'number');
   const texts: string[] = [];
   sheet.eachRow((row) => row.eachCell((c) => typeof c.value === 'string' && texts.push(c.value)));
   assert.ok(texts.some((t) => t.includes('not a bar count')));
@@ -374,12 +376,12 @@ test('PDF layout: summary and item tables, ~ on estimates, dashes and a missing 
 
   const mixedTotal = rSummary.rows.at(-1)!;
   assert.equal(mixedTotal.cells[6], 'Includes estimate');
-  const est = rItems.rows.find((r) => r.cells[1] === 'Mesh 01')!;
+  const est = rItems.rows.find((r) => r.cells[1] === 'Mesh 01 — Bottom')!;
   assert.ok(est.cells[4].startsWith('~ ')); // the printed estimate is marked
   assert.equal(est.cells[3], '—'); // no bar count
   assert.equal(est.cells[7], 'Estimate');
-  assert.equal(rItems.rows.find((r) => r.cells[1] === 'Mesh 02')!.cells[3], '41 × 10');
-  assert.equal(rItems.rows.find((r) => r.cells[1] === 'Mesh 03')!.cells[7], 'Data missing');
+  assert.equal(rItems.rows.find((r) => r.cells[1] === 'Mesh 02 — Bottom')!.cells[3], '41 × 10');
+  assert.equal(rItems.rows.find((r) => r.cells[1] === 'Mesh 03 — Bottom')!.cells[7], 'Data missing');
   const notes = blocks.filter((b) => b.type === 'note').map((b) => (b as { text: string }).text);
   assert.ok(notes.some((t) => t.startsWith('Includes estimate: ')));
   assert.ok(notes.some((t) => t === 'Missing data: 1 — not included in the totals.'));

@@ -20,7 +20,9 @@ const MESH: RebarItem = {
 };
 // What reading returns for SLAB: its old letter mark `S01` is the automatic number 1.
 const SLAB_READ: ConcreteElement = { ...SLAB, mark: '', autoNumber: 1 };
-const MESH_READ = { ...MESH, mark: '', autoNumber: 1 };
+// A flat list of a long and a short layer is read as a directional Bottom (see lib/rebarMesh).
+const { layers: _oldLayers, ...MESH_REST } = MESH as Extract<RebarItem, { kind: 'mesh' }>;
+const MESH_READ = { ...MESH_REST, mark: '', autoNumber: 1, bottom: { mode: 'directional', long: { diameterMm: 12, spacingM: 0.15 }, short: { diameterMm: 10, spacingM: 0.2 } } };
 const BARS: RebarItem = { id: 'r-2', kind: 'bars', pageNumber: 2, mark: 'B01', diameterMm: 16, count: 10, lengthM: 6 };
 
 const withZones = (): Plan => ({ ...structuredClone(PLAN_A), concreteElements: [SLAB], rebarItems: [MESH, BARS] });
@@ -71,12 +73,10 @@ test('duplicating a plan copies concrete and rebar with new ids and no shared re
   assert.ok(mesh.kind === 'mesh' && bars.kind === 'bars');
   assert.notEqual(mesh.id, MESH.id);
   assert.notEqual(bars.id, BARS.id);
-  const sourceLayerIds = new Set(['l-1', 'l-2']);
-  for (const l of mesh.layers) assert.equal(sourceLayerIds.has(l.id), false);
-  assert.deepEqual(mesh.layers.map(({ diameterMm, spacingM, direction }) => ({ diameterMm, spacingM, direction })), [
-    { diameterMm: 12, spacingM: 0.15, direction: 'long' },
-    { diameterMm: 10, spacingM: 0.2, direction: 'short' },
-  ]);
+  // read in the levels shape: a flat list of a long and a short layer is a directional Bottom
+  assert.equal('layers' in mesh, false);
+  assert.equal(mesh.top, undefined);
+  assert.deepEqual(mesh.bottom, { mode: 'directional', long: { diameterMm: 12, spacingM: 0.15 }, short: { diameterMm: 10, spacingM: 0.2 } });
 
   // Editing the copy never reaches the original.
   c[0].points[0].x = 999;

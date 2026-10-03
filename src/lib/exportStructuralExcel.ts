@@ -307,7 +307,7 @@ interface RebarSheetData {
   perPlan?: { planName: string; length: number; weight: number; orderLength: number; orderWeight: number; basis: RebarBasis | null; missing: number; estimatedLengthM: number; estimatedWeightKg: number }[];
 }
 
-const REBAR_WIDTHS = [8, 14, 12, 10, 12, 16, 10, 14, 14, 14, 10, 14, 14, 18, 22];
+const REBAR_WIDTHS = [8, 14, 12, 12, 10, 12, 16, 10, 14, 14, 14, 10, 14, 14, 18, 22];
 
 function addRebarSheet(workbook: ExcelJS.Workbook, data: RebarSheetData, withPlan: boolean, x: ExportContext) {
   const { t } = x;
@@ -319,6 +319,7 @@ function addRebarSheet(workbook: ExcelJS.Workbook, data: RebarSheetData, withPla
     t('exports.structural.headers.page'),
     t('exports.structural.headers.mark'),
     t('exports.structural.headers.kind'),
+    t('exports.structural.headers.level'),
     t('exports.structural.headers.diameter'),
     t('exports.structural.headers.spacing'),
     t('exports.structural.headers.direction'),
@@ -347,9 +348,10 @@ function addRebarSheet(workbook: ExcelJS.Workbook, data: RebarSheetData, withPla
       it.pageNumber,
       markLabel(it, t),
       t(it.kind === 'mesh' ? 'rebar.mesh' : 'rebar.bars'),
+      it.level === null ? DASH : t(it.level === 'bottom' ? 'exports.structural.levelBottom' : 'exports.structural.levelTop'),
       num(it.diameterMm),
-      num(it.spacingMm),
-      it.direction === null ? DASH : t(it.direction === 'long' ? 'exports.structural.longSide' : 'exports.structural.shortSide'),
+      num(it.spacingCm),
+      it.direction === null ? DASH : t(it.direction === 'both' ? 'exports.structural.bothDirections' : it.direction === 'long' ? 'exports.structural.longSide' : 'exports.structural.shortSide'),
       num(it.barCount),
       num(it.barLengthM),
       num(it.netLengthM),
@@ -362,9 +364,9 @@ function addRebarSheet(workbook: ExcelJS.Workbook, data: RebarSheetData, withPla
     ]);
     // The numbers stay numbers; an estimate is shown with a ≈ format and the Basis column.
     const qty = it.estimated ? ESTIMATE_FMT : NUM_FMT;
-    for (const c of [9, 10, 12, 13]) row.getCell(col(c)).numFmt = qty;
-    row.getCell(col(8)).numFmt = NUM_FMT;
-    row.getCell(col(11)).numFmt = PCT_FMT;
+    for (const c of [10, 11, 13, 14]) row.getCell(col(c)).numFmt = qty;
+    row.getCell(col(9)).numFmt = NUM_FMT;
+    row.getCell(col(12)).numFmt = PCT_FMT;
     styleRow(row, i % 2 === 0 ? C_ZEBRA_A : C_ZEBRA_B);
   });
   const last = sheet.rowCount;
@@ -372,8 +374,8 @@ function addRebarSheet(workbook: ExcelJS.Workbook, data: RebarSheetData, withPla
   const { totals } = data;
   const totalFmt = totals.basis === 'estimated' ? ESTIMATE_FMT : NUM_FMT;
   const total = sheet.addRow([t('exports.common.grandTotal'), ...new Array(headers.length - 1).fill('')]);
-  total.getCell(col(14)).value = totals.basis ? basisText(totals.basis, x) : DASH;
-  const sums: [number, number][] = [[9, totals.lengthM], [10, totals.weightKg], [12, totals.orderLengthM], [13, totals.orderWeightKg]];
+  total.getCell(col(15)).value = totals.basis ? basisText(totals.basis, x) : DASH;
+  const sums: [number, number][] = [[10, totals.lengthM], [11, totals.weightKg], [13, totals.orderLengthM], [14, totals.orderWeightKg]];
   for (const [c, result] of sums) {
     const letter = colLetter(col(c));
     total.getCell(col(c)).value = { formula: `ROUND(SUM(${letter}${first}:${letter}${last}),2)`, result };
@@ -383,56 +385,56 @@ function addRebarSheet(workbook: ExcelJS.Workbook, data: RebarSheetData, withPla
 
   // By diameter (by page and diameter in a plan workbook; across all plans in the project's).
   sectionTitle(sheet, t('exports.structural.rebarByDiameter'));
-  const keep = new Set([0, 3, 8, 9, 11, 12, 13]);
+  const keep = new Set([0, 4, 9, 10, 12, 13, 14]);
   headerRow(
     sheet,
     headers.map((h, i) => {
       const k = i - o;
       if (k < 0) return withPlan ? '' : h;
-      return k === 14 ? t('exports.structural.headers.status') : keep.has(k) && !(withPlan && k === 0) ? h : '';
+      return k === 15 ? t('exports.structural.headers.status') : keep.has(k) && !(withPlan && k === 0) ? h : '';
     })
   );
   data.summaryRows.forEach((r, i) => {
-    const cells: (string | number)[] = new Array(15).fill('');
+    const cells: (string | number)[] = new Array(16).fill('');
     cells[0] = r.page ?? '';
-    cells[3] = r.diameterMm;
-    cells[8] = r.lengthM;
-    cells[9] = r.weightKg;
-    cells[11] = r.orderLengthM;
-    cells[12] = r.orderWeightKg;
-    cells[13] = basisText(r.basis, x);
+    cells[4] = r.diameterMm;
+    cells[9] = r.lengthM;
+    cells[10] = r.weightKg;
+    cells[12] = r.orderLengthM;
+    cells[13] = r.orderWeightKg;
+    cells[14] = basisText(r.basis, x);
     const row = rowFor(undefined, cells);
     if (r.basis === 'mixed') {
-      row.getCell(col(15)).value = t('exports.structural.estimateNote', {
+      row.getCell(col(16)).value = t('exports.structural.estimateNote', {
         length: `${x.number(round2(r.estimatedLengthM))} ${lm}`,
         weight: `${x.number(round2(r.estimatedWeightKg))} ${kg}`,
       });
     }
-    for (const c of [9, 10, 12, 13]) row.getCell(col(c)).numFmt = r.basis === 'estimated' ? ESTIMATE_FMT : NUM_FMT;
+    for (const c of [10, 11, 13, 14]) row.getCell(col(c)).numFmt = r.basis === 'estimated' ? ESTIMATE_FMT : NUM_FMT;
     styleRow(row, i % 2 === 0 ? C_ZEBRA_A : C_ZEBRA_B);
   });
   const sumTotal = sheet.addRow([t('exports.common.grandTotal'), ...new Array(headers.length - 1).fill('')]);
-  sumTotal.getCell(col(9)).value = totals.lengthM;
-  sumTotal.getCell(col(10)).value = totals.weightKg;
-  sumTotal.getCell(col(12)).value = totals.orderLengthM;
-  sumTotal.getCell(col(13)).value = totals.orderWeightKg;
-  sumTotal.getCell(col(14)).value = totals.basis ? basisText(totals.basis, x) : DASH;
-  for (const c of [9, 10, 12, 13]) sumTotal.getCell(col(c)).numFmt = totalFmt;
+  sumTotal.getCell(col(10)).value = totals.lengthM;
+  sumTotal.getCell(col(11)).value = totals.weightKg;
+  sumTotal.getCell(col(13)).value = totals.orderLengthM;
+  sumTotal.getCell(col(14)).value = totals.orderWeightKg;
+  sumTotal.getCell(col(15)).value = totals.basis ? basisText(totals.basis, x) : DASH;
+  for (const c of [10, 11, 13, 14]) sumTotal.getCell(col(c)).numFmt = totalFmt;
   styleRow(sumTotal, C_TOTAL, true);
 
   if (data.perPlan && data.perPlan.length > 0) {
     sectionTitle(sheet, t('exports.structural.byPlan'));
-    headerRow(sheet, headers.map((h, i) => (i === 0 ? h : [col(9), col(10), col(12), col(13), col(14)].includes(i + 1) ? h : i + 1 === col(15) ? t('exports.structural.headers.status') : '')));
+    headerRow(sheet, headers.map((h, i) => (i === 0 ? h : [col(10), col(11), col(13), col(14), col(15)].includes(i + 1) ? h : i + 1 === col(16) ? t('exports.structural.headers.status') : '')));
     data.perPlan.forEach((p, i) => {
-      const cells: (string | number)[] = new Array(15).fill('');
-      cells[8] = p.length;
-      cells[9] = p.weight;
-      cells[11] = p.orderLength;
-      cells[12] = p.orderWeight;
-      cells[13] = p.basis ? basisText(p.basis, x) : DASH;
-      cells[14] = p.missing > 0 ? t('exports.structural.missingShort', { count: p.missing }) : '';
+      const cells: (string | number)[] = new Array(16).fill('');
+      cells[9] = p.length;
+      cells[10] = p.weight;
+      cells[12] = p.orderLength;
+      cells[13] = p.orderWeight;
+      cells[14] = p.basis ? basisText(p.basis, x) : DASH;
+      cells[15] = p.missing > 0 ? t('exports.structural.missingShort', { count: p.missing }) : '';
       const row = rowFor(p.planName, cells);
-      for (const c of [9, 10, 12, 13]) row.getCell(col(c)).numFmt = p.basis === 'estimated' ? ESTIMATE_FMT : NUM_FMT;
+      for (const c of [10, 11, 13, 14]) row.getCell(col(c)).numFmt = p.basis === 'estimated' ? ESTIMATE_FMT : NUM_FMT;
       styleRow(row, i % 2 === 0 ? C_ZEBRA_A : C_ZEBRA_B);
     });
   }

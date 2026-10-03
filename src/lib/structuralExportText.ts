@@ -6,7 +6,7 @@
 
 import type { ConcreteStatus } from './concrete';
 import type { RebarStatus } from './rebar';
-import type { RebarBasis } from './structuralQuantities';
+import type { RebarBasis, RebarItemRow } from './structuralQuantities';
 import type { ConcreteKind } from '../types/structural';
 import type { ExportContext } from './exportLanguage';
 
@@ -34,8 +34,22 @@ export function basisText(basis: RebarBasis, { t }: ExportContext): string {
   return t(basis === 'exact' ? 'exports.structural.basis.exact' : basis === 'estimated' ? 'exports.structural.basis.estimate' : 'exports.structural.basis.includesEstimate');
 }
 
-/** `Ø12 @ 200` — the notation is data and is never translated. Null when the diameter is unknown. */
-export function reinforcementNotation(diameterMm: number | null, spacingMm: number | null): string | null {
+/** `Ø12 @ 20 cm` — the notation is data (only the unit is a word). Null when the diameter is unknown. */
+export function reinforcementNotation(diameterMm: number | null, spacingCm: number | null, unit: string): string | null {
   if (diameterMm === null) return null;
-  return spacingMm === null ? `Ø${diameterMm}` : `Ø${diameterMm} @ ${spacingMm}`;
+  return spacingCm === null ? `Ø${diameterMm}` : `Ø${diameterMm} @ ${spacingCm} ${unit}`;
+}
+
+/** What a rebar row says about its reinforcement and the side it runs along: `Long side: Ø12 @ 20 cm`, `Ø12 @ 20 cm — Both directions`. */
+export function reinforcementDescription(row: Pick<RebarItemRow, 'diameterMm' | 'spacingCm' | 'direction'>, { t }: ExportContext): string | null {
+  const notation = reinforcementNotation(row.diameterMm, row.spacingCm, t('units.cm'));
+  if (!notation) return null;
+  if (row.direction === 'both') return `${notation} — ${t('exports.structural.bothDirections')}`;
+  if (row.direction === null) return notation;
+  return `${t(row.direction === 'long' ? 'exports.structural.longSide' : 'exports.structural.shortSide')}: ${notation}`;
+}
+
+/** The level a mesh row belongs to, in the export language ("Bottom" / "Top"); '' for manual bars. */
+export function levelText(level: RebarItemRow['level'], { t }: ExportContext): string {
+  return level === null ? '' : t(level === 'bottom' ? 'exports.structural.levelBottom' : 'exports.structural.levelTop');
 }

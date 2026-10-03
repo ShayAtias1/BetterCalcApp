@@ -33,7 +33,7 @@ const W10 = rebarWeightPerMeterKg(10)!;
 test('empty plan, and a plan saved before rebar existed: nothing, no basis', () => {
   for (const p of [planWith(undefined), planWith([])]) {
     assert.deepEqual(buildRebarSummary(p), {
-      pages: [], itemCount: 0, missingItemCount: 0, incompleteLayerCount: 0, lengthM: 0, weightKg: 0, orderLengthM: 0, orderWeightKg: 0,
+      pages: [], itemCount: 0, missingItemCount: 0, incompleteSpecCount: 0, lengthM: 0, weightKg: 0, orderLengthM: 0, orderWeightKg: 0,
       estimatedLengthM: 0, estimatedWeightKg: 0, basis: null,
     });
   }
@@ -138,7 +138,7 @@ test('not-calculable items are counted as missing and never as zero or in a tota
 
   assert.equal(s.itemCount, 6);
   assert.equal(s.missingItemCount, 5);
-  assert.equal(s.incompleteLayerCount, 2);
+  assert.equal(s.incompleteSpecCount, 2);
   near(s.lengthM, 60);
   near(s.weightKg, 60 * W16, 0.005);
   assert.deepEqual(s.pages.find((p) => p.pageNumber === 1)!.rows.map((r) => r.diameterMm), [16]); // none of the missing items made a row

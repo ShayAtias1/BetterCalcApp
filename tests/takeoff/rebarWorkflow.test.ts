@@ -6,22 +6,22 @@ import assert from 'node:assert/strict';
 import { PLAN_A } from './fixtures.ts';
 import {
   addRebarItem,
-  addRebarLayer,
   addRebarMeshFromRooms,
+  copyBottomToTop,
   newRebarBars,
   newRebarMesh,
-  oppositeDirection,
   removeRebarItem,
-  removeRebarLayer,
+  setMeshLevels,
+  setMeshReinforcement,
   updateRebarItem,
-  updateRebarLayer,
 } from '../../src/lib/structuralMutations.ts';
 import { rebarOf } from '../../src/lib/structuralPlan.ts';
 import { nextAutoNumber } from '../../src/lib/structuralMarks.ts';
-import { calculateRebar, rebarNotation } from '../../src/lib/rebar.ts';
+import { calculateRebar } from '../../src/lib/rebar.ts';
+import { levelChoice, specNotation, withMode, withSpec } from '../../src/lib/rebarMesh.ts';
 import { clonePlanForDuplicate } from '../../src/lib/planDuplication.ts';
 import type { Plan, Point } from '../../src/types/index.ts';
-import type { RebarItem } from '../../src/types/structural.ts';
+import type { MeshReinforcement, RebarItem, RebarMesh } from '../../src/types/structural.ts';
 
 Object.assign(globalThis, { DOMMatrix: class {}, DOMPoint: class {}, DOMRect: class {}, Path2D: class {} });
 const { useAppStore } = await import('../../src/store/appStore.ts');
@@ -47,16 +47,17 @@ test('automatic numbers: counted separately for mesh zones and manual bars', () 
   assert.deepEqual(rebarOf(old).map((i) => [i.mark, i.autoNumber]), [['', 7], ['', 3]]);
 });
 
-test('a new mesh zone is minimal: points, page, mark, one empty layer, zero waste — not calculable until filled in', () => {
+test('a new mesh zone is minimal: points, page, mark number, an empty Bottom level, zero waste — not calculable until filled in', () => {
   const plan = fresh();
   const m = newRebarMesh(plan, 2, rect(1000, 800));
   assert.equal(m.kind, 'mesh');
   assert.equal(m.pageNumber, 2);
-  assert.equal(m.layers.length, 1);
-  assert.equal(m.layers[0].diameterMm, 0);
+  assert.deepEqual(m.bottom, { mode: 'uniform', spec: { diameterMm: 0, spacingM: 0 } });
+  assert.equal(m.top, undefined);
+  assert.equal('layers' in m, false);
   assert.equal(calculateRebar(m, CAL).status, 'invalid-input');
   assert.equal(calculateRebar(m, CAL).totalLengthM, null);
-  assert.equal(calculateRebar({ ...m, layers: [] }, CAL).status, 'no-layers');
+  assert.equal(calculateRebar({ ...m, bottom: undefined }, CAL).status, 'no-layers');
   const bars = newRebarBars(plan, 3);
   assert.equal(bars.pageNumber, 3);
   assert.equal(calculateRebar(bars, null).status, 'invalid-input');
@@ -77,46 +78,97 @@ test('update / remove: id and kind are fixed, undefined removes a key, an unknow
   assert.equal(rebarOf(removeRebarItem(plan, id)).length, 0);
 });
 
-test('layers: add, edit and remove; layer edits on a bars row or an unknown mesh do nothing', () => {
+const mesh0 = (plan: Plan) => rebarOf(plan)[0] as RebarMesh;
+const uniform = (diameterMm: number, spacingM: number): MeshReinforcement => ({ mode: 'uniform', spec: { diameterMm, spacingM } });
+
+test('levels: choose Bottom / Top / both, keep what stays, drop what is switched off; a bars row or unknown id does nothing', () => {
   let plan = addRebarItem(fresh(), newRebarMesh(fresh(), 1, rect(1000, 800)));
   const id = rebarOf(plan)[0].id;
-  const layerId = (rebarOf(plan)[0] as { layers: { id: string }[] }).layers[0].id;
+  plan = setMeshReinforcement(plan, id, 'bottom', uniform(12, 0.2));
+  assert.equal(levelChoice(mesh0(plan)), 'bottom');
 
-  plan = updateRebarLayer(plan, id, layerId, { diameterMm: 12, spacingM: 0.2, direction: 'long' });
-  plan = addRebarLayer(plan, id, { diameterMm: 10, spacingM: 0.25, direction: 'short' });
-  const mesh = rebarOf(plan)[0];
-  assert.ok(mesh.kind === 'mesh');
-  assert.equal(mesh.layers.length, 2);
-  assert.notEqual(mesh.layers[0].id, mesh.layers[1].id);
-  assert.equal(rebarNotation(mesh.layers), 'Ø12 @ 200 / Ø10 @ 250');
+  plan = setMeshLevels(plan, id, 'both');
+  assert.equal(levelChoice(mesh0(plan)), 'both');
+  assert.deepEqual(mesh0(plan).bottom, uniform(12, 0.2)); // Bottom kept
+  assert.deepEqual(mesh0(plan).top, uniform(0, 0)); // Top starts empty — never copied from Bottom
+  assert.equal(calculateRebar(mesh0(plan), CAL).status, 'invalid-input'); // an enabled level that is empty: not calculable, no partial total
+  assert.equal(calculateRebar(mesh0(plan), CAL).totalLengthM, null);
 
-  // the engine reads exactly what the form wrote: 41 × 10 m + 41 × 8 m
-  const c = calculateRebar(mesh, CAL);
-  assert.equal(c.status, 'ok');
-  near(c.totalLengthM, 41 * 10 + 41 * 8);
+  plan = setMeshReinforcement(plan, id, 'top', uniform(10, 0.25));
+  plan = setMeshLevels(plan, id, 'top'); // Bottom switched off
+  assert.equal(mesh0(plan).bottom, undefined);
+  assert.equal('bottom' in mesh0(plan), false);
+  assert.deepEqual(mesh0(plan).top, uniform(10, 0.25));
+  assert.equal(levelChoice(mesh0(plan)), 'top');
 
-  plan = removeRebarLayer(plan, id, layerId);
-  assert.equal((rebarOf(plan)[0] as { layers: unknown[] }).layers.length, 1);
-  plan = removeRebarLayer(plan, id, (rebarOf(plan)[0] as { layers: { id: string }[] }).layers[0].id);
-  assert.equal(calculateRebar(rebarOf(plan)[0], CAL).status, 'no-layers'); // removing every layer is allowed and not calculable
-
+  assert.equal(setMeshLevels(plan, id, 'top'), plan); // no change → same plan
+  assert.equal(setMeshLevels(plan, 'nope', 'both'), plan);
+  assert.equal(setMeshReinforcement(plan, id, 'bottom', uniform(8, 0.1)), plan); // Bottom is not enabled
   const bars = addRebarItem(fresh(), newRebarBars(fresh(), 1));
-  const barsId = rebarOf(bars)[0].id;
-  assert.equal(addRebarLayer(bars, barsId), bars);
-  assert.equal(addRebarLayer(bars, 'nope'), bars);
+  assert.equal(setMeshLevels(bars, rebarOf(bars)[0].id, 'both'), bars);
 });
 
-test('"two directions": a second layer with the first one\'s bars running the other way', () => {
+test('a valid Bottom is not invalidated by a Top that is not enabled; an enabled incomplete Top makes the item incomplete', () => {
   let plan = addRebarItem(fresh(), newRebarMesh(fresh(), 1, rect(1000, 800)));
   const id = rebarOf(plan)[0].id;
-  const first = (rebarOf(plan)[0] as { layers: { id: string }[] }).layers[0].id;
-  plan = updateRebarLayer(plan, id, first, { diameterMm: 12, spacingM: 0.2, direction: 'long' });
-  const l = (rebarOf(plan)[0] as { layers: { diameterMm: number; spacingM: number; direction: 'long' | 'short' }[] }).layers[0];
-  plan = addRebarLayer(plan, id, { diameterMm: l.diameterMm, spacingM: l.spacingM, direction: oppositeDirection(l.direction) });
-  const layers = (rebarOf(plan)[0] as { layers: { diameterMm: number; spacingM: number; direction: string }[] }).layers;
-  assert.deepEqual(layers.map((x) => [x.diameterMm, x.spacingM, x.direction]), [[12, 0.2, 'long'], [12, 0.2, 'short']]);
-  assert.equal(oppositeDirection('short'), 'long');
-  near(calculateRebar(rebarOf(plan)[0], CAL).totalLengthM, 410 + 51 * 8); // 41 × 10 m + 51 × 8 m
+  plan = setMeshReinforcement(plan, id, 'bottom', uniform(12, 0.2));
+  const bottomOnly = calculateRebar(mesh0(plan), CAL);
+  assert.equal(bottomOnly.status, 'ok');
+  near(bottomOnly.totalLengthM, 41 * 10 + 51 * 8); // 41 long bars × 10 m + 51 short bars × 8 m
+
+  const withEmptyTop = calculateRebar(mesh0(setMeshLevels(plan, id, 'both')), CAL);
+  assert.equal(withEmptyTop.status, 'invalid-input');
+  assert.equal(withEmptyTop.totalLengthM, null);
+  assert.equal(withEmptyTop.layers.filter((l) => l.level === 'bottom').every((l) => l.valid), true); // Bottom itself is fine
+});
+
+test('uniform = one specification in both directions; directional = a specification per side, kept apart', () => {
+  let plan = addRebarItem(fresh(), newRebarMesh(fresh(), 1, rect(1000, 800)));
+  const id = rebarOf(plan)[0].id;
+  plan = setMeshReinforcement(plan, id, 'bottom', uniform(12, 0.2));
+  const u = calculateRebar(mesh0(plan), CAL);
+  assert.deepEqual(u.layers.map((l) => [l.level, l.direction, l.uniform, l.diameterMm, l.spacingM]), [['bottom', 'long', true, 12, 0.2], ['bottom', 'short', true, 12, 0.2]]);
+  near(u.totalLengthM, 410 + 408);
+
+  // switching to directional starts both sides from the one specification; they then differ freely
+  let r = withMode(uniform(12, 0.2), 'directional');
+  r = withSpec(r, 'short', { diameterMm: 10, spacingM: 0.15 });
+  plan = setMeshReinforcement(plan, id, 'bottom', r);
+  const d = calculateRebar(mesh0(plan), CAL);
+  assert.deepEqual(d.layers.map((l) => [l.direction, l.uniform, l.diameterMm, l.spacingM]), [['long', false, 12, 0.2], ['short', false, 10, 0.15]]);
+  near(d.layers[0].totalLengthM, 41 * 10); // 8 m ÷ 0.2 = 40 → 41 bars along 10 m
+  near(d.layers[1].totalLengthM, 68 * 8); // 10 m ÷ 0.15 = 66.7 → 67 → 68 bars along 8 m
+  // and back: the long side's values are kept
+  assert.deepEqual(withMode(r, 'uniform'), uniform(12, 0.2));
+});
+
+test('Top + Bottom: independent specifications that add up; "Copy Bottom to Top" makes an independent copy', () => {
+  let plan = addRebarItem(fresh(), newRebarMesh(fresh(), 1, rect(1000, 800)));
+  const id = rebarOf(plan)[0].id;
+  plan = setMeshReinforcement(plan, id, 'bottom', { mode: 'directional', long: { diameterMm: 12, spacingM: 0.2 }, short: { diameterMm: 10, spacingM: 0.15 } });
+  const topOnly = setMeshLevels(plan, id, 'top'); // Bottom switched off
+  assert.equal(copyBottomToTop(topOnly, id), topOnly); // nothing to copy from
+  plan = copyBottomToTop(plan, id);
+  assert.deepEqual(mesh0(plan).top, mesh0(plan).bottom);
+  assert.notEqual(mesh0(plan).top, mesh0(plan).bottom); // not the same object
+  const both = calculateRebar(mesh0(plan), CAL);
+  near(both.totalLengthM, 2 * (41 * 10 + 68 * 8)); // Top + Bottom
+
+  // independent afterwards
+  plan = setMeshReinforcement(plan, id, 'top', withSpec(mesh0(plan).top!, 'long', { diameterMm: 16 }));
+  assert.equal((mesh0(plan).bottom as { long: { diameterMm: number } }).long.diameterMm, 12);
+  assert.equal((mesh0(plan).top as { long: { diameterMm: number } }).long.diameterMm, 16);
+  const c = calculateRebar(mesh0(plan), CAL);
+  assert.deepEqual(c.layers.map((l) => [l.level, l.direction, l.diameterMm]), [['bottom', 'long', 12], ['bottom', 'short', 10], ['top', 'long', 16], ['top', 'short', 10]]);
+  const untouched = fresh();
+  assert.equal(copyBottomToTop(untouched, 'nope'), untouched);
+});
+
+test('notation is compact and in centimetres', () => {
+  assert.equal(specNotation({ diameterMm: 12, spacingM: 0.2 }), 'Ø12 @ 20');
+  assert.equal(specNotation({ diameterMm: 10, spacingM: 0.125 }), 'Ø10 @ 12.5');
+  assert.equal(specNotation({ diameterMm: 0, spacingM: 0.2 }), null);
+  assert.equal(specNotation(undefined), null);
 });
 
 test('manual bars: calculated without any scale or shape, and have no overlay notation', () => {
@@ -133,8 +185,7 @@ test('manual bars: calculated without any scale or shape, and have no overlay no
 test('an irregular mesh zone is an estimate with no bar count', () => {
   let plan = addRebarItem(fresh(), newRebarMesh(fresh(), 1, L_SHAPE));
   const id = rebarOf(plan)[0].id;
-  const layer = (rebarOf(plan)[0] as { layers: { id: string }[] }).layers[0].id;
-  plan = updateRebarLayer(plan, id, layer, { diameterMm: 12, spacingM: 0.15 });
+  plan = setMeshReinforcement(plan, id, 'bottom', { mode: 'directional', long: { diameterMm: 12, spacingM: 0.15 } });
   const c = calculateRebar(rebarOf(plan)[0], CAL);
   assert.equal(c.estimated, true);
   assert.equal(c.layers[0].barCount, null);
@@ -152,8 +203,8 @@ test('rooms → rebar: outlines copied (deep) as independent mesh zones with new
     assert.notEqual(m.points[0], rooms[i].points[0]);
     assert.equal(m.pageNumber, rooms[i].pageNumber);
     assert.equal(m.autoNumber, i + 1);
-    assert.equal(m.layers.length, 1);
-    assert.deepEqual(Object.keys(m).sort(), ['autoNumber', 'id', 'kind', 'layers', 'mark', 'pageNumber', 'points', 'wastePercent']);
+    assert.deepEqual(m.bottom, uniform(0, 0));
+    assert.deepEqual(Object.keys(m).sort(), ['autoNumber', 'bottom', 'id', 'kind', 'mark', 'pageNumber', 'points', 'wastePercent']);
   });
   assert.equal(new Set(created.map((m) => m.id)).size, created.length);
   assert.equal(JSON.stringify(plan.rooms), before);
@@ -163,19 +214,22 @@ test('rooms → rebar: outlines copied (deep) as independent mesh zones with new
   assert.equal(addRebarMeshFromRooms(plan, [flat]).created.length, 0);
 });
 
-test('persistence and duplication: mesh layers and manual bars survive a round trip and a duplicate gets new ids', () => {
+test('persistence and duplication: both levels and manual bars survive a round trip and a duplicate gets new ids', () => {
   let plan = addRebarItem(fresh(), newRebarMesh(fresh(), 1, rect(1000, 800)));
   plan = addRebarItem(plan, newRebarBars(plan, 2));
   const meshId = rebarOf(plan)[0].id;
-  plan = addRebarLayer(plan, meshId, { diameterMm: 12, spacingM: 0.2, direction: 'short' });
+  plan = setMeshReinforcement(plan, meshId, 'bottom', uniform(12, 0.2));
+  plan = setMeshLevels(plan, meshId, 'both');
   const viaClone = structuredClone(plan);
   assert.deepEqual(rebarOf(viaClone), rebarOf(plan));
   assert.deepEqual(rebarOf(JSON.parse(JSON.stringify(plan)) as Plan), rebarOf(plan));
 
   const copy = clonePlanForDuplicate(plan, 'copy');
-  const ids = (items: RebarItem[]) => items.flatMap((i) => [i.id, ...(i.kind === 'mesh' ? i.layers.map((l) => l.id) : [])]);
+  const ids = (items: RebarItem[]) => items.map((i) => i.id);
   assert.equal(ids(rebarOf(copy)).filter((id) => ids(rebarOf(plan)).includes(id)).length, 0);
   assert.equal(rebarOf(copy).length, 2);
+  assert.deepEqual((rebarOf(copy)[0] as RebarMesh).bottom, uniform(12, 0.2));
+  assert.deepEqual((rebarOf(copy)[0] as RebarMesh).top, uniform(0, 0));
 });
 
 // ---------- through the store ----------
@@ -189,7 +243,7 @@ function openRebar(page = 1) {
   store().setDrawTarget('rebar');
 }
 
-test('store: drawing creates a mesh, manual bars use the current page, layers/edits/delete are history steps, undo/redo clear selection', () => {
+test('store: drawing creates a mesh, manual bars use the current page, levels/edits/delete are history steps, undo/redo clear selection', () => {
   openRebar(2);
   store().finishRectangle({ x: 0, y: 0 }, { x: 100, y: 100 });
   assert.equal(items().length, 1);
@@ -204,18 +258,21 @@ test('store: drawing creates a mesh, manual bars use the current page, layers/ed
   store().updateRebarItem(items()[1].id, { diameterMm: 16, count: 4, lengthM: 6 });
 
   const meshId = items()[0].id;
-  const layerId = (items()[0] as { layers: { id: string }[] }).layers[0].id;
-  store().updateRebarLayer(meshId, layerId, { diameterMm: 12, spacingM: 0.2 });
-  store().addRebarLayer(meshId, { diameterMm: 12, spacingM: 0.2, direction: 'short' });
-  assert.equal((items()[0] as { layers: unknown[] }).layers.length, 2);
-  store().removeRebarLayer(meshId, layerId);
-  assert.equal((items()[0] as { layers: unknown[] }).layers.length, 1);
+  store().setRebarMeshReinforcement(meshId, 'bottom', uniform(12, 0.2));
+  store().setRebarMeshLevels(meshId, 'both');
+  assert.equal(levelChoice(items()[0] as RebarMesh), 'both');
+  store().setRebarMeshLevels(meshId, 'bottom');
+  assert.equal(levelChoice(items()[0] as RebarMesh), 'bottom');
 
-  store().undo(); // the layer removal
-  assert.equal((items()[0] as { layers: unknown[] }).layers.length, 2);
+  store().undo(); // switching Top off
+  assert.equal(levelChoice(items()[0] as RebarMesh), 'both');
   assert.equal(store().selectedRebarId, null);
   store().redo();
-  assert.equal((items()[0] as { layers: unknown[] }).layers.length, 1);
+  assert.equal(levelChoice(items()[0] as RebarMesh), 'bottom');
+  store().copyRebarBottomToTop(meshId);
+  assert.deepEqual((items()[0] as RebarMesh).top, uniform(12, 0.2));
+  store().undo();
+  assert.equal((items()[0] as RebarMesh).top, undefined);
 
   store().setSelectedRebarId(meshId);
   store().deleteRebarItem(meshId);
@@ -225,7 +282,7 @@ test('store: drawing creates a mesh, manual bars use the current page, layers/ed
   assert.equal(items().length, 2);
 });
 
-test('store: page change and plan switch clear the rebar selection; a nonexistent layer edit is not a history step', () => {
+test('store: page change and plan switch clear the rebar selection; a no-op or nonexistent level edit is not a history step', () => {
   openRebar();
   store().finishRectangle({ x: 0, y: 0 }, { x: 100, y: 100 });
   store().setCurrentPage(2);
@@ -238,8 +295,10 @@ test('store: page change and plan switch clear the rebar selection; a nonexisten
   openRebar();
   store().finishRectangle({ x: 0, y: 0 }, { x: 100, y: 100 });
   const h = store().history.length;
-  store().removeRebarLayer(items()[0].id, 'no-such-layer');
-  store().addRebarLayer('no-such-item');
+  store().setRebarMeshLevels(items()[0].id, 'bottom'); // already so
+  store().setRebarMeshLevels('no-such-item', 'both');
+  store().setRebarMeshReinforcement(items()[0].id, 'top', uniform(12, 0.2)); // Top is not enabled
+  store().copyRebarBottomToTop('no-such-item');
   assert.equal(store().history.length, h);
 });
 

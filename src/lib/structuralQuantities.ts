@@ -13,9 +13,9 @@
  */
 
 import type { Plan } from '../types';
-import type { ConcreteKind } from '../types/structural';
+import type { ConcreteKind, RebarLevel } from '../types/structural';
 import { calculateConcrete, type ConcreteStatus } from './concrete';
-import { calculateRebar, type RebarStatus } from './rebar';
+import { calculateRebar, incompleteSpecCount, type RebarLayerCalc, type RebarStatus } from './rebar';
 import { round } from './geometry';
 import { CONCRETE_KINDS } from './structuralMutations';
 import { concreteOf, rebarOf } from './structuralPlan';
@@ -121,7 +121,7 @@ export interface RebarPageSummary {
   /** Items on this page that are not calculable — in no row and in no total. */
   missingItemCount: number;
   /** Of those, layers that lack a diameter or spacing. */
-  incompleteLayerCount: number;
+  incompleteSpecCount: number;
 }
 
 export interface RebarSummary {
@@ -129,7 +129,7 @@ export interface RebarSummary {
   pages: RebarPageSummary[];
   itemCount: number;
   missingItemCount: number;
-  incompleteLayerCount: number;
+  incompleteSpecCount: number;
   /** Totals over every calculable layer, all diameters together. */
   lengthM: number;
   weightKg: number;
@@ -165,16 +165,16 @@ const basisOf = (a: Acc): RebarBasis | null => (a.lines === 0 ? null : a.estimat
  * decimals), so rounding never accumulates.
  */
 export function buildRebarSummary(plan: Plan, onlyPages?: ReadonlySet<number>): RebarSummary {
-  const perPage = new Map<number, { rows: Map<number, Acc>; missingItems: number; incompleteLayers: number }>();
+  const perPage = new Map<number, { rows: Map<number, Acc>; missingItems: number; incompleteSpecs: number }>();
   const total = emptyAcc();
   let missingItems = 0;
-  let incompleteLayers = 0;
+  let incompleteSpecs = 0;
 
   const items = rebarOf(plan).filter((i) => !onlyPages || onlyPages.has(i.pageNumber));
   for (const item of items) {
     let page = perPage.get(item.pageNumber);
     if (!page) {
-      page = { rows: new Map(), missingItems: 0, incompleteLayers: 0 };
+      page = { rows: new Map(), missingItems: 0, incompleteSpecs: 0 };
       perPage.set(item.pageNumber, page);
     }
 
@@ -183,9 +183,9 @@ export function buildRebarSummary(plan: Plan, onlyPages?: ReadonlySet<number>): 
       page.missingItems += 1;
       missingItems += 1;
       if (item.kind === 'mesh') {
-        const bad = calc.layers.filter((l) => !l.valid).length;
-        page.incompleteLayers += bad;
-        incompleteLayers += bad;
+        const bad = incompleteSpecCount(calc);
+        page.incompleteSpecs += bad;
+        incompleteSpecs += bad;
       }
       continue;
     }
@@ -232,14 +232,14 @@ export function buildRebarSummary(plan: Plan, onlyPages?: ReadonlySet<number>): 
           basis: basisOf(a)!,
         })),
       missingItemCount: p.missingItems,
-      incompleteLayerCount: p.incompleteLayers,
+      incompleteSpecCount: p.incompleteSpecs,
     }));
 
   return {
     pages,
     itemCount: items.length,
     missingItemCount: missingItems,
-    incompleteLayerCount: incompleteLayers,
+    incompleteSpecCount: incompleteSpecs,
     lengthM: round(total.length, 2),
     weightKg: round(total.weight, 2),
     orderLengthM: round(total.orderLength, 2),
@@ -299,10 +299,13 @@ export function buildConcreteItems(plan: Plan, pages?: ReadonlySet<number>): Con
 }
 
 /**
- * One rebar line as an export row: a mesh layer, or a manual-bars row. A mesh with several layers
- * gives several rows (same mark); a mesh with none gives one empty row so it is still listed.
+ * One rebar line as an export row: one directional bar group of a mesh level, one uniform level
+ * (a single row that says it applies to both directions), or a manual-bars row. A level with two
+ * directions gives two rows, a mesh with Top and Bottom gives rows for both (same mark, `level`
+ * telling them apart); a mesh with no level at all gives one empty row so it is still listed.
  * Quantities are null when the item is not calculable; `barCount` / `barLengthM` are also null for
- * an estimated layer (it has no bars to count).
+ * an estimated line (it has no bars to count) and `barLengthM` for a uniform line (its two
+ * directions have different bar lengths — `barCount` is then the bars of both directions together).
  */
 export interface RebarItemRow {
   itemId: string;
@@ -311,10 +314,13 @@ export interface RebarItemRow {
   mark: string;
   autoNumber?: number;
   kind: 'mesh' | 'bars';
+  /** The reinforcement level of a mesh line; null for manual bars and for a mesh with none. */
+  level: RebarLevel | null;
   diameterMm: number | null;
-  spacingMm: number | null;
-  /** Mesh layers only. */
-  direction: 'long' | 'short' | null;
+  /** Spacing in centimetres (the unit people specify it in). */
+  spacingCm: number | null;
+  /** Mesh lines only: 'both' for a uniform specification. */
+  direction: 'long' | 'short' | 'both' | null;
   barCount: number | null;
   barLengthM: number | null;
   netLengthM: number | null;
@@ -328,6 +334,7 @@ export interface RebarItemRow {
 }
 
 const positiveOrNull = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null);
+const spacingCmOf = (spacingM: number | null) => (spacingM === null ? null : Math.round(spacingM * 1000) / 10);
 
 export function buildRebarItems(plan: Plan, pages?: ReadonlySet<number>): RebarItemRow[] {
   const rows: RebarItemRow[] = [];
@@ -341,13 +348,15 @@ export function buildRebarItems(plan: Plan, pages?: ReadonlySet<number>): RebarI
     const ok = calc.status === 'ok';
     const factor = 1 + calc.wastePercent / 100;
     const base = { itemId: item.id, pageNumber: item.pageNumber, mark: item.mark, autoNumber: item.autoNumber, kind: item.kind, wastePercent: calc.wastePercent, status: calc.status };
+    const none = { level: null, diameterMm: null, spacingCm: null, direction: null, barCount: null, barLengthM: null, netLengthM: null, netWeightKg: null, orderLengthM: null, orderWeightKg: null, estimated: false };
 
     if (item.kind === 'bars') {
       const l = calc.layers[0];
       rows.push({
         ...base,
+        level: null,
         diameterMm: positiveOrNull(item.diameterMm),
-        spacingMm: null,
+        spacingCm: null,
         direction: null,
         barCount: ok ? l.barCount : null,
         barLengthM: ok ? l.cutLengthM : null,
@@ -360,27 +369,38 @@ export function buildRebarItems(plan: Plan, pages?: ReadonlySet<number>): RebarI
       continue;
     }
 
-    if (item.layers.length === 0) {
-      rows.push({ ...base, diameterMm: null, spacingMm: null, direction: null, barCount: null, barLengthM: null, netLengthM: null, netWeightKg: null, orderLengthM: null, orderWeightKg: null, estimated: false });
+    if (calc.layers.length === 0) {
+      rows.push({ ...base, ...none });
       continue;
     }
-    item.layers.forEach((layer, i) => {
-      const l = calc.layers[i];
-      const spacing = positiveOrNull(layer.spacingM);
+    // One row per directional group — except a uniform level, whose two directions are one row.
+    const groups: RebarLayerCalc[][] = [];
+    for (const layer of calc.layers) {
+      const last = groups.at(-1);
+      if (layer.uniform && last && last[0].uniform && last[0].level === layer.level) last.push(layer);
+      else groups.push([layer]);
+    }
+    for (const group of groups) {
+      const first = group[0];
+      const uniform = !!first.uniform;
+      const sum = (pick: (l: RebarLayerCalc) => number | null) => (ok && group.every((l) => pick(l) !== null) ? group.reduce((a, l) => a + pick(l)!, 0) : null);
+      const net = sum((l) => l.totalLengthM);
+      const weight = sum((l) => l.weightKg);
       rows.push({
         ...base,
-        diameterMm: positiveOrNull(layer.diameterMm),
-        spacingMm: spacing === null ? null : Math.round(spacing * 1000),
-        direction: layer.direction === 'short' ? 'short' : 'long',
-        barCount: ok ? l.barCount : null,
-        barLengthM: ok ? l.cutLengthM : null,
-        netLengthM: ok ? l.totalLengthM : null,
-        netWeightKg: ok ? l.weightKg : null,
-        orderLengthM: ok ? l.totalLengthM! * factor : null,
-        orderWeightKg: ok ? l.weightKg! * factor : null,
-        estimated: ok && l.estimated,
+        level: first.level ?? null,
+        diameterMm: positiveOrNull(first.diameterMm),
+        spacingCm: spacingCmOf(positiveOrNull(first.spacingM)),
+        direction: uniform ? 'both' : first.direction === 'short' ? 'short' : 'long',
+        barCount: sum((l) => l.barCount),
+        barLengthM: uniform ? null : ok ? first.cutLengthM : null,
+        netLengthM: net,
+        netWeightKg: weight,
+        orderLengthM: net === null ? null : net * factor,
+        orderWeightKg: weight === null ? null : weight * factor,
+        estimated: ok && group.some((l) => l.estimated),
       });
-    });
+    }
   }
   return rows;
 }

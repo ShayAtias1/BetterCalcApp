@@ -3,9 +3,13 @@
  * reinforcement. Pure — no store, no persistence, no drawing. A takeoff, not a design: it counts
  * what the user says exists in the zone and never decides what should.
  *
- * ── Mesh (a marked zone plus layers) ───────────────────────────────────────────────────────────
- * Each layer is bars of one diameter at one MAXIMUM spacing, running along the zone's long side or
- * its short side. For a RECTANGULAR zone (any rotation) with sides long ≥ short:
+ * ── Mesh (a marked zone plus reinforcement levels) ─────────────────────────────────────────────
+ * A mesh has a Bottom level, a Top level or both (lib/rebarMesh). Each level is either uniform (one
+ * diameter and spacing, in BOTH directions) or directional (a specification per side). Either way it
+ * flattens into bar groups, and each group is bars of one diameter at one MAXIMUM spacing, running
+ * along the zone's long side or its short side — the maths below is per group and does not know
+ * about levels; the item's total is the sum over its groups. For a RECTANGULAR zone (any rotation)
+ * with sides long ≥ short:
  *
  *   direction 'long'  : bars of length `long`,  spread across the short side → span = short
  *   direction 'short' : bars of length `short`, spread along the long side   → span = long
@@ -39,7 +43,8 @@
  */
 
 import type { Calibration } from '../types';
-import type { RebarBars, RebarItem, RebarLayer, RebarMesh } from '../types/structural';
+import type { RebarBars, RebarItem, RebarLayer, RebarLayerDirection, RebarLevel, RebarMesh } from '../types/structural';
+import { meshLayers, normalizeMesh } from './rebarMesh';
 import { finiteNonNegative, finitePositive, zoneGeometry } from './zoneGeometry';
 
 /** Steel density, kg/m³. */
@@ -50,17 +55,6 @@ export const COUNT_EPSILON = 1e-9;
 
 /** The bar diameters offered in the UI, in millimetres. The engine itself accepts any positive diameter. */
 export const REBAR_DIAMETERS_MM = [6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 28, 32, 40] as const;
-
-/**
- * Compact on-plan notation of a mesh's layers, e.g. `Ø12 @ 200` or `Ø12 @ 200 / Ø10 @ 250` (spacing
- * in millimetres). Layers that are not filled in yet are left out. Not translated: it is the notation.
- */
-export function rebarNotation(layers: RebarLayer[]): string {
-  return layers
-    .filter((l) => finitePositive(l.diameterMm) !== null && finitePositive(l.spacingM) !== null)
-    .map((l) => `Ø${l.diameterMm} @ ${Math.round(l.spacingM * 1000)}`)
-    .join(' / ');
-}
 
 /** Weight of one metre of bar, in kg, or null when the diameter is not a positive number. */
 export function rebarWeightPerMeterKg(diameterMm: number | null | undefined): number | null {
@@ -83,16 +77,26 @@ export function barCountForSpan(spanM: number, spacingM: number): number | null 
  * Why an item has no totals — never reported as 0:
  * - no-scale: a mesh zone measured off the plan whose page has no scale (and no size override).
  * - missing-size: a manual size is switched on but its length or width is not entered.
- * - no-layers: a mesh without any layer.
- * - invalid-input: a layer (or the manual bars) lacks a usable diameter, spacing, count or length.
+ * - no-layers: a mesh without any reinforcement level (or a level without any direction).
+ * - invalid-input: an enabled level's specification (or the manual bars) lacks a usable diameter,
+ *   spacing, count or length. One incomplete enabled level makes the whole item not calculable —
+ *   never a partial total of the rest.
  * Checked in that order.
  */
 export type RebarStatus = 'ok' | 'no-scale' | 'missing-size' | 'no-layers' | 'invalid-input';
 
-/** One layer of a mesh, or the single group of a manual-bars row. All quantities are net (no waste). */
+/** One bar group of a mesh, or the single group of a manual-bars row. All quantities are net (no waste). */
 export interface RebarLayerCalc {
   layerId: string;
-  /** The layer's own inputs are usable. Totals still need the zone to be known too. */
+  /** The reinforcement level the group belongs to; absent for manual bars. */
+  level?: RebarLevel;
+  /** The side the bars run along; absent for manual bars. */
+  direction?: RebarLayerDirection;
+  /** The group comes from a uniform specification (one specification, both directions). */
+  uniform?: boolean;
+  /** The specified spacing in metres; null for manual bars and for an unusable value. */
+  spacingM: number | null;
+  /** The group's own inputs are usable. Totals still need the zone to be known too. */
   valid: boolean;
   diameterMm: number | null;
   /** Bars in the layer; null for an estimated layer and for anything not calculable. */
@@ -120,12 +124,12 @@ export interface RebarCalc {
   wastePercent: number;
 }
 
-const emptyLayer = (layerId: string, valid: boolean, diameterMm: number | null): RebarLayerCalc => ({
-  layerId, valid, diameterMm, barCount: null, cutLengthM: null, totalLengthM: null, weightKg: null, estimated: false,
+const emptyLayer = (layerId: string, valid: boolean, diameterMm: number | null, spacingM: number | null = null): RebarLayerCalc => ({
+  layerId, spacingM, valid, diameterMm, barCount: null, cutLengthM: null, totalLengthM: null, weightKg: null, estimated: false,
 });
 
-function layerResult(layerId: string, diameterMm: number, barCount: number | null, cutLengthM: number | null, totalLengthM: number, estimated: boolean): RebarLayerCalc {
-  return { layerId, valid: true, diameterMm, barCount, cutLengthM, totalLengthM, weightKg: totalLengthM * rebarWeightPerMeterKg(diameterMm)!, estimated };
+function layerResult(layerId: string, diameterMm: number, spacingM: number | null, barCount: number | null, cutLengthM: number | null, totalLengthM: number, estimated: boolean): RebarLayerCalc {
+  return { layerId, spacingM, valid: true, diameterMm, barCount, cutLengthM, totalLengthM, weightKg: totalLengthM * rebarWeightPerMeterKg(diameterMm)!, estimated };
 }
 
 function finish(status: RebarStatus, layers: RebarLayerCalc[], wastePercent: number): RebarCalc {
@@ -141,33 +145,39 @@ function finish(status: RebarStatus, layers: RebarLayerCalc[], wastePercent: num
   };
 }
 
-function calculateMesh(item: RebarMesh, calibration: Calibration | null): RebarCalc {
+function calculateMesh(raw: RebarMesh, calibration: Calibration | null): RebarCalc {
+  const item = normalizeMesh(raw);
   const wastePercent = finiteNonNegative(item.wastePercent, 0);
-  const layers = Array.isArray(item.layers) ? item.layers : [];
+  const layers = meshLayers(item);
   const zone = zoneGeometry(item.points, calibration?.metersPerPixel ?? 0, item.sizeOverride);
 
-  const results = layers.map((layer) => calculateLayer(layer, zone));
+  const results = layers.map((layer) => ({ ...calculateLayer(layer, zone), level: layer.level, direction: layer.direction, uniform: layer.uniform }));
   if (!zone) return finish(item.sizeOverride ? 'missing-size' : 'no-scale', results, wastePercent);
   if (layers.length === 0) return finish('no-layers', results, wastePercent);
   if (results.some((r) => !r.valid)) return finish('invalid-input', results, wastePercent);
   return finish('ok', results, wastePercent);
 }
 
+/** Incomplete specifications of an item, counting a uniform one once (it is one entry in the form). */
+export function incompleteSpecCount(calc: RebarCalc): number {
+  return calc.layers.filter((l) => !l.valid && !(l.uniform && l.direction === 'short')).length;
+}
+
 function calculateLayer(layer: RebarLayer, zone: ReturnType<typeof zoneGeometry>): RebarLayerCalc {
   const diameterMm = finitePositive(layer.diameterMm);
   const spacingM = finitePositive(layer.spacingM);
-  if (diameterMm === null || spacingM === null) return emptyLayer(layer.id, false, diameterMm);
-  if (!zone) return emptyLayer(layer.id, true, diameterMm);
+  if (diameterMm === null || spacingM === null) return emptyLayer(layer.id, false, diameterMm, spacingM);
+  if (!zone) return emptyLayer(layer.id, true, diameterMm, spacingM);
 
   if (zone.sides) {
     const alongLong = layer.direction !== 'short';
     const barLengthM = alongLong ? zone.sides.longM : zone.sides.shortM;
     const spanM = alongLong ? zone.sides.shortM : zone.sides.longM;
     const count = barCountForSpan(spanM, spacingM)!;
-    return layerResult(layer.id, diameterMm, count, barLengthM, count * barLengthM, false);
+    return layerResult(layer.id, diameterMm, spacingM, count, barLengthM, count * barLengthM, false);
   }
   // Not a rectangle: no bars are generated; the total is the area-based estimate.
-  return layerResult(layer.id, diameterMm, null, null, zone.areaM2 / spacingM, true);
+  return layerResult(layer.id, diameterMm, spacingM, null, null, zone.areaM2 / spacingM, true);
 }
 
 function calculateBars(item: RebarBars): RebarCalc {
@@ -179,7 +189,7 @@ function calculateBars(item: RebarBars): RebarCalc {
   if (diameterMm === null || lengthM === null || count === null) {
     return finish('invalid-input', [emptyLayer(item.id, false, diameterMm)], wastePercent);
   }
-  return finish('ok', [layerResult(item.id, diameterMm, count, lengthM, count * lengthM, false)], wastePercent);
+  return finish('ok', [layerResult(item.id, diameterMm, null, count, lengthM, count * lengthM, false)], wastePercent);
 }
 
 export function calculateRebar(item: RebarItem, calibration: Calibration | null): RebarCalc {

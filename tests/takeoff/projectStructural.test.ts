@@ -234,18 +234,18 @@ test('project workbook: Plan column first, one row per element/layer, project su
 
   // rebar
   const rs = wb.getWorksheet('זיון')!;
-  assert.equal(rowOf(rs, 1).length, 16);
+  assert.equal(rowOf(rs, 1).length, 17);
   assert.deepEqual(rowOf(rs, 1).slice(0, 3), ['תוכנית', 'עמוד', 'סימון']);
   const plans = [2, 3, 4].map((r) => rowOf(rs, r)[0]);
   assert.deepEqual(plans, ['Plan A', 'Plan A', 'Plan B']);
   const est = rowOf(rs, 4);
-  assert.equal(typeof est[9], 'number'); // net length: still a number
-  near(est[9] as number, 180);
-  assert.equal(est[14], 'הערכה');
-  for (const addr of ['J4', 'K4', 'M4', 'N4']) assert.ok(rs.getCell(addr).numFmt.includes('≈'), addr);
+  assert.equal(typeof est[10], 'number'); // net length: still a number
+  near(est[10] as number, 180);
+  assert.equal(est[15], 'הערכה');
+  for (const addr of ['K4', 'L4', 'N4', 'O4']) assert.ok(rs.getCell(addr).numFmt.includes('≈'), addr);
   const rt = rs.getRow(5);
-  assert.equal((rt.getCell(10).value as { formula: string }).formula, 'ROUND(SUM(J2:J4),2)');
-  assert.equal(rt.getCell(15).value, 'כולל הערכה');
+  assert.equal((rt.getCell(11).value as { formula: string }).formula, 'ROUND(SUM(K2:K4),2)');
+  assert.equal(rt.getCell(16).value, 'כולל הערכה');
   const rtexts = texts(rs);
   assert.ok(rtexts.includes('סיכום לפי קוטר'));
   assert.ok(rtexts.some((t) => t.startsWith('כולל הערכה: 180')));
@@ -257,7 +257,7 @@ test('project workbook: Plan column first, one row per element/layer, project su
     if (v[0] === 'לפי תוכנית') afterByPlan = true;
     if (afterByPlan && v[0] === 'Plan B') planB = v;
   });
-  assert.equal(planB![14], 'הערכה');
+  assert.equal(planB![15], 'הערכה');
 });
 
 test('structural-only project workbook: structural sheets are there, English works', async () => {

@@ -2990,31 +2990,51 @@ html[dir='rtl'] .qty-table .col-room {
 .rebar-entry-row .btn-ghost {
   align-self: flex-start;
 }
-.rebar-layer {
+.rebar-level {
   margin-bottom: var(--s-3);
   padding: var(--s-3);
   border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--accent-edge);
   border-radius: var(--r-md);
 }
-.rebar-layer-head {
+.rebar-level-top {
+  border-inline-start-color: var(--warning-edge);
+}
+.rebar-level-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--s-2);
   margin-bottom: var(--s-2);
+}
+.rebar-level-title {
+  font: var(--t-label);
+  font-weight: 700;
+  color: var(--text-h);
+}
+.rebar-level-total {
+  margin: var(--s-2) 0 0;
+  font-weight: 600;
+}
+/* The two directions of one level sit together in a tinted frame. */
+.rebar-direction {
+  margin-bottom: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  background: var(--bg-subtle);
+  border-radius: var(--r-sm);
+}
+.rebar-direction-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  margin-bottom: var(--s-1);
   font: var(--t-label);
   font-weight: 600;
   color: var(--text-h);
 }
-.rebar-layer .form-row {
-  margin-bottom: var(--s-2);
-}
 .rebar-layer-result {
   margin: 0;
-}
-.rebar-layer-actions {
-  display: flex;
-  gap: var(--s-2);
-  margin-bottom: var(--s-3);
 }
 .rebar-order-length {
   margin: 0 0 var(--s-2);

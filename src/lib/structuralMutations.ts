@@ -7,7 +7,8 @@
 import { v4 as uuid } from 'uuid';
 import type { Plan, Point, Room } from '../types';
 import { polygonAreaPx } from './geometry';
-import type { ConcreteElement, ConcreteKind, RebarBars, RebarItem, RebarLayer, RebarMesh } from '../types/structural';
+import type { ConcreteElement, ConcreteKind, MeshReinforcement, RebarBars, RebarItem, RebarLevel, RebarMesh } from '../types/structural';
+import { copyReinforcement, emptyReinforcement } from './rebarMesh';
 import { concreteOf, rebarOf } from './structuralPlan';
 import { hasManualMark, nextAutoNumber } from './structuralMarks';
 
@@ -93,12 +94,7 @@ export function removeConcreteElement(plan: Plan, id: string): Plan {
 
 // ---------- rebar ----------
 
-/** A layer the user still has to fill in: 0 means "not entered", which the engine reports as not calculable. */
-export function newRebarLayer(template: Partial<Omit<RebarLayer, 'id'>> = {}): RebarLayer {
-  return { id: uuid(), diameterMm: 0, spacingM: 0, direction: 'long', ...template };
-}
-
-/** A new mesh zone for a finished outline: geometry, page, automatic mark number and one empty layer. */
+/** A new mesh zone for a finished outline: geometry, page, automatic mark number and an empty Bottom level. */
 export function newRebarMesh(plan: Plan, pageNumber: number, points: Point[]): RebarMesh {
   return {
     id: uuid(),
@@ -107,7 +103,7 @@ export function newRebarMesh(plan: Plan, pageNumber: number, points: Point[]): R
     points: points.map((p) => ({ x: p.x, y: p.y })),
     mark: '',
     autoNumber: nextAutoNumber(rebarOf(plan), 'mesh'),
-    layers: [newRebarLayer()],
+    bottom: emptyReinforcement(),
     wastePercent: 0,
   };
 }
@@ -139,31 +135,47 @@ export function removeRebarItem(plan: Plan, id: string): Plan {
   return { ...plan, rebarItems: items.filter((i) => i.id !== id) };
 }
 
-function withMeshLayers(plan: Plan, id: string, change: (layers: RebarLayer[]) => RebarLayer[]): Plan {
-  const mesh = rebarOf(plan).find((i) => i.id === id);
-  if (!mesh || mesh.kind !== 'mesh') return plan;
-  return updateRebarItem(plan, id, { layers: change(mesh.layers) });
+/** Which levels a mesh should have. Enabling a level starts it empty; disabling one drops its entries. */
+export type MeshLevelChoice = 'bottom' | 'top' | 'both';
+
+function meshOf(plan: Plan, id: string): RebarMesh | undefined {
+  const item = rebarOf(plan).find((i) => i.id === id);
+  return item && item.kind === 'mesh' ? item : undefined;
 }
 
-/** Adds a layer to a mesh; `template` pre-fills it (the "two directions" shortcut passes the first layer's values). */
-export function addRebarLayer(plan: Plan, id: string, template: Partial<Omit<RebarLayer, 'id'>> = {}): Plan {
-  return withMeshLayers(plan, id, (layers) => [...layers, newRebarLayer(template)]);
+/**
+ * Sets which reinforcement levels a mesh has. A level that stays keeps what was entered; a new one
+ * starts empty (not calculable until filled in — Top is never copied from Bottom here); a level
+ * switched off is removed. Unknown id, not a mesh, or no change: the plan unchanged.
+ */
+export function setMeshLevels(plan: Plan, id: string, choice: MeshLevelChoice): Plan {
+  const mesh = meshOf(plan, id);
+  if (!mesh) return plan;
+  const wantBottom = choice !== 'top';
+  const wantTop = choice !== 'bottom';
+  if (!!mesh.bottom === wantBottom && !!mesh.top === wantTop) return plan;
+  return updateRebarItem(plan, id, {
+    bottom: wantBottom ? mesh.bottom ?? emptyReinforcement() : undefined,
+    top: wantTop ? mesh.top ?? emptyReinforcement() : undefined,
+  });
 }
 
-export function updateRebarLayer(plan: Plan, id: string, layerId: string, patch: Partial<Omit<RebarLayer, 'id'>>): Plan {
-  const mesh = rebarOf(plan).find((i) => i.id === id);
-  if (!mesh || mesh.kind !== 'mesh' || !mesh.layers.some((l) => l.id === layerId)) return plan;
-  return withMeshLayers(plan, id, (layers) => layers.map((l) => (l.id === layerId ? { ...l, ...patch, id: layerId } : l)));
+/** Replaces one level's reinforcement (the form builds it with the lib/rebarMesh helpers). Level not enabled / unknown id: unchanged. */
+export function setMeshReinforcement(plan: Plan, id: string, level: RebarLevel, reinforcement: MeshReinforcement): Plan {
+  const mesh = meshOf(plan, id);
+  if (!mesh || !mesh[level]) return plan;
+  return updateRebarItem(plan, id, { [level]: reinforcement });
 }
 
-export function removeRebarLayer(plan: Plan, id: string, layerId: string): Plan {
-  const mesh = rebarOf(plan).find((i) => i.id === id);
-  if (!mesh || mesh.kind !== 'mesh' || !mesh.layers.some((l) => l.id === layerId)) return plan;
-  return withMeshLayers(plan, id, (layers) => layers.filter((l) => l.id !== layerId));
+/**
+ * "Copy Bottom to Top": the Top level becomes a deep copy of Bottom's reinforcement, and both are
+ * enabled. After this they are independent — editing one never touches the other. No Bottom: unchanged.
+ */
+export function copyBottomToTop(plan: Plan, id: string): Plan {
+  const mesh = meshOf(plan, id);
+  if (!mesh || !mesh.bottom) return plan;
+  return updateRebarItem(plan, id, { top: copyReinforcement(mesh.bottom) });
 }
-
-/** The other direction: what the second layer of a "two directions" mesh runs along. */
-export const oppositeDirection = (d: RebarLayer['direction']): RebarLayer['direction'] => (d === 'long' ? 'short' : 'long');
 
 /**
  * Copies the outlines of existing rooms into new mesh zones — the rebar twin of `addConcreteFromRooms`:

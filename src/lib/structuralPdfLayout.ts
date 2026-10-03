@@ -9,7 +9,7 @@
 import { round } from './geometry';
 import { markLabel } from './structuralMarks';
 import type { ExportContext } from './exportLanguage';
-import { basisText, concreteStatusText, rebarStatusText, reinforcementNotation } from './structuralExportText';
+import { basisText, concreteStatusText, levelText, rebarStatusText, reinforcementDescription } from './structuralExportText';
 import type { ProjectStructural, StructuralReport } from './structuralQuantities';
 
 export interface PdfTableRow {
@@ -175,16 +175,19 @@ function rebarBlocks(rebar: NonNullable<StructuralReport['rebar']>, x: ExportCon
         t('exports.projectPdf.orderUnit', { unit: kg }),
         `${t('exports.structural.headers.basis')} / ${t('exports.structural.headers.status')}`,
       ],
-      weights: [7, 10, 24, 16, 12, 12, 12, 20],
+      weights: [6, 17, 25, 14, 11, 11, 11, 18],
       rows: items.map((it) => {
-        const notation = reinforcementNotation(it.diameterMm, it.spacingMm);
-        const side = it.direction === null ? '' : ` · ${t(it.direction === 'long' ? 'exports.structural.longSide' : 'exports.structural.shortSide')}`;
+        // A mesh line names its reinforcement level next to the mark, and says which direction(s)
+        // its specification covers — so Top and Bottom are never two unexplained rows.
+        const markText = markLabel(it, t);
+        const level = levelText(it.level, x);
+        const description = reinforcementDescription(it, x);
         const calculable = it.netLengthM !== null;
         return {
           cells: [
             `${it.pageNumber}`,
-            markLabel(it, t),
-            notation ? `${notation}${side}` : DASH,
+            level ? `${markText} — ${level}` : markText,
+            description ?? DASH,
             it.barCount !== null && it.barLengthM !== null ? `${it.barCount} × ${x.number(round(it.barLengthM, 2))}` : DASH,
             fmt(it.netLengthM, it.estimated),
             fmt(it.netWeightKg, it.estimated),

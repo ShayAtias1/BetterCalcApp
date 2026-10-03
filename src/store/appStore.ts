@@ -19,12 +19,12 @@ import {
 import { clonePlanForDuplicate } from '../lib/planDuplication';
 import { createEmptyComparison, useCompareStore } from './compareStore';
 import type { Comparison } from '../types/compare';
-import type { ConcreteElement, ConcreteKind, RebarLayer } from '../types/structural';
+import type { ConcreteElement, ConcreteKind, MeshReinforcement, RebarLevel } from '../types/structural';
 import {
   addConcreteElement,
   addConcreteFromRooms,
   addRebarItem,
-  addRebarLayer as addLayer,
+  copyBottomToTop,
   addRebarMeshFromRooms,
   changeConcreteKind as changeKind,
   newConcreteElement,
@@ -32,10 +32,11 @@ import {
   newRebarMesh,
   removeConcreteElement,
   removeRebarItem,
-  removeRebarLayer as removeLayer,
   updateConcreteElement as updateConcrete,
   updateRebarItem as updateRebar,
-  updateRebarLayer as updateLayer,
+  setMeshLevels,
+  setMeshReinforcement,
+  type MeshLevelChoice,
   type RebarPatch,
 } from '../lib/structuralMutations';
 import { polygonAreaPx } from '../lib/geometry';
@@ -347,10 +348,12 @@ interface AppState {
   /** Adds a manual-bars row on the current page and selects it. */
   addRebarBars: () => void;
   deleteRebarItem: (id: string) => void;
-  /** Layer edits on a mesh zone. Add and remove are one undo step each; editing a layer is debounced. */
-  addRebarLayer: (id: string, template?: Partial<Omit<RebarLayer, 'id'>>) => void;
-  updateRebarLayer: (id: string, layerId: string, patch: Partial<Omit<RebarLayer, 'id'>>) => void;
-  removeRebarLayer: (id: string, layerId: string) => void;
+  /** Which reinforcement levels (Bottom / Top / both) a mesh zone has. One undo step. */
+  setRebarMeshLevels: (id: string, choice: MeshLevelChoice) => void;
+  /** Replaces one level's reinforcement (mode, diameter, spacing…). Debounced into one undo step per burst. */
+  setRebarMeshReinforcement: (id: string, level: RebarLevel, reinforcement: MeshReinforcement) => void;
+  /** "Copy Bottom to Top": Top becomes an independent copy of Bottom. One undo step. */
+  copyRebarBottomToTop: (id: string) => void;
   /** Copies the outlines of existing rooms into new mesh zones (rooms untouched). One undo step; returns how many. */
   copyRoomsToRebar: (roomIds: string[]) => number;
   finishDrawing: () => void;
@@ -1015,28 +1018,28 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ project: { ...removeRebarItem(project, id), updatedAt: Date.now() }, selectedRebarId: selectedRebarId === id ? null : selectedRebarId });
     scheduleSave(get, set);
   },
-  addRebarLayer: (id, template) => {
+  setRebarMeshLevels: (id, choice) => {
     const { project } = get();
     if (!project) return;
-    const next = addLayer(project, id, template);
+    const next = setMeshLevels(project, id, choice);
     if (next === project) return;
     historyTracker.push(get, set, project);
     set({ project: { ...next, updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
-  updateRebarLayer: (id, layerId, patch) => {
+  setRebarMeshReinforcement: (id, level, reinforcement) => {
     const { project } = get();
     if (!project) return;
-    const next = updateLayer(project, id, layerId, patch);
+    const next = setMeshReinforcement(project, id, level, reinforcement);
     if (next === project) return;
     historyTracker.pushDebounced(get, set, project);
     set({ project: { ...next, updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
-  removeRebarLayer: (id, layerId) => {
+  copyRebarBottomToTop: (id) => {
     const { project } = get();
     if (!project) return;
-    const next = removeLayer(project, id, layerId);
+    const next = copyBottomToTop(project, id);
     if (next === project) return;
     historyTracker.push(get, set, project);
     set({ project: { ...next, updatedAt: Date.now() } });

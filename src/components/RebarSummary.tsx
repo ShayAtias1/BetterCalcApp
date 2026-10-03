@@ -71,7 +71,7 @@ export default function RebarSummary({ plan }: { plan: Plan }) {
             <div className="concrete-summary-missing">
               <Icon name="alert" size={12} />
               {t('rebar.summary.missing', { count: page.missingItemCount })}
-              {page.incompleteLayerCount > 0 && ` · ${t('rebar.summary.incompleteLayers', { count: page.incompleteLayerCount })}`}
+              {page.incompleteSpecCount > 0 && ` · ${t('rebar.summary.incompleteSpecs', { count: page.incompleteSpecCount })}`}
             </div>
           )}
         </div>
@@ -94,7 +94,7 @@ export default function RebarSummary({ plan }: { plan: Plan }) {
         <div className="concrete-summary-missing">
           <Icon name="alert" size={12} />
           {t('rebar.summary.missing', { count: summary.missingItemCount })}
-          {summary.incompleteLayerCount > 0 && ` · ${t('rebar.summary.incompleteLayers', { count: summary.incompleteLayerCount })}`} — {t('rebar.summary.excluded')}
+          {summary.incompleteSpecCount > 0 && ` · ${t('rebar.summary.incompleteSpecs', { count: summary.incompleteSpecCount })}`} — {t('rebar.summary.excluded')}
         </div>
       )}
     </div>

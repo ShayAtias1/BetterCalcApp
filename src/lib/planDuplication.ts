@@ -1,5 +1,6 @@
 import { v4 as uuid } from 'uuid';
 import type { Plan } from '../types';
+import { withRenewedLayerIds } from './rebarMesh';
 
 /**
  * A fully independent copy of a plan: calibration, rooms (with openings and work items, overrides
@@ -33,7 +34,7 @@ export function clonePlanForDuplicate(source: Plan, name: string): Plan {
       ? {
           rebarItems: copy.rebarItems.map((item) =>
             item.kind === 'mesh'
-              ? { ...item, id: uuid(), layers: item.layers.map((l) => ({ ...l, id: uuid() })) }
+              ? { ...withRenewedLayerIds(item), id: uuid() }
               : { ...item, id: uuid() }
           ),
         }

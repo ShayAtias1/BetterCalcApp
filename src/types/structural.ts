@@ -53,7 +53,7 @@ export interface ConcreteElement extends MarkFields {
 /** Which side of a rectangular zone a layer's bars run along. */
 export type RebarLayerDirection = 'long' | 'short';
 
-/** One reinforcement layer of a mesh zone: bars of one diameter at one spacing, running one way. */
+/** One directional bar group: bars of one diameter at one spacing, running one way. (The pre-levels "layer", still the unit the engine calculates.) */
 export interface RebarLayer {
   id: string;
   /** Bar diameter in millimetres. */
@@ -63,13 +63,45 @@ export interface RebarLayer {
   direction: RebarLayerDirection;
 }
 
-/** Area reinforcement: a marked zone plus the layers that exist in it. */
+/** The two reinforcement levels of a slab-like zone. These — and only these — are "layers" of steel. */
+export type RebarLevel = 'bottom' | 'top';
+
+/** One bar specification: bars of one diameter at one maximum spacing (metres). 0 = not entered yet. */
+export interface BarSpec {
+  diameterMm: number;
+  spacingM: number;
+}
+
+/**
+ * The reinforcement of ONE level of a mesh zone, in one of two modes:
+ *  - uniform:     one specification that applies to BOTH orthogonal directions;
+ *  - directional: a specification per direction — along the long side and along the short side of the
+ *                 zone — which belong to the same level and may differ in diameter and spacing.
+ * A directional level may have only one direction (that is how a single old layer is read); the
+ * form always offers both. `extra` only ever holds old layers that could not be placed (a second
+ * layer in the same direction) so they keep calculating until the user removes them.
+ */
+export type MeshReinforcement =
+  | { mode: 'uniform'; spec: BarSpec }
+  | { mode: 'directional'; long?: BarSpec; short?: BarSpec; extra?: RebarLayer[] };
+
+/**
+ * Area reinforcement: a marked zone plus its reinforcement levels. A level that is present is
+ * enabled (Bottom, Top, or both); an absent one does not exist. Each level is specified on its own —
+ * Top is never assumed to equal Bottom.
+ *
+ * `layers` is the pre-levels shape (a flat list of directional layers). It is only read from old
+ * data: `rebarOf` returns every mesh already converted (see lib/rebarMesh) and nothing writes it.
+ */
 export interface RebarMesh extends MarkFields {
   id: string;
   kind: 'mesh';
   pageNumber: number;
   points: Point[];
-  layers: RebarLayer[];
+  bottom?: MeshReinforcement;
+  top?: MeshReinforcement;
+  /** @deprecated pre-levels data only. */
+  layers?: RebarLayer[];
   wastePercent?: number;
   sizeOverride?: SizeOverride;
 }
