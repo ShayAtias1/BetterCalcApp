@@ -66,7 +66,7 @@ export default function ConcreteSummary({ plan }: { plan: Plan }) {
       {summary.missingCount > 0 && (
         <div className="concrete-summary-missing">
           <Icon name="alert" size={12} />
-          {t('concrete.summary.missing', { count: summary.missingCount })} — {t('concrete.summary.excluded')}
+          {t('concrete.summary.missing', { count: summary.missingCount })} - {t('concrete.summary.excluded')}
         </div>
       )}
     </div>

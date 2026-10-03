@@ -242,7 +242,7 @@ export default function CompareTopBar({
             <span className="menu-check">
               <Icon name="file" size={13} />
             </span>
-            {pagesLabel} — {activeRevision?.label ?? t('compare.topBar.activeRevision')}
+            {pagesLabel} - {activeRevision?.label ?? t('compare.topBar.activeRevision')}
           </button>
           <button
             className="menu-item"
@@ -253,7 +253,7 @@ export default function CompareTopBar({
             <span className="menu-check">
               <Icon name="layers" size={13} />
             </span>
-            {pagesLabel} — {t('compare.topBar.allRevisions', { count: comparison.revisions.length })}
+            {pagesLabel} - {t('compare.topBar.allRevisions', { count: comparison.revisions.length })}
           </button>
 
           <div className="menu-divider" />

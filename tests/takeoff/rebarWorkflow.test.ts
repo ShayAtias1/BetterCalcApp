@@ -302,7 +302,7 @@ test('store: page change and plan switch clear the rebar selection; a no-op or n
   assert.equal(store().history.length, h);
 });
 
-test('store: copyRoomsToRebar — one room selects its zone, an apartment makes one per room, one undo step, rooms unchanged', () => {
+test('store: copyRoomsToRebar - one room selects its zone, an apartment makes one per room, one undo step, rooms unchanged', () => {
   store().setProject(structuredClone(PLAN_A));
   store().setDrawTarget('rebar');
   const rooms = store().project!.rooms;

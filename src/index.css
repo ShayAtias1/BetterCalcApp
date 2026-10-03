@@ -194,6 +194,9 @@ button:disabled,
 .icon-directional:dir(ltr) {
   transform: scaleX(-1);
 }
+.icon-directional-ltr:dir(rtl) {
+  transform: scaleX(-1);
+}
 
 /* ---------- buttons ----------
    primary (one per view) · secondary (surface + hairline) · ghost (text only) ·

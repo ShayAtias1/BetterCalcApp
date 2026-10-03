@@ -1,5 +1,5 @@
 /**
- * English — the second UI language. Same shape as `he.ts` (`Dictionary`, see index.ts): a missing or
+ * English - the second UI language. Same shape as `he.ts` (`Dictionary`, see index.ts): a missing or
  * extra key, or a key of another type, fails the build, and tests check that every key keeps the
  * Hebrew key's `{placeholders}`.
  *
@@ -17,7 +17,7 @@ import type { Dictionary } from './index';
 
 export const en: Dictionary = {
   app: {
-    documentTitle: 'BetterCalc — Quantity Takeoff from Plans',
+    documentTitle: 'BetterCalc - Quantity Takeoff from Plans',
     language: 'Language',
   },
 
@@ -116,7 +116,7 @@ export const en: Dictionary = {
   },
 
   quantities: {
-    notCalibrated: '— not calibrated',
+    notCalibrated: '- not calibrated',
   },
 
   detection: {
@@ -174,15 +174,15 @@ export const en: Dictionary = {
 
   pageStatus: {
     calibrated: 'Calibrated',
-    notCalibrated: 'Not calibrated — quantities cannot be calculated',
+    notCalibrated: 'Not calibrated - quantities cannot be calculated',
     recalibrate: 'Recalibrate',
     calibrateNow: 'Calibrate now',
   },
 
   calibration: {
     title: 'Calibrate Scale',
-    titleOriginal: 'Calibrate Scale — Original Plan',
-    titleRevised: 'Calibrate Scale — Revised Plan',
+    titleOriginal: 'Calibrate Scale - Original Plan',
+    titleRevised: 'Calibrate Scale - Revised Plan',
     instructions: 'Enter the real distance in metres between the two points you marked on the plan.',
     distanceLabel: 'Real distance (m)',
     distancePlaceholder: 'e.g. 5.00',
@@ -198,11 +198,11 @@ export const en: Dictionary = {
   compare: {
     tools: {
       select: 'Select',
-      selectHint: 'Select — select markups and changes on the plan',
+      selectHint: 'Select - select markups and changes on the plan',
       pan: 'Pan',
-      panHint: 'Pan — drag the view',
+      panHint: 'Pan - drag the view',
       align: 'Align',
-      alignHint: 'Align — drag the revised plan into place',
+      alignHint: 'Align - drag the revised plan into place',
     },
     tabs: {
       layers: 'Layers',
@@ -223,7 +223,7 @@ export const en: Dictionary = {
       picking: 'Picking points…',
       pickPairs: 'Pick 2 pairs of points',
       pickRevised: 'Click the same point on the revised plan',
-      pickOriginal: 'Click a reference point on the original plan — a building corner, a column, etc.',
+      pickOriginal: 'Click a reference point on the original plan - a building corner, a column, etc.',
       reset: 'Reset alignment on this page',
       resetHint: 'Returns the revision to its original position on this page',
     },
@@ -235,7 +235,7 @@ export const en: Dictionary = {
       apartmentLabel: 'Apartment number',
       originalLabel: 'Original plan (PDF)',
       pickPdf: 'Choose PDF file',
-      revisedLabel: 'Revised plans — optional, you can add them later',
+      revisedLabel: 'Revised plans - optional, you can add them later',
       addPdf: 'Add PDF file',
       removeFile: 'Remove file',
       create: 'Create Comparison',
@@ -243,8 +243,8 @@ export const en: Dictionary = {
       notPdfs: 'Please choose PDF files only',
     },
     measure: {
-      ambiguousScale: "This revision's saved calibration was measured before its alignment scale changed and cannot be interpreted — recalibrate to measure.",
-      notCalibrated: 'This page is not calibrated — calibrate it above before measuring.',
+      ambiguousScale: "This revision's saved calibration was measured before its alignment scale changed and cannot be interpreted - recalibrate to measure.",
+      notCalibrated: 'This page is not calibrated - calibrate it above before measuring.',
       changes: 'Record Changes',
       markKind: 'Mark {kind} on the plan',
       armed: 'Marking {kind} · {mode}',
@@ -257,7 +257,7 @@ export const en: Dictionary = {
       comparisonName: 'Comparison name',
       apartment: 'Apartment',
       apartmentNumber: 'Apartment number',
-      revisionContext: 'The revision being compared — every new markup, measurement, calibration and alignment is saved to it',
+      revisionContext: 'The revision being compared - every new markup, measurement, calibration and alignment is saved to it',
       original: 'Original',
       revision: 'Revision compared',
       noRevision: 'No revision',
@@ -272,8 +272,8 @@ export const en: Dictionary = {
       onlyOneRevision: 'There is only one revision in this comparison',
       allRevisionsHint: 'All revisions in one file',
       allRevisions: 'All revisions ({count})',
-      regionNote: 'The region applies only to the page it was drawn on — even when exporting all pages, the other pages are exported in full.',
-      noRegionNote: 'No region selected — the full plan is exported.',
+      regionNote: 'The region applies only to the page it was drawn on - even when exporting all pages, the other pages are exported in full.',
+      noRegionNote: 'No region selected - the full plan is exported.',
       exitHint: 'Save and exit',
       exit: 'Exit',
     },
@@ -286,14 +286,14 @@ export const en: Dictionary = {
       calibrated: 'Calibrated · {cmPerPixel} cm/px · {source}',
       sourceOriginal: 'original',
       sourceRevision: 'revision',
-      ambiguous: 'Old calibration that cannot be interpreted — recalibrate',
-      notCalibrated: 'Not calibrated — quantities cannot be measured',
+      ambiguous: 'Old calibration that cannot be interpreted - recalibrate',
+      notCalibrated: 'Not calibrated - quantities cannot be measured',
       inRevision: 'In revision',
       revisedPageHint: 'Which page of the revised plan is shown against this original page',
       revisedPageMissing: 'does not exist in the revision',
       calibrateOriginalHint: 'Measure a known distance on the original plan',
       calibrateRevised: 'Revision',
-      calibrateRevisedHint: 'Measure a known distance on the revised plan — saved in its own coordinates, so it stays correct after the alignment changes',
+      calibrateRevisedHint: 'Measure a known distance on the revised plan - saved in its own coordinates, so it stays correct after the alignment changes',
       alignmentLabel: 'Alignment',
       scope: 'Page {page} · {revision}',
     },
@@ -308,8 +308,8 @@ export const en: Dictionary = {
       empty: 'There is no revised plan to compare against the original yet.',
       addRevision: 'Add Revised Plan',
       revisionHint: 'Click to compare against this revision · double-click to rename',
-      moveUp: 'Move up — the order also sets the export order',
-      moveDown: 'Move down — the order also sets the export order',
+      moveUp: 'Move up - the order also sets the export order',
+      moveDown: 'Move down - the order also sets the export order',
       removeRevision: 'Remove revised plan',
       display: 'Layer Display',
       original: 'Original plan',
@@ -343,7 +343,7 @@ export const en: Dictionary = {
     },
     canvas: {
       exportRegionHint: 'Drag on the plan to choose the region to export',
-      revisedPageMissing: 'Page {page} does not exist in revision "{revision}" ({count} pages) — only the original plan is shown.',
+      revisedPageMissing: 'Page {page} does not exist in revision "{revision}" ({count} pages) - only the original plan is shown.',
     },
     exportHeader: {
       withApartment: '{name} - Apartment {apartment}',
@@ -353,26 +353,26 @@ export const en: Dictionary = {
     viewModes: {
       label: 'Comparison mode',
       overlay: 'Overlay',
-      overlayHint: 'Overlay — both plans on top of each other',
+      overlayHint: 'Overlay - both plans on top of each other',
       swipe: 'Swipe',
-      swipeHint: 'Swipe — drag the divider to reveal each side',
+      swipeHint: 'Swipe - drag the divider to reveal each side',
       blink: 'Blink',
-      blinkHint: 'Blink — automatically alternate between the plans',
+      blinkHint: 'Blink - automatically alternate between the plans',
     },
   },
 
   toolbar: {
     select: 'Select',
-    selectHint: 'Select — select and move points',
+    selectHint: 'Select - select and move points',
     pan: 'Pan',
-    panHint: 'Pan — drag the view',
+    panHint: 'Pan - drag the view',
     draw: 'Draw Room',
-    drawHint: 'Draw Room — polygon',
+    drawHint: 'Draw Room - polygon',
     drawRect: 'Rectangle',
-    drawRectHint: 'Draw Room — rectangle, two opposite corners',
+    drawRectHint: 'Draw Room - rectangle, two opposite corners',
     calibrate: 'Calibrate Scale',
-    calibrateHint: 'Calibrate — recalibrate the scale on this page',
-    calibrateHintMissing: 'Calibrate — this page is not calibrated, quantities cannot be calculated',
+    calibrateHint: 'Calibrate - recalibrate the scale on this page',
+    calibrateHintMissing: 'Calibrate - this page is not calibrated, quantities cannot be calculated',
     calibrateInstruction: 'Click two points a known distance apart',
     drawProgressClose: '{count} {count|point|points} · click the first point or press Enter to close',
     drawProgressAdd: '{count} {count|point|points} · click to add points',
@@ -384,16 +384,16 @@ export const en: Dictionary = {
 
   startScreen: {
     title: 'Projects',
-    description: "A project holds its quantity-takeoff plans and its revision comparisons — and one Quantity Takeoff for the whole project.",
+    description: "A project holds its quantity-takeoff plans and its revision comparisons - and one Quantity Takeoff for the whole project.",
     newProject: 'New Project',
     savedProjects: 'Saved Projects',
-    empty: 'No saved projects yet. Create a project — then add quantity-takeoff plans and revision comparisons to it.',
+    empty: 'No saved projects yet. Create a project - then add quantity-takeoff plans and revision comparisons to it.',
     open: 'Open project',
     delete: 'Delete project',
     deleteConfirm: 'Delete this project? This cannot be undone.',
     deleteConfirmWithContents: 'Delete this project and all of its plans and comparisons? This cannot be undone.',
     nameLabel: 'Project name',
-    namePlaceholder: 'e.g. Carmel Tower — Typical Floor',
+    namePlaceholder: 'e.g. Carmel Tower - Typical Floor',
     nameHint: 'After creating it, you choose what to add: a quantity-takeoff plan or a revision comparison.',
     create: 'Create Project',
     meta: {
@@ -424,7 +424,7 @@ export const en: Dictionary = {
 
   measure: {
     title: 'Measurements',
-    notCalibrated: 'This page is not calibrated — calibrate it before measuring.',
+    notCalibrated: 'This page is not calibrated - calibrate it before measuring.',
     tools: 'Measure tools',
     calcMode: 'Calculation',
     calcModes: {
@@ -458,14 +458,14 @@ export const en: Dictionary = {
       cloud: 'Click points and close near the first ({count})',
       twoPoints: 'Click a start and an end point',
       mask: 'Click a start and an end corner for a masking rectangle',
-      maskLong: 'Click a start and an end corner for a rectangle that hides whatever is beneath it. It is created in white — you can change the colour afterwards.',
+      maskLong: 'Click a start and an end corner for a rectangle that hides whatever is beneath it. It is created in white - you can change the colour afterwards.',
       dimension: 'Click a start and an end; each further click continues the line ({count})',
       dimensionLong: 'Click a start and an end point; each further click continues the dimension along the same line. Finish: Enter, double-click or click the last stop. Cancel: Esc.',
       text: 'Click to add a note',
       textLong: 'Click where the note goes. A window opens for writing several lines. To edit: double-click the note with the Select tool.',
     },
     colorSelectedHint: 'Changes the colour of the selected markup',
-    colorNewHint: 'Colour for new markups — select an existing markup to change its colour',
+    colorNewHint: 'Colour for new markups - select an existing markup to change its colour',
     colorSelected: 'Markup colour',
     color: 'Colour',
     freeColor: 'Custom colour',
@@ -494,10 +494,10 @@ export const en: Dictionary = {
       unsaved: 'Unsaved',
       unsavedHint: 'There are changes that have not been saved yet',
       error: 'Save error',
-      errorHint: 'Saving failed — your work was not saved',
+      errorHint: 'Saving failed - your work was not saved',
     },
-    brandTakeoff: 'BetterCalc — Quantity Takeoff',
-    brandCompare: 'BetterCalc — Revision Compare',
+    brandTakeoff: 'BetterCalc - Quantity Takeoff',
+    brandCompare: 'BetterCalc - Revision Compare',
     goHome: 'Go to the BetterCalc home screen',
     backToOverview: 'Save and return to the project overview',
     unnamedProject: 'Untitled project',
@@ -526,7 +526,7 @@ export const en: Dictionary = {
     gridCustomLabel: 'Spacing (m)',
     gridCustomInvalid: 'Enter a spacing between 0.01 and 100 m.',
     gridOpacity: 'Line strength',
-    gridNote: 'View only — the grid is not exported and does not affect measurements. Fine lines hide when zoomed out.',
+    gridNote: 'View only - the grid is not exported and does not affect measurements. Fine lines hide when zoomed out.',
     exportHint: 'Export the quantity takeoff or the plan',
     quantityReport: 'Quantity Takeoff',
     markedPlan: 'Marked-up Plan',
@@ -537,7 +537,7 @@ export const en: Dictionary = {
     chooseRegion: 'Choose export region',
     clearRegion: 'Clear the region on this page',
     regionNote: 'The current page is cropped to the region you marked. Pages without a region are exported in full.',
-    noRegionNote: 'No region selected — the full page is exported.',
+    noRegionNote: 'No region selected - the full page is exported.',
     projectOverviewShort: 'Project Overview',
   },
 
@@ -553,7 +553,7 @@ export const en: Dictionary = {
 
   autoDetect: {
     title: 'Auto-Detect',
-    intro: 'Detection only suggests areas — no room is added to the project or to the quantities until you accept it.',
+    intro: 'Detection only suggests areas - no room is added to the project or to the quantities until you accept it.',
     detecting: 'Detecting…',
     redetect: 'Detect Again',
     detect: 'Detect Rooms',
@@ -572,7 +572,7 @@ export const en: Dictionary = {
     assignToApartment: 'Accepted rooms will be assigned to apartment {apartment}.',
     assignToNone: 'Accepted rooms will not be assigned to an apartment (unassigned).',
     detectedType: 'Detected: {type}',
-    typeUnknown: 'Room type not detected — please check manually',
+    typeUnknown: 'Room type not detected - please check manually',
     accept: 'Accept',
     acceptHint: 'Add as a room in the project',
     rejectHint: 'Reject the suggestion',
@@ -580,8 +580,8 @@ export const en: Dictionary = {
   },
 
   quantityExport: {
-    excelMenu: 'Quantity Takeoff — Excel',
-    pdfMenu: 'Quantity Takeoff — PDF',
+    excelMenu: 'Quantity Takeoff - Excel',
+    pdfMenu: 'Quantity Takeoff - PDF',
     pdfButton: 'Export to PDF',
     excelButton: 'Export to Excel',
     whichPages: 'Which pages to export?',
@@ -615,9 +615,9 @@ export const en: Dictionary = {
     newPlanTitle: 'New Quantity-Takeoff Plan',
     newPlanDesc: 'Upload a PDF plan, calibrate it, mark rooms and calculate quantities by work type.',
     newComparisonTitle: 'New Revision Comparison',
-    newComparisonDesc: 'An original plan against an updated revision — alignment, layers and demolition / new construction marking.',
+    newComparisonDesc: 'An original plan against an updated revision - alignment, layers and demolition / new construction marking.',
     takeoffTitle: 'Quantity Takeoff',
-    takeoffIntro: 'Each plan is measured separately — with its own scale, rooms and openings.',
+    takeoffIntro: 'Each plan is measured separately - with its own scale, rooms and openings.',
     excelHint: "A quantity takeoff for all of the project's plans in a single Excel file",
     excel: 'Excel',
     pdfHint: "A PDF quantity report for all of the project's plans",
@@ -631,7 +631,7 @@ export const en: Dictionary = {
     duplicatePlan: 'Duplicate Plan',
     deletePlan: 'Delete Plan',
     compareTitle: 'Revision Compare',
-    compareIntro: 'An original plan against updated revisions — alignment, layers, and demolition / new construction marking.',
+    compareIntro: 'An original plan against updated revisions - alignment, layers, and demolition / new construction marking.',
     newComparison: 'New Comparison',
     noComparisons: 'There are no comparisons in this project yet. Create a comparison from an original plan and a revised one.',
     openComparison: 'Open the comparison',
@@ -647,7 +647,7 @@ export const en: Dictionary = {
     },
     summaryTitle: 'Project Quantity Summary',
     summaryIntro: "The sum of all plans. Click a row to see each plan's share.",
-    summaryEmpty: 'No quantities yet — mark rooms on the plans and add work types to them.',
+    summaryEmpty: 'No quantities yet - mark rooms on the plans and add work types to them.',
     item: 'Item',
     net: 'Net quantity',
     order: 'To order (incl. waste)',
@@ -665,7 +665,7 @@ export const en: Dictionary = {
   },
 
   quantityTable: {
-    defaultsNote: 'Calculation defaults — they apply to new work items and to items without a value of their own.',
+    defaultsNote: 'Calculation defaults - they apply to new work items and to items without a value of their own.',
     claddingHeight: 'Cladding height (m)',
     panelHeight: 'Skirting height (m)',
     tilingRegularWaste: 'Standard tiling waste (%)',
@@ -675,8 +675,8 @@ export const en: Dictionary = {
     wallHeight: 'Wall height for paint / plaster (m)',
     workTypeWaste: '{label} waste (%)',
     empty: 'No quantities to calculate yet. Mark rooms on the plan in the "Finishes" tab.',
-    emptyWithAreas: 'No quantities to calculate yet. Mark rooms on the plan in the "Finishes" tab. You have demolition / construction marks — the PDF and Excel exports will include them.',
-    noWorkItems: 'The rooms have no work types yet — add a work type to a room to see its quantities.',
+    emptyWithAreas: 'No quantities to calculate yet. Mark rooms on the plan in the "Finishes" tab. You have demolition / construction marks - the PDF and Excel exports will include them.',
+    noWorkItems: 'The rooms have no work types yet - add a work type to a room to see its quantities.',
     details: 'Details',
     apartment: 'Apt.',
     room: 'Room',
@@ -714,7 +714,7 @@ export const en: Dictionary = {
     draw: '+ Draw Room',
     drawPolygon: 'Draw room as polygon',
     drawRect: 'Draw room as rectangle',
-    autoDetectHint: 'Detect rooms automatically — suggests areas for you to accept',
+    autoDetectHint: 'Detect rooms automatically - suggests areas for you to accept',
     autoDetect: 'Auto-Detect',
     newRoomTemplate: 'New room template',
     newRoomTemplateHint: "Rooms you draw take the template's room type and work types",
@@ -728,7 +728,7 @@ export const en: Dictionary = {
     makeActive: 'Make apartment {apartment} the active apartment',
     active: 'Active',
     duplicateApartment: 'Duplicate apartment {apartment}',
-    reviewFlag: 'Detected automatically — worth checking',
+    reviewFlag: 'Detected automatically - worth checking',
     page: 'Page {page}',
     detail: {
       typeKept: 'Template updated. Existing work types were not changed.',
@@ -741,7 +741,7 @@ export const en: Dictionary = {
       noType: 'Unclassified / custom',
       applyTemplateConfirm: "Replace the room's work types with the template's work types?",
       applyTemplate: "Apply the template's work types",
-      detectedAs: 'Detected automatically as "{type}" — choose a type to confirm.',
+      detectedAs: 'Detected automatically as "{type}" - choose a type to confirm.',
       notes: 'Notes',
       workTypes: 'Work Types',
       removeWorkItem: 'Remove work type',
@@ -756,7 +756,7 @@ export const en: Dictionary = {
       deductDoors: 'Deduct door widths',
       deductOpenings: 'Deduct openings',
       waste: 'Waste %',
-      noWorkItems: "Add a work type — tiling, cladding, skirting, paint, plaster or waterproofing — to calculate the room's quantities.",
+      noWorkItems: "Add a work type - tiling, cladding, skirting, paint, plaster or waterproofing - to calculate the room's quantities.",
     },
     openings: {
       title: 'Openings',
@@ -823,11 +823,11 @@ export const en: Dictionary = {
       choose: 'Choose a room or apartment',
       rooms: 'Rooms',
       apartments: 'Apartments',
-      apartmentOption: 'Apartment {apartment} — {count} {count|room|rooms}',
+      apartmentOption: 'Apartment {apartment} - {count} {count|room|rooms}',
       willCreate: 'Concrete zones to create: {count} · type: {kind}',
       nothing: 'There is no outline to copy.',
       add: 'Add to Concrete',
-      note: 'Only the outline is copied — the room or apartment is not changed. An apartment becomes one zone per room.',
+      note: 'Only the outline is copied - the room or apartment is not changed. An apartment becomes one zone per room.',
       done: 'Concrete zones created: {count}',
     },
     summary: {
@@ -879,7 +879,7 @@ export const en: Dictionary = {
     legacyExtra: 'Additional bars from earlier data: {dir} {spec}',
     removeLegacyExtra: 'Remove',
     copyBottomToTop: 'Copy Bottom to Top',
-    copyBottomToTopHint: 'Starts Top from the same values — each level stays editable on its own',
+    copyBottomToTopHint: 'Starts Top from the same values - each level stays editable on its own',
     levelResult: 'Level total: {length} · {weight}',
     overlay: {
       bottom: 'Bottom',
@@ -891,16 +891,12 @@ export const en: Dictionary = {
       both: '2 directions',
     },
     spacing: 'Spacing (cm)',
-    runsAlongLong: 'Long-side bars: {length} each',
-    runsAlongShort: 'Short-side bars: {length} each',
-    countTimes: '{count} bars × {length} = {total}',
-    layerEstimate: 'Estimate: about {total} (no bar count)',
     totalLength: 'Total length',
     totalWeight: 'Total weight',
     order: 'To order (incl. waste)',
     orderLength: 'Length to order: {length}',
     estimate: 'Estimate',
-    estimateHint: 'For a zone that is not a rectangle the quantity is estimated as area ÷ spacing — it is not an exact bar count.',
+    estimateHint: 'For a zone that is not a rectangle the quantity is estimated as area ÷ spacing - it is not an exact bar count.',
     noLayers: 'Choose a reinforcement level and fill it in.',
     invalidInput: 'Fill in the diameter and the spacing of every enabled reinforcement level.',
     barsInvalid: 'Enter the diameter, the number of bars and the bar length.',
@@ -913,7 +909,7 @@ export const en: Dictionary = {
       lengthOrder: 'Length to order',
       weightOrder: 'Weight to order',
       total: 'Total',
-      estimateOnly: 'Estimate — not a bar count',
+      estimateOnly: 'Estimate - not a bar count',
       includesEstimate: 'Includes estimate: {length} · {weight}',
       missing: 'Missing data: {count}',
       incompleteSpecs: 'Incomplete reinforcement: {count}',
@@ -1005,7 +1001,7 @@ export const en: Dictionary = {
         noLayers: 'No reinforcement level',
         invalidInput: 'Data missing',
       },
-      missing: 'Missing data: {count} — not included in the totals.',
+      missing: 'Missing data: {count} - not included in the totals.',
       estimateNote: 'Includes estimate: {length} · {weight}',
       estimateOnlyNote: 'All quantities are an estimate (area ÷ spacing), not a bar count.',
     },
@@ -1061,7 +1057,7 @@ export const en: Dictionary = {
         orderLength: 'Length to order (lm)',
       },
       summaryGrandTotal: 'Grand total',
-      uncalibratedNote: 'Note: {count} {count|room is|rooms are} not included in the summary — the page is not calibrated, so quantities cannot be calculated ({rooms}).',
+      uncalibratedNote: 'Note: {count} {count|room is|rooms are} not included in the summary - the page is not calibrated, so quantities cannot be calculated ({rooms}).',
       project: {
         planHeaders: {
           rooms: 'Rooms',
@@ -1070,7 +1066,7 @@ export const en: Dictionary = {
           status: 'Status',
         },
         projectTotal: 'Project total',
-        title: 'Quantity Takeoff — {name}',
+        title: 'Quantity Takeoff - {name}',
         planCountDate: '{count} {count|plan|plans} · {date}',
         summaryHeaders: {
           net: 'Net quantity (m²)',
@@ -1078,7 +1074,7 @@ export const en: Dictionary = {
           length: 'Net length (lm)',
           orderLength: 'Length to order (lm)',
         },
-        uncalibratedNote: 'Note: {count} {count|room was|rooms were} not included — the page is not calibrated.',
+        uncalibratedNote: 'Note: {count} {count|room was|rooms were} not included - the page is not calibrated.',
         roomHeaders: {
           floorArea: 'Floor area (m²)',
           perimeter: 'Perimeter (m)',
@@ -1097,7 +1093,7 @@ export const en: Dictionary = {
 
     quantityPdf: {
       fileName: 'quantity-report-{name}.pdf',
-      title: 'Quantity Takeoff — {name}',
+      title: 'Quantity Takeoff - {name}',
       columns: {
         net: 'Net',
         order: 'To order',
@@ -1137,20 +1133,20 @@ export const en: Dictionary = {
         unit: 'Unit',
       },
       deductionNote: 'An opening taller than the work height (for example a door in partial cladding) is deducted only up to the work height; for skirting only the door width is deducted.',
-      uncalibratedNote: 'Note: {count} {count|room is|rooms are} not included in the summary — the page is not calibrated',
+      uncalibratedNote: 'Note: {count} {count|room is|rooms are} not included in the summary - the page is not calibrated',
       planPageHeader: 'Plan page {page} · {date}',
-      planPageTitle: '{name} — page {page}',
+      planPageTitle: '{name} - page {page}',
     },
 
     projectPdf: {
       fileName: 'quantity-report-project-{name}.pdf',
-      title: 'Project Quantity Takeoff — {name}',
+      title: 'Project Quantity Takeoff - {name}',
       subtitle: '{count} {count|plan|plans} · {date}',
       netUnit: 'Net ({unit})',
       orderUnit: 'To order ({unit})',
       summary: 'Quantity Summary',
-      empty: 'No quantities in the project yet — mark rooms and add work types to them.',
-      uncalibratedNote: 'Note: {count} {count|room was|rooms were} not included — the page is not calibrated.',
+      empty: 'No quantities in the project yet - mark rooms and add work types to them.',
+      uncalibratedNote: 'Note: {count} {count|room was|rooms were} not included - the page is not calibrated.',
       plans: 'Plans',
       planHeaders: {
         rooms: 'Rooms',
@@ -1163,7 +1159,7 @@ export const en: Dictionary = {
     },
 
     areaTable: {
-      title: 'Demolition & New Construction Areas — {title}',
+      title: 'Demolition & New Construction Areas - {title}',
     },
 
     planPdf: {
@@ -1175,8 +1171,8 @@ export const en: Dictionary = {
     comparePdf: {
       fileName: 'comparison-{name}.pdf',
       pageLabel: 'Page {page}',
-      revisionPageLabel: '{revision} — page {page}',
-      title: '{name} — {revision} — page {page}',
+      revisionPageLabel: '{revision} - page {page}',
+      title: '{name} - {revision} - page {page}',
       original: 'Original',
     },
   },

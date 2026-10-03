@@ -44,7 +44,7 @@ export function reinforcementNotation(diameterMm: number | null, spacingCm: numb
 export function reinforcementDescription(row: Pick<RebarItemRow, 'diameterMm' | 'spacingCm' | 'direction'>, { t }: ExportContext): string | null {
   const notation = reinforcementNotation(row.diameterMm, row.spacingCm, t('units.cm'));
   if (!notation) return null;
-  if (row.direction === 'both') return `${notation} — ${t('exports.structural.bothDirections')}`;
+  if (row.direction === 'both') return `${notation} - ${t('exports.structural.bothDirections')}`;
   if (row.direction === null) return notation;
   return `${t(row.direction === 'long' ? 'exports.structural.longSide' : 'exports.structural.shortSide')}: ${notation}`;
 }

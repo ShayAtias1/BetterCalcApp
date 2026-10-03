@@ -7,5 +7,5 @@ import type { Plan } from '../types';
  */
 export function planForReport(plan: Plan, projectName: string | undefined): Plan {
   const project = projectName?.trim();
-  return project ? { ...plan, name: `${project} — ${plan.name}` } : plan;
+  return project ? { ...plan, name: `${project} - ${plan.name}` } : plan;
 }

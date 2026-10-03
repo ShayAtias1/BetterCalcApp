@@ -29,7 +29,7 @@ function levelLines(mesh: RebarMesh, t: T): { tag: string; text: string }[] {
     let body: string | null;
     if (r.mode === 'uniform') {
       const n = specNotation(r.spec);
-      body = n ? `${ltr(n)} — ${t('rebar.overlay.both')}` : null;
+      body = n ? `${ltr(n)} - ${t('rebar.overlay.both')}` : null;
     } else {
       const parts = [
         specNotation(r.long) && `${t('rebar.overlay.long')} ${ltr(specNotation(r.long)!.replace(' @ ', '@'))}`,

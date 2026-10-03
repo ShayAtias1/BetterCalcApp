@@ -94,7 +94,7 @@ export default function RebarSummary({ plan }: { plan: Plan }) {
         <div className="concrete-summary-missing">
           <Icon name="alert" size={12} />
           {t('rebar.summary.missing', { count: summary.missingItemCount })}
-          {summary.incompleteSpecCount > 0 && ` · ${t('rebar.summary.incompleteSpecs', { count: summary.incompleteSpecCount })}`} — {t('rebar.summary.excluded')}
+          {summary.incompleteSpecCount > 0 && ` · ${t('rebar.summary.incompleteSpecs', { count: summary.incompleteSpecCount })}`} - {t('rebar.summary.excluded')}
         </div>
       )}
     </div>

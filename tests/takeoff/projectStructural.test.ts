@@ -276,10 +276,10 @@ test('project PDF layout: aggregates and by-plan tables only — no item schedul
   const b = plan('b', 'Plan B', [el({ mark: 'S01', grade: 'B30', depthM: 0.3 })], [mesh([layer()], { mark: 'M01', points: L_SHAPE })]);
   const blocks = buildProjectStructuralPdfLayout(buildProjectStructural([a, b]), exportContext('en'));
   assert.deepEqual(blocks.filter((x) => x.type === 'section').map((x) => (x as { title: string }).title), [
-    'Concrete — Summary by type and grade',
-    'Concrete — By plan',
-    'Rebar — Summary by diameter',
-    'Rebar — By plan',
+    'Concrete - Summary by type and grade',
+    'Concrete - By plan',
+    'Rebar - Summary by diameter',
+    'Rebar - By plan',
   ]);
   const tables = blocks.filter((x) => x.type === 'table') as Extract<(typeof blocks)[number], { type: 'table' }>[];
   for (const t of tables) for (const r of t.rows) assert.equal(r.cells.length, t.headers.length);
@@ -295,11 +295,11 @@ test('project PDF layout: aggregates and by-plan tables only — no item schedul
   assert.equal(rPlan.rows[0].cells[5], 'Exact');
   const notes = blocks.filter((x) => x.type === 'note').map((x) => (x as { text: string }).text);
   assert.ok(notes.some((t) => t.startsWith('Includes estimate: ')));
-  assert.ok(notes.some((t) => t === 'Missing data: 1 — not included in the totals.'));
+  assert.ok(notes.some((t) => t === 'Missing data: 1 - not included in the totals.'));
 
   assert.deepEqual(buildProjectStructuralPdfLayout(buildProjectStructural([PLAN_A]), exportContext('he')), []);
   const he = buildProjectStructuralPdfLayout(buildProjectStructural([a]), exportContext('he'));
-  assert.equal((he[0] as { title: string }).title, 'בטון — סיכום לפי סוג ודרגה');
+  assert.equal((he[0] as { title: string }).title, 'בטון - סיכום לפי סוג ודרגה');
 });
 
 test('a real project PDF page set is produced with the report writer, in both languages', async () => {

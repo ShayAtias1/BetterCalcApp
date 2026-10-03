@@ -2,7 +2,7 @@ import { formatNumber, useT } from '../i18n';
 import { useAppStore } from '../store/appStore';
 import type { Calibration } from '../types';
 import type { BarSpec, MeshReinforcement, RebarBars, RebarItem, RebarLayerDirection, RebarLevel, RebarMesh } from '../types/structural';
-import { REBAR_DIAMETERS_MM, calculateRebar, type RebarCalc, type RebarLayerCalc } from '../lib/rebar';
+import { REBAR_DIAMETERS_MM, calculateRebar, type RebarCalc } from '../lib/rebar';
 import { levelChoice, meshLevels, specNotation, withDirection, withMode, withoutDirection, withoutExtra, withSpec } from '../lib/rebarMesh';
 import type { MeshLevelChoice } from '../lib/structuralMutations';
 import { cmToMeters, metersToCm } from '../lib/structuralUnits';
@@ -216,23 +216,6 @@ function statusMessage(calc: RebarCalc, t: T): string | null {
   }
 }
 
-/** The product-language line(s) under one bar group: which side the bars run along, and how many of what length. */
-function GroupResult({ direction, result }: { direction: RebarLayerDirection; result: RebarLayerCalc | undefined }) {
-  const t = useT();
-  if (!result || result.totalLengthM === null) return null;
-  if (result.estimated) {
-    return <p className="muted rebar-layer-result">{t('rebar.layerEstimate', { total: metres(result.totalLengthM, t) })}</p>;
-  }
-  const side = metres(result.cutLengthM!, t);
-  return (
-    <p className="muted rebar-layer-result">
-      {t(direction === 'short' ? 'rebar.runsAlongShort' : 'rebar.runsAlongLong', { length: side })}
-      <br />
-      {t('rebar.countTimes', { count: result.barCount!, length: side, total: metres(result.totalLengthM, t) })}
-    </p>
-  );
-}
-
 /** One diameter + one spacing. The spacing is typed in centimetres and stored in metres. */
 function SpecFields({ spec, onChange }: { spec: BarSpec; onChange: (patch: Partial<BarSpec>) => void }) {
   const t = useT();
@@ -270,7 +253,6 @@ function LevelSection({
 }) {
   const t = useT();
   const mine = calc.layers.filter((l) => l.level === level);
-  const resultOf = (direction: RebarLayerDirection) => mine.find((l) => l.direction === direction && !l.uniform);
   const levelOk = calc.status === 'ok' && mine.length > 0;
   const levelLength = levelOk ? mine.reduce((a, l) => a + l.totalLengthM!, 0) : null;
   const levelWeight = levelOk ? mine.reduce((a, l) => a + l.weightKg!, 0) : null;
@@ -302,7 +284,6 @@ function LevelSection({
           )}
         </div>
         <SpecFields spec={spec} onChange={(patch) => onChange(withSpec(reinforcement, direction, patch))} />
-        <GroupResult direction={direction} result={resultOf(direction)} />
       </div>
     );
   };
@@ -331,7 +312,6 @@ function LevelSection({
         <>
           <SpecFields spec={reinforcement.spec} onChange={(patch) => onChange(withSpec(reinforcement, 'uniform', patch))} />
           <p className="muted rebar-layer-result">{t('rebar.uniformHint')}</p>
-          {mine.map((l) => l.direction && <GroupResult key={l.layerId} direction={l.direction} result={l} />)}
         </>
       ) : (
         <>

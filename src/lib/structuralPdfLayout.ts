@@ -62,7 +62,7 @@ function concreteBlocks(concrete: NonNullable<StructuralReport['concrete']>, x: 
   const title = t('exports.structural.concrete');
 
   const blocks: PdfBlock[] = [
-    { type: 'section', title: `${title} — ${t('exports.structural.concreteByGrade')}` },
+    { type: 'section', title: `${title} - ${t('exports.structural.concreteByGrade')}` },
     {
       type: 'table',
       headers: [
@@ -83,7 +83,7 @@ function concreteBlocks(concrete: NonNullable<StructuralReport['concrete']>, x: 
         { cells: [t('exports.common.grandTotal'), '', '', `${summary.elementCount}`, fmt(summary.volumeM3), fmt(summary.orderM3), summary.missingCount > 0 ? `${summary.missingCount}` : ''], bg: C_GRAND, bold: true },
       ],
     },
-    { type: 'section', title: `${title} — ${t('exports.structural.concreteItems')}` },
+    { type: 'section', title: `${title} - ${t('exports.structural.concreteItems')}` },
     {
       type: 'table',
       headers: [
@@ -116,7 +116,7 @@ function rebarBlocks(rebar: NonNullable<StructuralReport['rebar']>, x: ExportCon
   const fmt = (v: number | null, estimated = false) => (v === null ? DASH : `${estimated ? ESTIMATE_PREFIX : ''}${x.number(round(v, 2))}`);
 
   const blocks: PdfBlock[] = [
-    { type: 'section', title: `${title} — ${t('exports.structural.rebarByDiameter')}` },
+    { type: 'section', title: `${title} - ${t('exports.structural.rebarByDiameter')}` },
     {
       type: 'table',
       headers: [
@@ -162,7 +162,7 @@ function rebarBlocks(rebar: NonNullable<StructuralReport['rebar']>, x: ExportCon
   }
 
   blocks.push(
-    { type: 'section', title: `${title} — ${t('exports.structural.rebarItems')}` },
+    { type: 'section', title: `${title} - ${t('exports.structural.rebarItems')}` },
     {
       type: 'table',
       headers: [
@@ -186,7 +186,7 @@ function rebarBlocks(rebar: NonNullable<StructuralReport['rebar']>, x: ExportCon
         return {
           cells: [
             `${it.pageNumber}`,
-            level ? `${markText} — ${level}` : markText,
+            level ? `${markText} - ${level}` : markText,
             description ?? DASH,
             it.barCount !== null && it.barLengthM !== null ? `${it.barCount} × ${x.number(round(it.barLengthM, 2))}` : DASH,
             fmt(it.netLengthM, it.estimated),
@@ -224,7 +224,7 @@ export function buildProjectStructuralPdfLayout(project: ProjectStructural, x: E
     const order = t('exports.projectPdf.orderUnit', { unit: m3 });
     const missing = t('exports.structural.headers.notCalculable');
     blocks.push(
-      { type: 'section', title: `${title} — ${t('exports.structural.concreteByGrade')}` },
+      { type: 'section', title: `${title} - ${t('exports.structural.concreteByGrade')}` },
       {
         type: 'table',
         headers: [t('exports.structural.headers.type'), t('exports.structural.headers.grade'), t('exports.structural.headers.elements'), net, order, missing],
@@ -237,7 +237,7 @@ export function buildProjectStructuralPdfLayout(project: ProjectStructural, x: E
           { cells: [t('exports.common.grandTotal'), '', `${c.elementCount}`, fmt(c.volumeM3), fmt(c.orderM3), c.missingCount > 0 ? `${c.missingCount}` : ''], bg: C_GRAND, bold: true },
         ],
       },
-      { type: 'section', title: `${title} — ${t('exports.structural.byPlan')}` },
+      { type: 'section', title: `${title} - ${t('exports.structural.byPlan')}` },
       {
         type: 'table',
         headers: [t('exports.common.plan'), t('exports.structural.headers.elements'), net, order, missing],
@@ -263,7 +263,7 @@ export function buildProjectStructuralPdfLayout(project: ProjectStructural, x: E
       t('exports.projectPdf.orderUnit', { unit: kg }),
     ];
     blocks.push(
-      { type: 'section', title: `${title} — ${t('exports.structural.rebarByDiameter')}` },
+      { type: 'section', title: `${title} - ${t('exports.structural.rebarByDiameter')}` },
       {
         type: 'table',
         headers: ['Ø', ...amountHeaders, t('exports.structural.headers.basis')],
@@ -294,7 +294,7 @@ export function buildProjectStructuralPdfLayout(project: ProjectStructural, x: E
       blocks.push({ type: 'note', text: t('exports.structural.estimateOnlyNote') });
     }
     blocks.push(
-      { type: 'section', title: `${title} — ${t('exports.structural.byPlan')}` },
+      { type: 'section', title: `${title} - ${t('exports.structural.byPlan')}` },
       {
         type: 'table',
         headers: [t('exports.common.plan'), ...amountHeaders, t('exports.structural.headers.basis'), t('exports.structural.headers.notCalculable')],

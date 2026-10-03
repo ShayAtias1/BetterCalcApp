@@ -362,7 +362,7 @@ test('PDF layout: summary and item tables, ~ on estimates, dashes and a missing 
   );
   const blocks = buildStructuralPdfLayout(buildStructuralReport(p), exportContext('en'));
   const sections = blocks.filter((b) => b.type === 'section').map((b) => (b as { title: string }).title);
-  assert.deepEqual(sections, ['Concrete — Summary by type and grade', 'Concrete — Concrete elements', 'Rebar — Summary by diameter', 'Rebar — Rebar items']);
+  assert.deepEqual(sections, ['Concrete - Summary by type and grade', 'Concrete - Concrete elements', 'Rebar - Summary by diameter', 'Rebar - Rebar items']);
   const tables = blocks.filter((b) => b.type === 'table') as Extract<(typeof blocks)[number], { type: 'table' }>[];
   assert.equal(tables.length, 4);
   for (const t of tables) for (const r of t.rows) assert.equal(r.cells.length, t.headers.length);
@@ -376,22 +376,22 @@ test('PDF layout: summary and item tables, ~ on estimates, dashes and a missing 
 
   const mixedTotal = rSummary.rows.at(-1)!;
   assert.equal(mixedTotal.cells[6], 'Includes estimate');
-  const est = rItems.rows.find((r) => r.cells[1] === 'Mesh 01 — Bottom')!;
+  const est = rItems.rows.find((r) => r.cells[1] === 'Mesh 01 - Bottom')!;
   assert.ok(est.cells[4].startsWith('~ ')); // the printed estimate is marked
   assert.equal(est.cells[3], '—'); // no bar count
   assert.equal(est.cells[7], 'Estimate');
-  assert.equal(rItems.rows.find((r) => r.cells[1] === 'Mesh 02 — Bottom')!.cells[3], '41 × 10');
-  assert.equal(rItems.rows.find((r) => r.cells[1] === 'Mesh 03 — Bottom')!.cells[7], 'Data missing');
+  assert.equal(rItems.rows.find((r) => r.cells[1] === 'Mesh 02 - Bottom')!.cells[3], '41 × 10');
+  assert.equal(rItems.rows.find((r) => r.cells[1] === 'Mesh 03 - Bottom')!.cells[7], 'Data missing');
   const notes = blocks.filter((b) => b.type === 'note').map((b) => (b as { text: string }).text);
   assert.ok(notes.some((t) => t.startsWith('Includes estimate: ')));
-  assert.ok(notes.some((t) => t === 'Missing data: 1 — not included in the totals.'));
+  assert.ok(notes.some((t) => t === 'Missing data: 1 - not included in the totals.'));
 
   assert.deepEqual(buildStructuralPdfLayout(buildStructuralReport(PLAN_A), exportContext('he')), []);
 });
 
 test('PDF layout in Hebrew uses the Hebrew words', () => {
   const blocks = buildStructuralPdfLayout(buildStructuralReport(structuralOnly([el({})])), exportContext('he'));
-  assert.deepEqual(blocks.filter((b) => b.type === 'section').map((b) => (b as { title: string }).title), ['בטון — סיכום לפי סוג ודרגה', 'בטון — אלמנטי בטון']);
+  assert.deepEqual(blocks.filter((b) => b.type === 'section').map((b) => (b as { title: string }).title), ['בטון - סיכום לפי סוג ודרגה', 'בטון - אלמנטי בטון']);
 });
 
 test('a real PDF is produced for both sections in both languages, and none for a plan without structural data', async () => {

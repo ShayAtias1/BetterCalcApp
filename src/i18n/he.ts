@@ -1,5 +1,5 @@
 /**
- * Hebrew — BetterCalc's source dictionary. Its shape defines every translation key (see index.ts).
+ * Hebrew - BetterCalc's source dictionary. Its shape defines every translation key (see index.ts).
  *
  * Keys under the domain sections are the app's stable ids (`workTypes.tiling`, `areaKinds.demolition`),
  * so code reaches a label from the id it already holds. `{name}` marks a value filled in at runtime.
@@ -10,7 +10,7 @@
  */
 export const he = {
   app: {
-    documentTitle: 'BetterCalc — חישוב כמויות מתוכניות',
+    documentTitle: 'BetterCalc - חישוב כמויות מתוכניות',
     language: 'שפה',
   },
 
@@ -112,7 +112,7 @@ export const he = {
 
   quantities: {
     /** Where a quantity would read 0 only because the page has no scale yet. */
-    notCalibrated: '— לא כויל',
+    notCalibrated: '- לא כויל',
   },
 
   /** Room auto-detection progress (lib/roomDetection). */
@@ -172,15 +172,15 @@ export const he = {
 
   pageStatus: {
     calibrated: 'מכויל',
-    notCalibrated: 'לא כויל — לא ניתן לחשב כמויות',
+    notCalibrated: 'לא כויל - לא ניתן לחשב כמויות',
     recalibrate: 'כייל מחדש',
     calibrateNow: 'כייל עכשיו',
   },
 
   calibration: {
     title: 'כיול קנה מידה',
-    titleOriginal: 'כיול קנה מידה — תוכנית מקור',
-    titleRevised: 'כיול קנה מידה — תוכנית מעודכנת',
+    titleOriginal: 'כיול קנה מידה - תוכנית מקור',
+    titleRevised: 'כיול קנה מידה - תוכנית מעודכנת',
     instructions: 'הזן את המרחק האמיתי במטרים בין שתי הנקודות שסימנת בתוכנית.',
     distanceLabel: 'מרחק אמיתי (מטר)',
     distancePlaceholder: 'לדוגמה: 5.00',
@@ -196,11 +196,11 @@ export const he = {
   compare: {
     tools: {
       select: 'בחירה',
-      selectHint: 'בחירה — בחירת סימונים ושינויים על התוכנית',
+      selectHint: 'בחירה - בחירת סימונים ושינויים על התוכנית',
       pan: 'הזזה',
-      panHint: 'הזזה — גרירת התצוגה',
+      panHint: 'הזזה - גרירת התצוגה',
       align: 'יישור',
-      alignHint: 'יישור — גרור את התוכנית המעודכנת למקומה',
+      alignHint: 'יישור - גרור את התוכנית המעודכנת למקומה',
     },
     tabs: {
       layers: 'שכבות ויישור',
@@ -221,7 +221,7 @@ export const he = {
       picking: 'סימון נקודות…',
       pickPairs: 'סמן 2 זוגות נקודות',
       pickRevised: 'לחץ על אותה נקודה בתוכנית המעודכנת',
-      pickOriginal: 'לחץ על נקודת ייחוס בתוכנית המקור — פינת בניין, עמוד וכו׳',
+      pickOriginal: 'לחץ על נקודת ייחוס בתוכנית המקור - פינת בניין, עמוד וכו׳',
       reset: 'איפוס היישור בעמוד זה',
       resetHint: 'מחזיר את הגרסה למיקומה המקורי בעמוד זה',
     },
@@ -233,7 +233,7 @@ export const he = {
       apartmentLabel: 'מספר דירה',
       originalLabel: 'תוכנית מקור (PDF)',
       pickPdf: 'בחר קובץ PDF',
-      revisedLabel: 'תוכניות מעודכנות — אופציונלי, ניתן להוסיף גם מאוחר יותר',
+      revisedLabel: 'תוכניות מעודכנות - אופציונלי, ניתן להוסיף גם מאוחר יותר',
       addPdf: 'הוסף קובץ PDF',
       removeFile: 'הסר קובץ',
       create: 'צור השוואה',
@@ -241,8 +241,8 @@ export const he = {
       notPdfs: 'נא לבחור קבצי PDF בלבד',
     },
     measure: {
-      ambiguousScale: 'הכיול השמור של הגרסה נמדד לפני שינוי קנה המידה של היישור ואינו ניתן לפענוח — כייל מחדש כדי למדוד.',
-      notCalibrated: 'העמוד אינו מכויל — כייל אותו למעלה לפני מדידה.',
+      ambiguousScale: 'הכיול השמור של הגרסה נמדד לפני שינוי קנה המידה של היישור ואינו ניתן לפענוח - כייל מחדש כדי למדוד.',
+      notCalibrated: 'העמוד אינו מכויל - כייל אותו למעלה לפני מדידה.',
       changes: 'תיעוד שינויים',
       markKind: 'סמן {kind} על התוכנית',
       armed: 'מסמן {kind} · {mode}',
@@ -255,7 +255,7 @@ export const he = {
       comparisonName: 'שם ההשוואה',
       apartment: 'דירה',
       apartmentNumber: 'מספר דירה',
-      revisionContext: 'הגרסה המושווית — כל סימון, מדידה, כיול ויישור חדשים נשמרים אליה',
+      revisionContext: 'הגרסה המושווית - כל סימון, מדידה, כיול ויישור חדשים נשמרים אליה',
       original: 'מקור',
       revision: 'הגרסה המושווית',
       noRevision: 'אין גרסה',
@@ -270,8 +270,8 @@ export const he = {
       onlyOneRevision: 'יש רק גרסה אחת בהשוואה',
       allRevisionsHint: 'כל הגרסאות בקובץ אחד',
       allRevisions: 'כל {count} הגרסאות',
-      regionNote: 'האזור שייך לעמוד שבו סומן בלבד — גם בייצוא כל העמודים, שאר העמודים מיוצאים במלואם.',
-      noRegionNote: 'ללא אזור נבחר — מיוצאת התוכנית המלאה.',
+      regionNote: 'האזור שייך לעמוד שבו סומן בלבד - גם בייצוא כל העמודים, שאר העמודים מיוצאים במלואם.',
+      noRegionNote: 'ללא אזור נבחר - מיוצאת התוכנית המלאה.',
       exitHint: 'שמירה ויציאה',
       exit: 'יציאה',
     },
@@ -284,14 +284,14 @@ export const he = {
       calibrated: 'מכויל · {cmPerPixel} ס"מ/פיקסל · לפי {source}',
       sourceOriginal: 'המקור',
       sourceRevision: 'הגרסה',
-      ambiguous: 'כיול ישן שאינו ניתן לפענוח — כייל מחדש',
-      notCalibrated: 'לא כויל — לא ניתן למדוד כמויות',
+      ambiguous: 'כיול ישן שאינו ניתן לפענוח - כייל מחדש',
+      notCalibrated: 'לא כויל - לא ניתן למדוד כמויות',
       inRevision: 'בגרסה',
       revisedPageHint: 'איזה עמוד בתוכנית המעודכנת מוצג מול עמוד המקור הזה',
       revisedPageMissing: 'אינו קיים בגרסה',
       calibrateOriginalHint: 'מדוד מרחק ידוע על תוכנית המקור',
       calibrateRevised: 'לפי הגרסה',
-      calibrateRevisedHint: 'מדוד מרחק ידוע על התוכנית המעודכנת — נשמר בקואורדינטות שלה, כך שהוא נשאר נכון גם אחרי שינוי יישור',
+      calibrateRevisedHint: 'מדוד מרחק ידוע על התוכנית המעודכנת - נשמר בקואורדינטות שלה, כך שהוא נשאר נכון גם אחרי שינוי יישור',
       alignmentLabel: 'יישור',
       scope: 'עמוד {page} · {revision}',
     },
@@ -306,8 +306,8 @@ export const he = {
       empty: 'אין עדיין תוכנית מעודכנת להשוואה מול המקור.',
       addRevision: 'הוסף תוכנית מעודכנת',
       revisionHint: 'לחיצה להשוואה מול גרסה זו · לחיצה כפולה לשינוי שם',
-      moveUp: 'העבר למעלה — הסדר קובע גם את סדר הייצוא',
-      moveDown: 'העבר למטה — הסדר קובע גם את סדר הייצוא',
+      moveUp: 'העבר למעלה - הסדר קובע גם את סדר הייצוא',
+      moveDown: 'העבר למטה - הסדר קובע גם את סדר הייצוא',
       removeRevision: 'הסר תוכנית מעודכנת',
       display: 'תצוגת השכבות',
       original: 'תוכנית מקור',
@@ -341,7 +341,7 @@ export const he = {
     },
     canvas: {
       exportRegionHint: 'גרור על התוכנית כדי לבחור את האזור לייצוא',
-      revisedPageMissing: 'עמוד {page} אינו קיים בגרסה "{revision}" ({count} עמודים) — מוצגת תוכנית המקור בלבד.',
+      revisedPageMissing: 'עמוד {page} אינו קיים בגרסה "{revision}" ({count} עמודים) - מוצגת תוכנית המקור בלבד.',
     },
     /** The raster header of the comparison PDF. */
     exportHeader: {
@@ -352,26 +352,26 @@ export const he = {
     viewModes: {
       label: 'אופן ההשוואה',
       overlay: 'שכבות',
-      overlayHint: 'שכבות — שתי התוכניות זו על גבי זו',
+      overlayHint: 'שכבות - שתי התוכניות זו על גבי זו',
       swipe: 'החלקה',
-      swipeHint: 'החלקה — גרור את המפריד כדי לחשוף כל צד',
+      swipeHint: 'החלקה - גרור את המפריד כדי לחשוף כל צד',
       blink: 'הבהוב',
-      blinkHint: 'הבהוב — החלפה אוטומטית בין התוכניות',
+      blinkHint: 'הבהוב - החלפה אוטומטית בין התוכניות',
     },
   },
 
   toolbar: {
     select: 'בחירה',
-    selectHint: 'בחירה — בחירה והזזת נקודות',
+    selectHint: 'בחירה - בחירה והזזת נקודות',
     pan: 'הזזה',
-    panHint: 'הזזה — גרירת התצוגה',
+    panHint: 'הזזה - גרירת התצוגה',
     draw: 'סימון חדר',
-    drawHint: 'סימון חדר — פוליגון',
+    drawHint: 'סימון חדר - פוליגון',
     drawRect: 'מלבן',
-    drawRectHint: 'סימון חדר — מלבן, שתי פינות נגדיות',
+    drawRectHint: 'סימון חדר - מלבן, שתי פינות נגדיות',
     calibrate: 'כיול קנה מידה',
-    calibrateHint: 'כיול — כיול מחדש של קנה המידה בעמוד זה',
-    calibrateHintMissing: 'כיול — העמוד אינו מכויל, לא ניתן לחשב כמויות',
+    calibrateHint: 'כיול - כיול מחדש של קנה המידה בעמוד זה',
+    calibrateHintMissing: 'כיול - העמוד אינו מכויל, לא ניתן לחשב כמויות',
     calibrateInstruction: 'לחץ שתי נקודות שהמרחק ביניהן ידוע',
     drawProgressClose: '{count} נקודות · לחץ על הנקודה הראשונה או Enter לסגירה',
     drawProgressAdd: '{count} נקודות · לחץ להוספת נקודות',
@@ -383,16 +383,16 @@ export const he = {
 
   startScreen: {
     title: 'פרויקטים',
-    description: 'פרויקט מרכז את תוכניות הכמויות ואת השוואות הגרסאות שלו — וכתב כמויות אחד לכל הפרויקט.',
+    description: 'פרויקט מרכז את תוכניות הכמויות ואת השוואות הגרסאות שלו - וכתב כמויות אחד לכל הפרויקט.',
     newProject: 'פרויקט חדש',
     savedProjects: 'פרויקטים שמורים',
-    empty: 'אין עדיין פרויקטים שמורים. צור פרויקט חדש — ובתוכו תוסיף תוכניות כמויות והשוואות גרסאות.',
+    empty: 'אין עדיין פרויקטים שמורים. צור פרויקט חדש - ובתוכו תוסיף תוכניות כמויות והשוואות גרסאות.',
     open: 'פתח את הפרויקט',
     delete: 'מחק פרויקט',
     deleteConfirm: 'למחוק את הפרויקט? הפעולה בלתי הפיכה.',
     deleteConfirmWithContents: 'למחוק את הפרויקט ואת כל התוכניות וההשוואות שבו? הפעולה בלתי הפיכה.',
     nameLabel: 'שם הפרויקט',
-    namePlaceholder: 'לדוגמה: מגדל הכרמל — קומה טיפוסית',
+    namePlaceholder: 'לדוגמה: מגדל הכרמל - קומה טיפוסית',
     nameHint: 'אחרי היצירה תבחר מה להוסיף לפרויקט: תוכנית כמויות או השוואת גרסאות.',
     create: 'צור פרויקט',
     meta: {
@@ -424,7 +424,7 @@ export const he = {
   /** The measurement sidebar, shared by both apps. */
   measure: {
     title: 'מדידות',
-    notCalibrated: 'העמוד אינו מכויל — יש לכייל אותו לפני מדידה.',
+    notCalibrated: 'העמוד אינו מכויל - יש לכייל אותו לפני מדידה.',
     tools: 'כלי מדידה',
     calcMode: 'אופן חישוב',
     calcModes: {
@@ -459,14 +459,14 @@ export const he = {
       cloud: 'לחץ נקודות וסגור ליד הראשונה ({count})',
       twoPoints: 'לחץ נקודת התחלה וסיום',
       mask: 'לחץ פינת התחלה וסיום למלבן מסתיר',
-      maskLong: 'לחץ פינת התחלה וסיום למלבן שיסתיר את מה שמתחתיו. נוצר בלבן — אפשר לשנות את הצבע אחר כך.',
+      maskLong: 'לחץ פינת התחלה וסיום למלבן שיסתיר את מה שמתחתיו. נוצר בלבן - אפשר לשנות את הצבע אחר כך.',
       dimension: 'לחץ התחלה וסיום; כל לחיצה נוספת ממשיכה את הקו ({count})',
       dimensionLong: 'לחץ נקודת התחלה וסיום, וכל לחיצה נוספת ממשיכה מידה על אותו קו. סיום: Enter, לחיצה כפולה או לחיצה על העצירה האחרונה. ביטול: Esc.',
       text: 'לחץ במקום להוספת הערה',
       textLong: 'לחץ במקום להוספת הערה. נפתח חלון לכתיבת מספר שורות. לעריכה: לחיצה כפולה על ההערה בכלי הבחירה.',
     },
     colorSelectedHint: 'משנה את הצבע של הסימון שנבחר',
-    colorNewHint: 'צבע לסימונים חדשים — בחר סימון קיים כדי לשנות את הצבע שלו',
+    colorNewHint: 'צבע לסימונים חדשים - בחר סימון קיים כדי לשנות את הצבע שלו',
     colorSelected: 'צבע הסימון',
     color: 'צבע',
     freeColor: 'צבע חופשי',
@@ -496,10 +496,10 @@ export const he = {
       unsaved: 'לא נשמר',
       unsavedHint: 'יש שינויים שטרם נשמרו',
       error: 'שגיאה בשמירה',
-      errorHint: 'השמירה נכשלה — העבודה לא נשמרה',
+      errorHint: 'השמירה נכשלה - העבודה לא נשמרה',
     },
-    brandTakeoff: 'BetterCalc — חישוב כמויות',
-    brandCompare: 'BetterCalc — השוואת תוכניות',
+    brandTakeoff: 'BetterCalc - חישוב כמויות',
+    brandCompare: 'BetterCalc - השוואת תוכניות',
     goHome: 'מעבר למסך הבית של BetterCalc',
     backToOverview: 'שמירה וחזרה לסקירת הפרויקט',
     unnamedProject: 'פרויקט ללא שם',
@@ -528,7 +528,7 @@ export const he = {
     gridCustomLabel: 'מרווח (מ׳)',
     gridCustomInvalid: 'הזינו מרווח בין 0.01 ל-100 מטר.',
     gridOpacity: 'עוצמת הקווים',
-    gridNote: 'לתצוגה בלבד — הרשת לא מיוצאת ולא משפיעה על המדידות. קווים עדינים מוסתרים בהקטנה.',
+    gridNote: 'לתצוגה בלבד - הרשת לא מיוצאת ולא משפיעה על המדידות. קווים עדינים מוסתרים בהקטנה.',
     exportHint: 'ייצוא כתב הכמויות או התוכנית',
     quantityReport: 'כתב כמויות',
     markedPlan: 'תוכנית מסומנת',
@@ -539,7 +539,7 @@ export const he = {
     chooseRegion: 'בחירת אזור לייצוא',
     clearRegion: 'ביטול האזור בעמוד זה',
     regionNote: 'העמוד הנוכחי ייחתך לאזור שסימנת. עמודים ללא אזור מיוצאים במלואם.',
-    noRegionNote: 'ללא אזור נבחר — מיוצא העמוד המלא.',
+    noRegionNote: 'ללא אזור נבחר - מיוצא העמוד המלא.',
     projectOverviewShort: 'סקירת פרויקט',
   },
 
@@ -556,7 +556,7 @@ export const he = {
 
   autoDetect: {
     title: 'זיהוי אוטומטי',
-    intro: 'הזיהוי מציע אזורים בלבד — שום חדר לא נוסף לפרויקט ולא נכנס לכמויות עד שתאשר אותו.',
+    intro: 'הזיהוי מציע אזורים בלבד - שום חדר לא נוסף לפרויקט ולא נכנס לכמויות עד שתאשר אותו.',
     detecting: 'מזהה…',
     redetect: 'זיהוי מחדש',
     detect: 'זיהוי חדרים',
@@ -575,7 +575,7 @@ export const he = {
     assignToApartment: 'חדרים שיאושרו ישויכו לדירה {apartment}.',
     assignToNone: 'חדרים שיאושרו ישויכו ללא לדירה (ללא שיוך).',
     detectedType: 'זוהה: {type}',
-    typeUnknown: 'סוג החדר לא זוהה — יש לבדוק ידנית',
+    typeUnknown: 'סוג החדר לא זוהה - יש לבדוק ידנית',
     accept: 'אשר',
     acceptHint: 'הוסף כחדר בפרויקט',
     rejectHint: 'דחה את ההצעה',
@@ -583,8 +583,8 @@ export const he = {
   },
 
   quantityExport: {
-    excelMenu: 'כתב כמויות — Excel',
-    pdfMenu: 'כתב כמויות — PDF',
+    excelMenu: 'כתב כמויות - Excel',
+    pdfMenu: 'כתב כמויות - PDF',
     pdfButton: 'ייצוא ל-PDF',
     excelButton: 'ייצוא לאקסל',
     whichPages: 'איזה עמודים לייצא?',
@@ -618,9 +618,9 @@ export const he = {
     newPlanTitle: 'תוכנית כמויות חדשה',
     newPlanDesc: 'העלאת תוכנית PDF, כיול, סימון חדרים וחישוב כמויות לפי סוגי עבודה.',
     newComparisonTitle: 'השוואת גרסאות חדשה',
-    newComparisonDesc: 'תוכנית מקור מול גרסה מעודכנת — יישור, שכבות וסימון הריסה ובנייה חדשה.',
+    newComparisonDesc: 'תוכנית מקור מול גרסה מעודכנת - יישור, שכבות וסימון הריסה ובנייה חדשה.',
     takeoffTitle: 'חישוב כמויות',
-    takeoffIntro: 'כל תוכנית נמדדת בנפרד — קנה מידה, חדרים ופתחים משלה.',
+    takeoffIntro: 'כל תוכנית נמדדת בנפרד - קנה מידה, חדרים ופתחים משלה.',
     excelHint: 'כתב כמויות לכל תוכניות הפרויקט בקובץ Excel אחד',
     excel: 'Excel',
     pdfHint: 'דוח כמויות PDF לכל תוכניות הפרויקט',
@@ -634,7 +634,7 @@ export const he = {
     duplicatePlan: 'שכפל תוכנית',
     deletePlan: 'מחק תוכנית',
     compareTitle: 'השוואת תוכניות',
-    compareIntro: 'תוכנית מקור מול גרסאות מעודכנות — יישור, שכבות, וסימון הריסה ובנייה חדשה.',
+    compareIntro: 'תוכנית מקור מול גרסאות מעודכנות - יישור, שכבות, וסימון הריסה ובנייה חדשה.',
     newComparison: 'השוואה חדשה',
     noComparisons: 'אין עדיין השוואות בפרויקט. צור השוואה מתוכנית מקור ומגרסה מעודכנת.',
     openComparison: 'פתח את ההשוואה',
@@ -650,7 +650,7 @@ export const he = {
     },
     summaryTitle: 'סיכום כמויות לפרויקט',
     summaryIntro: 'סכום כל התוכניות. לחץ על שורה כדי לראות את חלקה של כל תוכנית.',
-    summaryEmpty: 'אין עדיין כמויות — סמן חדרים בתוכניות והוסף להם סוגי עבודה.',
+    summaryEmpty: 'אין עדיין כמויות - סמן חדרים בתוכניות והוסף להם סוגי עבודה.',
     item: 'פריט',
     net: 'כמות נטו',
     order: 'להזמנה (כולל פחת)',
@@ -668,7 +668,7 @@ export const he = {
   },
 
   quantityTable: {
-    defaultsNote: 'ברירות מחדל לחישוב — משפיעות על פריטי עבודה חדשים ועל פריטים ללא ערך משלהם.',
+    defaultsNote: 'ברירות מחדל לחישוב - משפיעות על פריטי עבודה חדשים ועל פריטים ללא ערך משלהם.',
     claddingHeight: "גובה חיפוי (מ')",
     panelHeight: "גובה פנלים (מ')",
     tilingRegularWaste: 'פחת ריצוף רגיל (%)',
@@ -678,8 +678,8 @@ export const he = {
     wallHeight: "גובה קיר לצבע/טיח (מ')",
     workTypeWaste: 'פחת {label} (%)',
     empty: 'אין עדיין כמויות לחישוב. סמן חדרים על התוכנית בטאב "עבודות גמר".',
-    emptyWithAreas: 'אין עדיין כמויות לחישוב. סמן חדרים על התוכנית בטאב "עבודות גמר". יש לך סימוני הריסה/בנייה — ייצוא ה-PDF וה-Excel יכללו אותם.',
-    noWorkItems: 'לחדרים אין עדיין סוגי עבודה — הוסף סוג עבודה לחדר כדי לראות את כמויותיו.',
+    emptyWithAreas: 'אין עדיין כמויות לחישוב. סמן חדרים על התוכנית בטאב "עבודות גמר". יש לך סימוני הריסה/בנייה - ייצוא ה-PDF וה-Excel יכללו אותם.',
+    noWorkItems: 'לחדרים אין עדיין סוגי עבודה - הוסף סוג עבודה לחדר כדי לראות את כמויותיו.',
     details: 'פרטים',
     apartment: 'דירה',
     room: 'חדר',
@@ -718,7 +718,7 @@ export const he = {
     draw: '+ סימון חדר',
     drawPolygon: 'סימון חדר כפוליגון',
     drawRect: 'סימון חדר כמלבן',
-    autoDetectHint: 'זיהוי אוטומטי של חדרים — מציע אזורים לאישור',
+    autoDetectHint: 'זיהוי אוטומטי של חדרים - מציע אזורים לאישור',
     autoDetect: 'זיהוי אוטומטי',
     newRoomTemplate: 'תבנית לחדר חדש',
     newRoomTemplateHint: 'חדרים שתסמן יקבלו את סוג החדר ואת סוגי העבודה של התבנית',
@@ -732,7 +732,7 @@ export const he = {
     makeActive: 'הפוך את דירה {apartment} לדירה הפעילה',
     active: 'פעילה',
     duplicateApartment: 'שכפל את דירה {apartment}',
-    reviewFlag: 'זוהה אוטומטית — מומלץ לבדוק',
+    reviewFlag: 'זוהה אוטומטית - מומלץ לבדוק',
     page: 'עמוד {page}',
     detail: {
       typeKept: 'התבנית עודכנה. סוגי העבודה הקיימים לא שונו.',
@@ -745,7 +745,7 @@ export const he = {
       noType: 'ללא סיווג / מותאם אישית',
       applyTemplateConfirm: 'להחליף את סוגי העבודה של החדר בסוגי העבודה של התבנית?',
       applyTemplate: 'החל את סוגי העבודה של התבנית',
-      detectedAs: 'זוהה אוטומטית כ"{type}" — בחר סוג כדי לאשר.',
+      detectedAs: 'זוהה אוטומטית כ"{type}" - בחר סוג כדי לאשר.',
       notes: 'הערות',
       workTypes: 'סוגי עבודה',
       removeWorkItem: 'הסר סוג עבודה',
@@ -760,7 +760,7 @@ export const he = {
       deductDoors: 'הפחת רוחב דלתות',
       deductOpenings: 'הפחת פתחים',
       waste: 'פחת %',
-      noWorkItems: 'הוסף סוג עבודה — ריצוף, חיפוי, פנלים, צבע, טיח או איטום — כדי לחשב את כמויות החדר.',
+      noWorkItems: 'הוסף סוג עבודה - ריצוף, חיפוי, פנלים, צבע, טיח או איטום - כדי לחשב את כמויות החדר.',
     },
     openings: {
       title: 'פתחים',
@@ -827,11 +827,11 @@ export const he = {
       choose: 'בחרו חדר או דירה',
       rooms: 'חדרים',
       apartments: 'דירות',
-      apartmentOption: 'דירה {apartment} — {count} חדרים',
+      apartmentOption: 'דירה {apartment} - {count} חדרים',
       willCreate: 'אזורי בטון שייווצרו: {count} · סוג: {kind}',
       nothing: 'אין קו מתאר שאפשר להעתיק.',
       add: 'הוספה לבטון',
-      note: 'מועתק קו המתאר בלבד — החדר או הדירה לא משתנים. דירה הופכת לאזור אחד לכל חדר.',
+      note: 'מועתק קו המתאר בלבד - החדר או הדירה לא משתנים. דירה הופכת לאזור אחד לכל חדר.',
       done: 'נוצרו אזורי בטון: {count}',
     },
     summary: {
@@ -883,7 +883,7 @@ export const he = {
     legacyExtra: 'מוטות נוספים מנתונים קודמים: {dir} {spec}',
     removeLegacyExtra: 'הסרה',
     copyBottomToTop: 'העתק מתחתון לעליון',
-    copyBottomToTopHint: 'מתחיל את העליון מאותם ערכים — כל מפלס נשאר ניתן לעריכה בנפרד',
+    copyBottomToTopHint: 'מתחיל את העליון מאותם ערכים - כל מפלס נשאר ניתן לעריכה בנפרד',
     levelResult: 'סה"כ במפלס: {length} · {weight}',
     overlay: {
       bottom: 'תחתון',
@@ -895,16 +895,12 @@ export const he = {
       both: '2 כיוונים',
     },
     spacing: 'מרווח (ס"מ)',
-    runsAlongLong: 'מוטות הצלע הארוכה: {length} כל אחד',
-    runsAlongShort: 'מוטות הצלע הקצרה: {length} כל אחד',
-    countTimes: '{count} מוטות × {length} = {total}',
-    layerEstimate: 'הערכה: כ-{total} (בלי ספירת מוטות)',
     totalLength: 'אורך כולל',
     totalWeight: 'משקל כולל',
     order: 'להזמנה (כולל פחת)',
     orderLength: 'אורך להזמנה: {length}',
     estimate: 'הערכה',
-    estimateHint: 'באזור שאינו מלבן הכמות מוערכת לפי שטח ÷ מרווח — זו אינה ספירת מוטות מדויקת.',
+    estimateHint: 'באזור שאינו מלבן הכמות מוערכת לפי שטח ÷ מרווח - זו אינה ספירת מוטות מדויקת.',
     noLayers: 'בחרו מפלס זיון ומלאו אותו.',
     invalidInput: 'מלאו קוטר ומרווח בכל מפלס זיון שנבחר.',
     barsInvalid: 'הזינו קוטר, מספר מוטות ואורך מוט.',
@@ -917,7 +913,7 @@ export const he = {
       lengthOrder: 'אורך להזמנה',
       weightOrder: 'משקל להזמנה',
       total: 'סה"כ',
-      estimateOnly: 'הערכה — לא ספירת מוטות',
+      estimateOnly: 'הערכה - לא ספירת מוטות',
       includesEstimate: 'כולל הערכה: {length} · {weight}',
       missing: 'חסרים נתונים: {count}',
       incompleteSpecs: 'מפרטי זיון חסרים: {count}',
@@ -1012,7 +1008,7 @@ export const he = {
         noLayers: 'אין מפלס זיון',
         invalidInput: 'נתונים חסרים',
       },
-      missing: 'חסרים נתונים: {count} — לא נכללים בסכומים.',
+      missing: 'חסרים נתונים: {count} - לא נכללים בסכומים.',
       estimateNote: 'כולל הערכה: {length} · {weight}',
       estimateOnlyNote: 'כל הכמויות הן הערכה לפי שטח ÷ מרווח, לא ספירת מוטות.',
     },
@@ -1068,7 +1064,7 @@ export const he = {
         orderLength: 'אורך להזמנה (מ"א)',
       },
       summaryGrandTotal: 'סה"כ כולל',
-      uncalibratedNote: 'שים לב: {count} חדרים לא נכללו בסיכום — העמוד שלהם אינו מכויל ולא ניתן לחשב את כמויותיהם ({rooms}).',
+      uncalibratedNote: 'שים לב: {count} חדרים לא נכללו בסיכום - העמוד שלהם אינו מכויל ולא ניתן לחשב את כמויותיהם ({rooms}).',
       project: {
         planHeaders: {
           rooms: 'חדרים',
@@ -1077,7 +1073,7 @@ export const he = {
           status: 'סטטוס',
         },
         projectTotal: 'סה"כ פרויקט',
-        title: 'כתב כמויות — {name}',
+        title: 'כתב כמויות - {name}',
         planCountDate: '{count} תוכניות · {date}',
         summaryHeaders: {
           net: 'כמות נטו (מ"ר)',
@@ -1085,7 +1081,7 @@ export const he = {
           length: 'אורך נטו (מ"א)',
           orderLength: 'אורך להזמנה (מ"א)',
         },
-        uncalibratedNote: 'שים לב: {count} חדרים לא נכללו — העמוד שלהם אינו מכויל.',
+        uncalibratedNote: 'שים לב: {count} חדרים לא נכללו - העמוד שלהם אינו מכויל.',
         roomHeaders: {
           floorArea: 'שטח רצפה (מ"ר)',
           perimeter: "היקף (מ')",
@@ -1105,7 +1101,7 @@ export const he = {
     /** The contractor's quantity report (exportQuantitiesPdf). */
     quantityPdf: {
       fileName: 'דוח-כמויות-{name}.pdf',
-      title: 'כתב כמויות — {name}',
+      title: 'כתב כמויות - {name}',
       columns: {
         net: 'נטו',
         order: 'להזמנה',
@@ -1145,21 +1141,21 @@ export const he = {
         unit: 'יחידה',
       },
       deductionNote: 'פתח גבוה מגובה העבודה (למשל דלת בחיפוי חלקי) מנוכה רק עד גובה העבודה; בפנלים מנוכה רוחב הדלת בלבד.',
-      uncalibratedNote: 'שים לב: {count} חדרים לא נכללו בסיכום — העמוד שלהם אינו מכויל',
+      uncalibratedNote: 'שים לב: {count} חדרים לא נכללו בסיכום - העמוד שלהם אינו מכויל',
       planPageHeader: 'עמוד תוכנית {page} · {date}',
-      planPageTitle: '{name} — עמוד {page}',
+      planPageTitle: '{name} - עמוד {page}',
     },
 
     /** The whole-project report (exportProjectPdf). */
     projectPdf: {
       fileName: 'דוח-כמויות-פרויקט-{name}.pdf',
-      title: 'כתב כמויות לפרויקט — {name}',
+      title: 'כתב כמויות לפרויקט - {name}',
       subtitle: '{count} תוכניות · {date}',
       netUnit: 'נטו ({unit})',
       orderUnit: 'להזמנה ({unit})',
       summary: 'סיכום כמויות',
-      empty: 'אין עדיין כמויות בפרויקט — סמן חדרים והוסף להם סוגי עבודה.',
-      uncalibratedNote: 'שים לב: {count} חדרים לא נכללו — העמוד שלהם אינו מכויל.',
+      empty: 'אין עדיין כמויות בפרויקט - סמן חדרים והוסף להם סוגי עבודה.',
+      uncalibratedNote: 'שים לב: {count} חדרים לא נכללו - העמוד שלהם אינו מכויל.',
       plans: 'תוכניות',
       planHeaders: {
         rooms: 'חדרים',
@@ -1173,7 +1169,7 @@ export const he = {
 
     /** Demolition/construction table pages (areaMeasurementTable). */
     areaTable: {
-      title: 'טבלת שטחי הריסה ובנייה — {title}',
+      title: 'טבלת שטחי הריסה ובנייה - {title}',
     },
 
     planPdf: {
@@ -1185,8 +1181,8 @@ export const he = {
     comparePdf: {
       fileName: 'השוואה-{name}.pdf',
       pageLabel: 'עמוד {page}',
-      revisionPageLabel: '{revision} — עמוד {page}',
-      title: '{name} — {revision} — עמוד {page}',
+      revisionPageLabel: '{revision} - עמוד {page}',
+      title: '{name} - {revision} - עמוד {page}',
       original: 'מקור',
     },
   },

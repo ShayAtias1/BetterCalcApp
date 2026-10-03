@@ -248,14 +248,14 @@ test('PDF: Top and Bottom are distinct, uniform says "both directions", directio
   const blocks = buildStructuralPdfLayout(buildStructuralReport(p), exportContext('en'));
   const items = blocks.filter((b) => b.type === 'table').at(-1) as Extract<(typeof blocks)[number], { type: 'table' }>;
   assert.deepEqual(items.rows.map((r) => [r.cells[1], r.cells[2]]), [
-    ['Mesh 01 — Bottom', 'Ø12 @ 20 cm — Both directions'],
-    ['Mesh 01 — Top', 'Long side: Ø12 @ 20 cm'],
-    ['Mesh 01 — Top', 'Short side: Ø10 @ 15 cm'],
+    ['Mesh 01 - Bottom', 'Ø12 @ 20 cm - Both directions'],
+    ['Mesh 01 - Top', 'Long side: Ø12 @ 20 cm'],
+    ['Mesh 01 - Top', 'Short side: Ø10 @ 15 cm'],
   ]);
   const he = buildStructuralPdfLayout(buildStructuralReport(p), exportContext('he'));
   const hItems = he.filter((b) => b.type === 'table').at(-1) as Extract<(typeof he)[number], { type: 'table' }>;
-  assert.equal(hItems.rows[0].cells[1], 'רשת 01 — תחתון');
-  assert.equal(hItems.rows[0].cells[2], 'Ø12 @ 20 ס"מ — שני הכיוונים');
+  assert.equal(hItems.rows[0].cells[1], 'רשת 01 - תחתון');
+  assert.equal(hItems.rows[0].cells[2], 'Ø12 @ 20 ס"מ - שני הכיוונים');
   assert.equal(hItems.rows[1].cells[2], 'צלע ארוכה: Ø12 @ 20 ס"מ');
 });
 

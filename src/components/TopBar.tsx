@@ -317,10 +317,6 @@ export default function TopBar() {
           </p>
         </TopBarMenu>
 
-        <button className="btn-ghost small" onClick={backToOverview} title={t('topBar.backToOverview')}>
-          <Icon name="exit" />
-          <span className="btn-label">{t('topBar.projectOverviewShort')}</span>
-        </button>
         <LanguageSwitch />
       </div>
     </div>

@@ -124,6 +124,8 @@ const PATHS: Record<IconName, string> = {
  * hidden from assistive tech, because the button's own text already names the action.
  */
 const DIRECTIONAL: ReadonlySet<IconName> = new Set<IconName>(['chevron-previous', 'chevron-next']);
+// Drawn pointing left (back in LTR); mirrored when the page reads RTL.
+const DIRECTIONAL_LTR: ReadonlySet<IconName> = new Set<IconName>(['back']);
 
 export default function Icon({
   name,
@@ -138,7 +140,7 @@ export default function Icon({
 }) {
   return (
     <svg
-      className={`icon ${DIRECTIONAL.has(name) ? 'icon-directional ' : ''}${className ?? ''}`}
+      className={`icon ${DIRECTIONAL.has(name) ? 'icon-directional ' : ''}${DIRECTIONAL_LTR.has(name) ? 'icon-directional-ltr ' : ''}${className ?? ''}`}
       width={size}
       height={size}
       viewBox="0 0 24 24"
