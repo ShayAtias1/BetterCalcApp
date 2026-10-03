@@ -3180,3 +3180,9 @@ html[dir='rtl'] .qty-table .col-room {
 .rebar-sheets-line {
   margin: 2px 0 0;
 }
+
+/* Project quantities card: the domain switch is the plan panel's, sitting inside the card. */
+.project-domains {
+  padding-inline: 0;
+  margin-bottom: var(--s-3);
+}

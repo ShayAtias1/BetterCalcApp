@@ -1,5 +1,5 @@
-import ProjectStructuralSummary from './ProjectStructuralSummary';
-import { buildProjectStructural, finishesSummaryMode } from '../lib/structuralQuantities';
+import { ProjectConcreteTable, ProjectRebarTable } from './ProjectStructuralTables';
+import { buildProjectStructural } from '../lib/structuralQuantities';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { formatDate, formatNumber, useLanguage, useT, type TranslateFn } from '../i18n';
 import { useAppStore } from '../store/appStore';
@@ -30,6 +30,8 @@ function comparisonMeta(c: Comparison, t: TranslateFn): string {
   parts.push(t('projectOverview.comparisonMeta.updated', { date: formatDate(c.updatedAt) }));
   return parts.join(' · ');
 }
+
+const DOMAIN_LABEL = { finishes: 'workspace.tabs.rooms', concrete: 'workspace.tabs.concrete', rebar: 'workspace.tabs.rebar' } as const;
 
 const DASH = '-';
 const fmt = (v: number | null) => (v == null ? DASH : formatNumber(v));
@@ -75,7 +77,11 @@ export default function ProjectOverview() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the labels inside depend on the UI language
   const quantities = useMemo(() => buildProjectQuantities(plans), [plans, language]);
   const structural = useMemo(() => buildProjectStructural(plans), [plans]);
-  const summaryMode = finishesSummaryMode(quantities.totals.length, structural);
+  // The one project quantities card: Finishes, Concrete and Rebar are separate tables inside it.
+  const [domainChoice, setDomainChoice] = useState<'finishes' | 'concrete' | 'rebar' | null>(null);
+  const domainCounts = { finishes: quantities.totals.length, concrete: structural.concrete?.elementCount ?? 0, rebar: structural.rebar?.itemCount ?? 0 };
+  // Until the user picks one, show the first domain that has something (Finishes when none does).
+  const domain = domainChoice ?? (['finishes', 'concrete', 'rebar'] as const).find((d) => domainCounts[d] > 0) ?? 'finishes';
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -145,6 +151,11 @@ export default function ProjectOverview() {
       <div className="top-bar">
         <div className="top-bar-group identity">
           <BrandHomeLink title={t('topBar.goHome')} />
+          {/* "Projects" sits right next to the logo (the reading start in either direction). */}
+          <button className="btn-ghost small" onClick={() => void closeProject()} title={t('projectOverview.backToProjects')}>
+            <Icon name="exit" />
+            <span className="btn-label">{t('projectOverview.projects')}</span>
+          </button>
           <input
             className="project-name-input"
             dir="auto"
@@ -155,10 +166,6 @@ export default function ProjectOverview() {
         </div>
         <div className="top-bar-group grow" />
         <div className="top-bar-group output">
-          <button className="btn-ghost small" onClick={() => void closeProject()} title={t('projectOverview.backToProjects')}>
-            <Icon name="exit" />
-            <span className="btn-label">{t('projectOverview.projects')}</span>
-          </button>
           <LanguageSwitch />
         </div>
       </div>
@@ -305,13 +312,26 @@ export default function ProjectOverview() {
               )}
             </div>
 
-            {/* The finishes summary stays as it was; a project with only concrete/rebar shows no empty finishes panel. */}
-            {summaryMode !== 'skip' && (
-            <div className="home-panel">
+            <div className="home-panel project-quantities">
               <div className="home-panel-text">
                 <h2>{t('projectOverview.summaryTitle')}</h2>
-                <p className="muted">{t('projectOverview.summaryIntro')}</p>
               </div>
+              <div className="qty-domains project-domains" role="tablist" aria-label={t('quantitiesPanel.domains')}>
+                {(['finishes', 'concrete', 'rebar'] as const).map((d) => (
+                  <button key={d} role="tab" aria-selected={domain === d} className={`btn-ghost small ${domain === d ? 'active' : ''}`} onClick={() => setDomainChoice(d)}>
+                    {t(DOMAIN_LABEL[d])}
+                    {domainCounts[d] > 0 && <span className="qty-domain-count">{domainCounts[d]}</span>}
+                  </button>
+                ))}
+              </div>
+
+              {domain === 'concrete' &&
+                (structural.concrete ? <ProjectConcreteTable concrete={structural.concrete} /> : <p className="muted project-summary-empty">{t('projectOverview.emptyConcrete')}</p>)}
+              {domain === 'rebar' && (structural.rebar ? <ProjectRebarTable rebar={structural.rebar} /> : <p className="muted project-summary-empty">{t('projectOverview.emptyRebar')}</p>)}
+
+              {domain === 'finishes' && (
+              <>
+              <p className="muted">{t('projectOverview.summaryIntro')}</p>
               {quantities.totals.length === 0 ? (
                 <p className="muted project-summary-empty">{t('projectOverview.summaryEmpty')}</p>
               ) : (
@@ -355,10 +375,10 @@ export default function ProjectOverview() {
                   {t('projectOverview.uncalibratedRooms', { count: quantities.uncalibratedRoomCount })}
                 </div>
               )}
+              </>
+              )}
             </div>
-            )}
 
-            <ProjectStructuralSummary structural={structural} />
           </div>
         )}
       </div>
