@@ -9,6 +9,7 @@ import PdfViewer from './components/PdfViewer';
 import CalibrationDialog from './components/CalibrationDialog';
 import RoomPanel from './components/RoomPanel';
 import QuantitiesPanel from './components/QuantitiesPanel';
+import QuantityExportDialogs from './components/QuantityExportDialogs';
 import PageStatusBar from './components/PageStatusBar';
 import MeasureToolbar from './components/MeasureToolbar';
 import MarkupToolbar from './components/MarkupToolbar';
@@ -81,6 +82,7 @@ function Workspace() {
         </div>
       </div>
       <QuantitiesPanel />
+      <QuantityExportDialogs />
     </div>
   );
 }

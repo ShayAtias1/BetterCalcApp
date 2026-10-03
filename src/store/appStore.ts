@@ -373,6 +373,15 @@ interface AppState {
   quantitiesOpen: boolean;
   quantitiesHeight: number;
   quantitiesMaximized: boolean;
+  /**
+   * The plan export dialog that is open (PDF or Excel), and which export is running. Held here - not in
+   * the buttons that open it - because the top bar's export menu closes (and unmounts its items) the
+   * moment one is clicked; the dialogs are mounted once in the workspace (QuantityExportDialogs).
+   */
+  quantityExportDialog: { kind: 'pdf' | 'excel'; surface: 'topbar_menu' | 'quantities_panel' } | null;
+  quantityExportBusy: 'pdf' | 'excel' | null;
+  setQuantityExportDialog: (dialog: { kind: 'pdf' | 'excel'; surface: 'topbar_menu' | 'quantities_panel' } | null) => void;
+  setQuantityExportBusy: (busy: 'pdf' | 'excel' | null) => void;
   setQuantitiesOpen: (open: boolean) => void;
   setQuantitiesHeight: (px: number) => void;
   toggleQuantitiesMaximized: () => void;
@@ -583,6 +592,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   quantitiesOpen: false,
   quantitiesHeight: 320,
   quantitiesMaximized: false,
+  quantityExportDialog: null,
+  quantityExportBusy: null,
   overlayVisible: loadOverlayVisibility(),
   setOverlayVisible: (key, visible) => {
     const next = { ...get().overlayVisible, [key]: visible };
@@ -1147,6 +1158,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   setOrthoSnap: (v) => set({ orthoSnap: v }),
+  setQuantityExportDialog: (dialog) => set({ quantityExportDialog: dialog }),
+  setQuantityExportBusy: (busy) => set({ quantityExportBusy: busy }),
   setQuantitiesOpen: (open) => set({ quantitiesOpen: open, ...(open ? {} : { quantitiesMaximized: false }) }),
   // The height is clamped by the panel itself against the live viewport; the store only remembers it.
   setQuantitiesHeight: (px) => set({ quantitiesHeight: px }),

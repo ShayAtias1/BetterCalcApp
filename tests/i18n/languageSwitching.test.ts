@@ -99,7 +99,7 @@ test('translatorFor stays on its language while the UI language changes (an expo
 
 test('every export is handed the UI language read at the moment the component renders (useLanguage), never a constant', () => {
   const sites: [string, RegExp[]][] = [
-    ['src/components/QuantityExportActions.tsx', [/exportQuantitiesToExcel\([^\n]*, language\)/, /exportQuantitiesToPdf\([^\n]*, language\)/]],
+    ['src/components/QuantityExportDialogs.tsx', [/exportQuantitiesToExcel\([^\n]*, language\)/, /exportQuantitiesToPdf\([^\n]*, language\)/]],
     ['src/components/TopBar.tsx', [/exportPlanPageToPdf\([^\n]*, language\)/, /exportAllPlanPagesToPdf\([^\n]*, language\)/]],
     ['src/components/ProjectOverview.tsx', [/exportProjectToExcel\([^\n]*, language\)/, /exportProjectToPdf\([^\n]*, language\)/]],
     ['src/components/compare/CompareWorkspace.tsx', [/exportComposite\(language\)/, /exportCompositesAsPdf\([^\n]*, language\)/]],
