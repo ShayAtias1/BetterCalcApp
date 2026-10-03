@@ -20,7 +20,7 @@ import { clonePlanForDuplicate } from '../lib/planDuplication';
 import { createEmptyComparison, useCompareStore } from './compareStore';
 import type { Comparison } from '../types/compare';
 import type { ConcreteElement, ConcreteKind } from '../types/structural';
-import { addConcreteElement, newConcreteElement, removeConcreteElement, updateConcreteElement as updateConcrete } from '../lib/structuralMutations';
+import { addConcreteElement, changeConcreteKind as changeKind, newConcreteElement, removeConcreteElement, updateConcreteElement as updateConcrete } from '../lib/structuralMutations';
 import { polygonAreaPx } from '../lib/geometry';
 import { createHistoryTracker } from '../lib/undoHistory';
 import { loadPdfPlanSource } from '../lib/planSource';
@@ -312,6 +312,8 @@ interface AppState {
   setConcreteKind: (kind: ConcreteKind) => void;
   /** Debounced into one undo step per burst, like typing in a room's fields. */
   updateConcreteElement: (id: string, patch: Partial<Omit<ConcreteElement, 'id'>>) => void;
+  /** Changes the kind of an existing zone (mark renumbered if still automatic). One undo step. */
+  changeConcreteElementKind: (id: string, kind: ConcreteKind) => void;
   deleteConcreteElement: (id: string) => void;
   finishDrawing: () => void;
   finishRectangle: (p1: Point, p2: Point) => void;
@@ -908,6 +910,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
     set({ project: { ...updateConcrete(project, id, patch), updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
+  changeConcreteElementKind: (id, kind) => {
+    const { project } = get();
+    if (!project) return;
+    const next = changeKind(project, id, kind);
+    if (next === project) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...next, updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
   deleteConcreteElement: (id) => {

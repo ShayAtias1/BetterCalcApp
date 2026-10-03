@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useT, formatNumber } from '../i18n';
 import { useAppStore } from '../store/appStore';
 import type { Calibration } from '../types';
-import type { ConcreteElement } from '../types/structural';
+import type { ConcreteElement, ConcreteKind } from '../types/structural';
 import { calculateConcrete, type ConcreteCalc } from '../lib/concrete';
 import { CONCRETE_KINDS } from '../lib/structuralMutations';
 import { concreteOf } from '../lib/structuralPlan';
@@ -58,6 +58,7 @@ export default function ConcretePanel() {
   const setSelectedId = useAppStore((s) => s.setSelectedConcreteId);
   const updateElement = useAppStore((s) => s.updateConcreteElement);
   const deleteElement = useAppStore((s) => s.deleteConcreteElement);
+  const changeKind = useAppStore((s) => s.changeConcreteElementKind);
 
   if (!project) return null;
   const elements = concreteOf(project);
@@ -93,6 +94,7 @@ export default function ConcretePanel() {
           element={selected}
           calibration={project.pages[selected.pageNumber]?.calibration ?? null}
           onUpdate={(patch) => updateElement(selected.id, patch)}
+          onChangeKind={(kind) => changeKind(selected.id, kind)}
         />
         {/* Kept under the form so an edit can be seen landing in the totals as it is typed. */}
         <ConcreteSummary plan={project} />
@@ -179,10 +181,12 @@ function ConcreteDetail({
   element,
   calibration,
   onUpdate,
+  onChangeKind,
 }: {
   element: ConcreteElement;
   calibration: Calibration | null;
   onUpdate: (patch: Partial<Omit<ConcreteElement, 'id'>>) => void;
+  onChangeKind: (kind: ConcreteKind) => void;
 }) {
   const t = useT();
   const calc = calculateConcrete(element, calibration);
@@ -209,6 +213,19 @@ function ConcreteDetail({
 
   return (
     <div className="room-detail">
+      {/* Same zone for every kind, so a wrong pick is fixed here instead of by redrawing. */}
+      <div className="concrete-kinds" role="group" aria-label={t('concrete.kindPicker')}>
+        {CONCRETE_KINDS.map((kind) => (
+          <button
+            key={kind}
+            className={`btn-ghost small ${element.kind === kind ? 'active' : ''}`}
+            aria-pressed={element.kind === kind}
+            onClick={() => onChangeKind(kind)}
+          >
+            {t(`concrete.kinds.${kind}`)}
+          </button>
+        ))}
+      </div>
       {message && <div className="warning-box">{message}</div>}
 
       <div className="metrics-row concrete-results">

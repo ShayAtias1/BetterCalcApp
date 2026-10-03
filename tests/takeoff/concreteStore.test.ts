@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { PLAN_A } from './fixtures.ts';
 import { concreteOf } from '../../src/lib/structuralPlan.ts';
 import { calculateConcrete } from '../../src/lib/concrete.ts';
+import { buildConcreteSummary } from '../../src/lib/structuralQuantities.ts';
 
 Object.assign(globalThis, { DOMMatrix: class {}, DOMPoint: class {}, DOMRect: class {}, Path2D: class {} });
 const { useAppStore } = await import('../../src/store/appStore.ts');
@@ -142,4 +143,31 @@ test('the calculation reads the element exactly as the form edits it: manual siz
   assert.ok(Math.abs(calc.volumeM3! - 1.92) < 1e-9);
   store().updateConcreteElement(id, { sizeOverride: undefined });
   assert.equal(calculateConcrete(elements()[0], null).status, 'no-scale');
+});
+
+test('changing the kind is one undo step, updates the summary at once, and leaves the zone alone', () => {
+  openConcrete();
+  store().setProject(structuredClone(PLAN_A));
+  store().setCurrentPage(1);
+  store().setDrawTarget('concrete');
+  store().setConcreteKind('slab');
+  store().finishRectangle({ x: 0, y: 0 }, { x: 100, y: 100 });
+  const id = elements()[0].id;
+  store().updateConcreteElement(id, { depthM: 2 });
+  store().changeConcreteElementKind(id, 'wall');
+  assert.equal(elements()[0].kind, 'wall');
+  assert.equal(elements()[0].mark, 'W01');
+  assert.deepEqual(elements()[0].points, [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]);
+  const historyAfter = store().history.length; // includes the pending depth edit the change flushed
+  assert.deepEqual(buildConcreteSummary(store().project!).rows.map((r) => r.kind), ['wall']);
+
+  store().changeConcreteElementKind(id, 'wall'); // same kind: no history entry
+  assert.equal(store().history.length, historyAfter);
+
+  store().undo(); // exactly the kind change, not the depth edit before it
+  assert.equal(elements()[0].kind, 'slab');
+  assert.equal(elements()[0].mark, 'S01');
+  assert.equal(elements()[0].depthM, 2);
+  store().redo();
+  assert.equal(elements()[0].kind, 'wall');
 });

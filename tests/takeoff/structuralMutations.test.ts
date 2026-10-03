@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { PLAN_A } from './fixtures.ts';
 import {
   addConcreteElement,
+  changeConcreteKind,
   newConcreteElement,
   nextConcreteMark,
   removeConcreteElement,
@@ -81,4 +82,53 @@ test('an unknown id changes nothing', () => {
   const plan = addConcreteElement(structuredClone(PLAN_A), newConcreteElement(PLAN_A, 1, 'slab', sq));
   assert.equal(updateConcreteElement(plan, 'nope', { depthM: 1 }), plan);
   assert.equal(removeConcreteElement(plan, 'nope'), plan);
+});
+
+test('changing kind: auto mark is renumbered for the new kind, geometry and dimension are untouched', () => {
+  let plan = structuredClone(PLAN_A);
+  plan = addConcreteElement(plan, { ...el('slab', 'S01'), id: 'a', depthM: 0.2, grade: 'B30', wastePercent: 5 });
+  plan = addConcreteElement(plan, { ...el('wall', 'W01'), id: 'w1' });
+  plan = addConcreteElement(plan, { ...el('wall', 'W02'), id: 'w2' });
+
+  const changed = changeConcreteKind(plan, 'a', 'wall');
+  const a = concreteOf(changed).find((e) => e.id === 'a')!;
+  assert.equal(a.kind, 'wall');
+  assert.equal(a.mark, 'W03'); // next free wall number
+  assert.deepEqual(a.points, sq);
+  assert.equal(a.depthM, 0.2);
+  assert.equal(a.grade, 'B30');
+  assert.equal(a.wastePercent, 5);
+  assert.equal(changed.rooms, plan.rooms);
+  assert.equal(concreteOf(plan).find((e) => e.id === 'a')!.kind, 'slab'); // input not mutated
+
+  // the freed number is picked up by the old kind next time
+  assert.equal(nextConcreteMark(concreteOf(changed), 'slab'), 'S01');
+});
+
+test('changing kind keeps a mark the user typed, and renumbers one that merely looks automatic', () => {
+  let plan = structuredClone(PLAN_A);
+  plan = addConcreteElement(plan, { ...el('slab', 'Roof slab'), id: 'typed' });
+  plan = addConcreteElement(plan, { ...el('slab', 'S07'), id: 'auto' });
+  plan = addConcreteElement(plan, { ...el('slab', 'W01'), id: 'foreign' }); // a slab marked with another kind's letter: user text
+  const out = concreteOf(changeConcreteKind(changeConcreteKind(changeConcreteKind(plan, 'typed', 'beam'), 'auto', 'beam'), 'foreign', 'column'));
+  assert.equal(out.find((e) => e.id === 'typed')!.mark, 'Roof slab');
+  assert.equal(out.find((e) => e.id === 'auto')!.mark, 'B01');
+  assert.equal(out.find((e) => e.id === 'foreign')!.mark, 'W01');
+});
+
+test('a quantity belongs to columns only: it is dropped when the kind stops being a column, and not invented', () => {
+  let plan = addConcreteElement(structuredClone(PLAN_A), { ...el('column', 'C01'), id: 'c', quantity: 4, depthM: 3 });
+  const slab = concreteOf(changeConcreteKind(plan, 'c', 'slab'))[0];
+  assert.equal('quantity' in slab, false);
+  assert.equal(slab.depthM, 3);
+  assert.equal(slab.mark, 'S01');
+  const back = concreteOf(changeConcreteKind(changeConcreteKind(plan, 'c', 'slab'), 'c', 'column'))[0];
+  assert.equal('quantity' in back, false);
+  assert.equal(back.mark, 'C01');
+});
+
+test('changing to the same kind or an unknown id changes nothing', () => {
+  const plan = addConcreteElement(structuredClone(PLAN_A), { ...el('slab', 'S01'), id: 'a' });
+  assert.equal(changeConcreteKind(plan, 'a', 'slab'), plan);
+  assert.equal(changeConcreteKind(plan, 'zzz', 'wall'), plan);
 });

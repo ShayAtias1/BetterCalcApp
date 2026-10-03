@@ -66,6 +66,24 @@ export function updateConcreteElement(plan: Plan, id: string, patch: Partial<Omi
   return { ...plan, concreteElements: elements.map((e) => (e.id === id ? merge(e) : e)) };
 }
 
+/**
+ * Changes an element's kind and nothing about its zone. The mark follows the kind only while it is
+ * still an automatic one — `<old letter><number>` — and is then renumbered for the new kind;
+ * a mark the user typed is kept. The vertical dimension stays (thickness and height are the same
+ * field). A quantity only belongs to columns, so it is dropped when the new kind is not a column —
+ * otherwise a hidden "4" would silently multiply a slab. Same kind or unknown id: the plan unchanged.
+ */
+export function changeConcreteKind(plan: Plan, id: string, kind: ConcreteKind): Plan {
+  const element = concreteOf(plan).find((e) => e.id === id);
+  if (!element || element.kind === kind) return plan;
+  const wasAutoMark = new RegExp(`^${CONCRETE_MARK_PREFIX[element.kind]}\\d+$`).test(element.mark.trim());
+  return updateConcreteElement(plan, id, {
+    kind,
+    mark: wasAutoMark ? nextConcreteMark(concreteOf(plan), kind) : element.mark,
+    ...(kind === 'column' ? {} : { quantity: undefined }),
+  });
+}
+
 /** Removes the element. Unknown id: the plan unchanged. */
 export function removeConcreteElement(plan: Plan, id: string): Plan {
   const elements = concreteOf(plan);
