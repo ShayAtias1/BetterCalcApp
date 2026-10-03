@@ -3115,11 +3115,41 @@ html[dir='rtl'] .qty-table .col-room {
   font: var(--t-label);
   color: var(--muted);
 }
-.qty-structural {
-  max-width: 640px;
+/* One header row (Finishes has a group row above its column row, which offsets the second by 25px). */
+.qty-table thead tr.qty-single-row th {
+  top: 0;
 }
-.qty-structural .concrete-summary {
-  margin-top: 0;
+/* Concrete / Rebar tables share the Finishes table (.qty-table.qty-grid); only these few additions. */
+.qty-grid .col-page {
+  width: 56px;
+  min-width: 56px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.qty-grid td.qty-id {
+  font-weight: 600;
+  color: var(--text-h);
+}
+.qty-grid tr.qty-page-start td {
+  border-top: 1px solid var(--border-strong);
+}
+.qty-grid tbody tr.qty-missing-row td {
+  background: var(--bg-surface);
+}
+.qty-grid .qty-status {
+  color: var(--muted);
+}
+.qty-grid .qty-status.estimate {
+  color: var(--warning);
+}
+.qty-grid tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--bg-subtle);
+  border-top: 1px solid var(--border-strong);
+  font-weight: 700;
+  color: var(--text-h);
 }
 .qty-domain-empty {
   margin: var(--s-4);

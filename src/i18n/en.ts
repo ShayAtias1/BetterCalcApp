@@ -409,6 +409,22 @@ export const en: Dictionary = {
 
   quantitiesPanel: {
     domains: 'Quantity domains',
+    cols: {
+      page: 'Page',
+      type: 'Type',
+      grade: 'Grade',
+      elements: 'Elements',
+      netM3: 'Net (m³)',
+      orderM3: 'To order (m³)',
+      diameter: 'Diameter',
+      lines: 'Bar lines',
+      netLength: 'Net length',
+      netWeight: 'Net weight',
+      orderLength: 'Order length',
+      orderWeight: 'Order weight',
+      status: 'Status',
+    },
+    basis: { exact: 'Exact', includesEstimate: 'Includes estimate', estimate: 'Estimate' },
     emptyConcrete: 'No concrete zones yet. Mark concrete in the Concrete tab to see its quantities here.',
     emptyRebar: 'No rebar yet. Add rebar in the Rebar tab to see its quantities here.',
     open: 'Open the quantities table',

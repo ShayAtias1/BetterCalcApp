@@ -408,6 +408,22 @@ export const he = {
 
   quantitiesPanel: {
     domains: 'תחומי כמויות',
+    cols: {
+      page: 'עמוד',
+      type: 'סוג',
+      grade: 'דרגת בטון',
+      elements: 'אלמנטים',
+      netM3: 'נטו (מ"ק)',
+      orderM3: 'להזמנה (מ"ק)',
+      diameter: 'קוטר',
+      lines: 'שורות זיון',
+      netLength: 'אורך נטו',
+      netWeight: 'משקל נטו',
+      orderLength: 'אורך להזמנה',
+      orderWeight: 'משקל להזמנה',
+      status: 'מצב',
+    },
+    basis: { exact: 'מדויק', includesEstimate: 'כולל אומדן', estimate: 'אומדן' },
     emptyConcrete: 'עדיין אין אזורי בטון. סמנו בטון בטאב בטון כדי לראות כאן את הכמויות.',
     emptyRebar: 'עדיין אין זיון. הוסיפו זיון בטאב זיון כדי לראות כאן את הכמויות.',
     open: 'פתח את טבלת הכמויות',

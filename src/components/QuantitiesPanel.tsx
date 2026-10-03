@@ -2,8 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../store/appStore';
 import QuantityTable from './QuantityTable';
 import QuantityExportActions from './QuantityExportActions';
-import ConcreteSummary from './ConcreteSummary';
-import RebarSummary from './RebarSummary';
+import { ConcreteQuantityTable, RebarQuantityTable } from './StructuralQuantityTables';
 import { concreteOf, rebarOf } from '../lib/structuralPlan';
 import Icon from './Icon';
 import { useT } from '../i18n';
@@ -156,9 +155,9 @@ export default function QuantitiesPanel() {
       <div className="qty-panel-body">
         {domain === 'finishes' && <QuantityTable showDefaults={showDefaults} />}
         {domain === 'concrete' &&
-          (counts.concrete === 0 ? <p className="muted qty-domain-empty">{t('quantitiesPanel.emptyConcrete')}</p> : <div className="qty-structural"><ConcreteSummary plan={project} /></div>)}
+          (counts.concrete === 0 ? <p className="muted qty-domain-empty">{t('quantitiesPanel.emptyConcrete')}</p> : <ConcreteQuantityTable plan={project} />)}
         {domain === 'rebar' &&
-          (counts.rebar === 0 ? <p className="muted qty-domain-empty">{t('quantitiesPanel.emptyRebar')}</p> : <div className="qty-structural"><RebarSummary plan={project} /></div>)}
+          (counts.rebar === 0 ? <p className="muted qty-domain-empty">{t('quantitiesPanel.emptyRebar')}</p> : <RebarQuantityTable plan={project} />)}
       </div>
     </section>
   );
