@@ -20,7 +20,7 @@ import { clonePlanForDuplicate } from '../lib/planDuplication';
 import { createEmptyComparison, useCompareStore } from './compareStore';
 import type { Comparison } from '../types/compare';
 import type { ConcreteElement, ConcreteKind } from '../types/structural';
-import { addConcreteElement, changeConcreteKind as changeKind, newConcreteElement, removeConcreteElement, updateConcreteElement as updateConcrete } from '../lib/structuralMutations';
+import { addConcreteElement, addConcreteFromRooms, changeConcreteKind as changeKind, newConcreteElement, removeConcreteElement, updateConcreteElement as updateConcrete } from '../lib/structuralMutations';
 import { polygonAreaPx } from '../lib/geometry';
 import { createHistoryTracker } from '../lib/undoHistory';
 import { loadPdfPlanSource } from '../lib/planSource';
@@ -315,6 +315,12 @@ interface AppState {
   /** Changes the kind of an existing zone (mark renumbered if still automatic). One undo step. */
   changeConcreteElementKind: (id: string, kind: ConcreteKind) => void;
   deleteConcreteElement: (id: string) => void;
+  /**
+   * Copies the outlines of existing rooms into new concrete zones of the chosen kind (the room itself
+   * is untouched). One undo step. A single new zone is selected so its form opens; several are left
+   * in the list. Returns how many zones were created.
+   */
+  copyRoomsToConcrete: (roomIds: string[]) => number;
   finishDrawing: () => void;
   finishRectangle: (p1: Point, p2: Point) => void;
 
@@ -920,6 +926,21 @@ export const useAppStore = create<AppState>((set, get) => ({
     historyTracker.push(get, set, project);
     set({ project: { ...next, updatedAt: Date.now() } });
     scheduleSave(get, set);
+  },
+  copyRoomsToConcrete: (roomIds) => {
+    const { project, concreteKind } = get();
+    if (!project) return 0;
+    const wanted = new Set(roomIds);
+    const { plan, created } = addConcreteFromRooms(project, project.rooms.filter((r) => wanted.has(r.id)), concreteKind);
+    if (created.length === 0) return 0;
+    historyTracker.push(get, set, project);
+    set({ project: { ...plan, updatedAt: Date.now() } });
+    if (created.length === 1) {
+      get().setCurrentPage(created[0].pageNumber);
+      set({ selectedConcreteId: created[0].id });
+    }
+    scheduleSave(get, set);
+    return created.length;
   },
   deleteConcreteElement: (id) => {
     const { project, selectedConcreteId } = get();

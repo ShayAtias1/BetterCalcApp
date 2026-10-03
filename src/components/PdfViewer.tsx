@@ -160,6 +160,8 @@ export default function PdfViewer() {
   const toolMode = useAppStore((s) => s.toolMode);
   const annotationsVisible = useAppStore((s) => s.annotationsVisible);
   const drawTarget = useAppStore((s) => s.drawTarget);
+  // One switch for every structural overlay: the existing "area markings and notes" View option.
+  const structuralVisible = annotationsVisible;
   const selectedConcreteId = useAppStore((s) => s.selectedConcreteId);
   const setSelectedConcreteId = useAppStore((s) => s.setSelectedConcreteId);
   const gridEnabled = useGridStore((s) => s.enabled);
@@ -743,7 +745,8 @@ export default function PdfViewer() {
       // In the Concrete tab a click picks a concrete zone and never a room; everywhere else this
       // is the original room hit-test, untouched.
       if (drawTarget === 'concrete') {
-        const zone = [...concreteOf(project)].reverse().find((z) => z.pageNumber === currentPage && polygonAreaPx(z.points) > 0 && pointInPolygon(native, z.points));
+        // Hidden zones are not hit-tested: an invisible zone must not catch clicks.
+        const zone = !structuralVisible ? undefined : [...concreteOf(project)].reverse().find((z) => z.pageNumber === currentPage && polygonAreaPx(z.points) > 0 && pointInPolygon(native, z.points));
         setSelectedConcreteId(zone ? zone.id : null);
         return;
       }
@@ -822,12 +825,16 @@ export default function PdfViewer() {
                 );
               })}
 
-            <ConcreteZones
-              elements={concreteOf(project).filter((z) => z.pageNumber === currentPage)}
-              selectedId={selectedConcreteId}
-              strokeW={strokeW}
-              zoom={zoom}
-            />
+            {/* Structural zones (concrete now, rebar later) follow the View menu's "area markings and
+                notes" switch: hidden means not drawn here and not selectable (see handleClick). */}
+            {structuralVisible && (
+              <ConcreteZones
+                elements={concreteOf(project).filter((z) => z.pageNumber === currentPage)}
+                selectedId={selectedConcreteId}
+                strokeW={strokeW}
+                zoom={zoom}
+              />
+            )}
 
             {/* Detection suggestions: dashed, faint and unselectable, so they never read as rooms
                 that are already part of the project. They live in session state only. */}

@@ -2946,3 +2946,25 @@ html[dir='rtl'] .qty-table .col-room {
   font: var(--t-meta);
   color: var(--warning);
 }
+
+/* Concrete: copy from existing rooms */
+.concrete-from-rooms-toggle {
+  margin-bottom: var(--s-3);
+}
+.concrete-from-rooms {
+  margin-bottom: var(--s-3);
+  padding: var(--s-3);
+  border-radius: var(--r-md);
+  background: var(--bg-subtle);
+}
+.concrete-from-rooms .form-row {
+  margin-bottom: var(--s-2);
+}
+.concrete-from-rooms-actions {
+  display: flex;
+  gap: var(--s-2);
+  margin-bottom: var(--s-2);
+}
+.concrete-from-rooms p {
+  margin: 0 0 var(--s-2);
+}

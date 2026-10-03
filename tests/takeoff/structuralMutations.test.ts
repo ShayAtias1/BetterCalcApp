@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { PLAN_A } from './fixtures.ts';
 import {
   addConcreteElement,
+  addConcreteFromRooms,
   changeConcreteKind,
   newConcreteElement,
   nextConcreteMark,
@@ -131,4 +132,45 @@ test('changing to the same kind or an unknown id changes nothing', () => {
   const plan = addConcreteElement(structuredClone(PLAN_A), { ...el('slab', 'S01'), id: 'a' });
   assert.equal(changeConcreteKind(plan, 'a', 'slab'), plan);
   assert.equal(changeConcreteKind(plan, 'zzz', 'wall'), plan);
+});
+
+test('rooms → concrete: only the outline and page are copied, with new ids and marks; the rooms are untouched', () => {
+  const plan = structuredClone(PLAN_A);
+  const roomsBefore = JSON.stringify(plan.rooms);
+  const apartment7 = plan.rooms.filter((r) => r.apartmentNumber === '7');
+  assert.ok(apartment7.length >= 2);
+
+  const { plan: out, created } = addConcreteFromRooms(plan, apartment7, 'slab');
+  assert.equal(created.length, apartment7.length);
+  assert.deepEqual(concreteOf(out), created);
+  created.forEach((el, i) => {
+    assert.deepEqual(el.points, apartment7[i].points); // identical native points
+    assert.notEqual(el.points, apartment7[i].points); // a copy, not a shared array
+    assert.notEqual(el.points[0], apartment7[i].points[0]);
+    assert.equal(el.pageNumber, apartment7[i].pageNumber);
+    assert.equal(el.kind, 'slab');
+    assert.equal(el.mark, `S${String(i + 1).padStart(2, '0')}`);
+    assert.notEqual(el.id, apartment7[i].id);
+    // nothing of the room's finishes data came along
+    assert.deepEqual(Object.keys(el).sort(), ['id', 'kind', 'mark', 'pageNumber', 'points', 'wastePercent']);
+  });
+  assert.equal(new Set(created.map((e) => e.id)).size, created.length);
+
+  // the original plan and every room are exactly as they were; editing a copy never reaches a room
+  assert.equal(JSON.stringify(plan.rooms), roomsBefore);
+  assert.equal(out.rooms, plan.rooms);
+  assert.equal(concreteOf(plan).length, 0);
+  created[0].points[0].x = -999;
+  assert.notEqual(apartment7[0].points[0].x, -999);
+});
+
+test('rooms → concrete continues the numbering, and skips rooms with no usable outline', () => {
+  const plan = addConcreteElement(structuredClone(PLAN_A), { ...el('wall', 'W04'), id: 'w' });
+  const flat = { ...PLAN_A.rooms[0], id: 'flat', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 20, y: 0 }] }; // zero area
+  const tiny = { ...PLAN_A.rooms[0], id: 'tiny', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }] };
+  const { plan: out, created } = addConcreteFromRooms(plan, [flat, tiny, PLAN_A.rooms[0]], 'wall');
+  assert.equal(created.length, 1);
+  assert.equal(created[0].mark, 'W05');
+  assert.equal(concreteOf(out).length, 2);
+  assert.equal(addConcreteFromRooms(plan, [], 'slab').created.length, 0);
 });

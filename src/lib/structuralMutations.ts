@@ -5,7 +5,8 @@
  */
 
 import { v4 as uuid } from 'uuid';
-import type { Plan, Point } from '../types';
+import type { Plan, Point, Room } from '../types';
+import { polygonAreaPx } from './geometry';
 import type { ConcreteElement, ConcreteKind } from '../types/structural';
 import { concreteOf } from './structuralPlan';
 
@@ -49,6 +50,24 @@ export function newConcreteElement(plan: Plan, pageNumber: number, kind: Concret
 
 export function addConcreteElement(plan: Plan, element: ConcreteElement): Plan {
   return { ...plan, concreteElements: [...concreteOf(plan), element] };
+}
+
+/**
+ * Copies the outlines of existing rooms into new concrete zones of one kind. Only the page and the
+ * native points are taken — never the room's name, work items, openings or quantity settings — and
+ * every zone gets its own id and the next automatic mark of that kind, in the order given. The rooms
+ * are not touched. A room without a usable outline (fewer than three points, or no area) is skipped.
+ */
+export function addConcreteFromRooms(plan: Plan, rooms: Room[], kind: ConcreteKind): { plan: Plan; created: ConcreteElement[] } {
+  let next = plan;
+  const created: ConcreteElement[] = [];
+  for (const room of rooms) {
+    if (!Array.isArray(room.points) || room.points.length < 3 || polygonAreaPx(room.points) <= 0) continue;
+    const element = newConcreteElement(next, room.pageNumber, kind, room.points);
+    created.push(element);
+    next = addConcreteElement(next, element);
+  }
+  return { plan: next, created };
 }
 
 /**

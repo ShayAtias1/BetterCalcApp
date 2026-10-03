@@ -10,6 +10,7 @@ import { zoneGeometry } from '../lib/zoneGeometry';
 import { round } from '../lib/geometry';
 import { CONCRETE_COLOR } from './ConcreteZones';
 import ConcreteSummary from './ConcreteSummary';
+import ConcreteFromRooms from './ConcreteFromRooms';
 import Icon from './Icon';
 
 /** A number field that can be empty or half-typed ("0.") without fighting the stored value. */
@@ -146,6 +147,8 @@ export default function ConcretePanel() {
           </button>
         </div>
       </div>
+
+      <ConcreteFromRooms />
 
       <div className="room-list">
         <span className="section-label">{t('concrete.zones', { count: elements.length })}</span>

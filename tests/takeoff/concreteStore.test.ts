@@ -171,3 +171,46 @@ test('changing the kind is one undo step, updates the summary at once, and leave
   store().redo();
   assert.equal(elements()[0].kind, 'wall');
 });
+
+test('copyRoomsToConcrete: one room selects its zone; an apartment makes one zone per room; one undo step; rooms unchanged', () => {
+  store().setProject(structuredClone(PLAN_A));
+  store().setDrawTarget('concrete');
+  store().setConcreteKind('beam');
+  const rooms = store().project!.rooms;
+  const roomsBefore = JSON.stringify(rooms);
+
+  // a single room
+  assert.equal(store().copyRoomsToConcrete([rooms[0].id]), 1);
+  assert.equal(elements().length, 1);
+  assert.equal(store().selectedConcreteId, elements()[0].id);
+  assert.equal(store().currentPage, rooms[0].pageNumber);
+  assert.deepEqual(elements()[0].points, rooms[0].points);
+  assert.equal(elements()[0].mark, 'B01');
+  assert.equal(store().history.length, 1);
+
+  // an apartment's rooms
+  const apartmentRooms = rooms.filter((r) => r.apartmentNumber === '7');
+  store().setConcreteKind('slab');
+  assert.equal(store().copyRoomsToConcrete(apartmentRooms.map((r) => r.id)), apartmentRooms.length);
+  assert.equal(elements().length, 1 + apartmentRooms.length);
+  assert.equal(store().history.length, 2); // a single step for the whole apartment
+
+  assert.equal(JSON.stringify(store().project!.rooms), roomsBefore); // every room untouched
+
+  store().undo();
+  assert.equal(elements().length, 1);
+  store().redo();
+  assert.equal(elements().length, 1 + apartmentRooms.length);
+
+  // nothing to copy: no history, no change
+  const n = elements().length;
+  assert.equal(store().copyRoomsToConcrete([]), 0);
+  assert.equal(store().copyRoomsToConcrete(['no-such-room']), 0);
+  assert.equal(elements().length, n);
+
+  // editing or deleting a copy leaves the room alone
+  const copy = elements()[0];
+  store().updateConcreteElement(copy.id, { depthM: 0.5, mark: 'X' });
+  store().deleteConcreteElement(copy.id);
+  assert.equal(JSON.stringify(store().project!.rooms), roomsBefore);
+});
