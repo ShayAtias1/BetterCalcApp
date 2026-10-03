@@ -164,7 +164,7 @@ export const en: Dictionary = {
 
   workspace: {
     tabs: {
-      rooms: 'Rooms',
+      rooms: 'Finishes',
       measure: 'Measurements',
       markup: 'Markups',
       concrete: 'Concrete',
@@ -173,10 +173,7 @@ export const en: Dictionary = {
   },
 
   pageStatus: {
-    page: 'Page {page}',
-    pageOf: 'Page {page} of {count}',
     calibrated: 'Calibrated',
-    calibratedWithReference: 'Calibrated · {meters} m reference',
     notCalibrated: 'Not calibrated — quantities cannot be calculated',
     recalibrate: 'Recalibrate',
     calibrateNow: 'Calibrate now',
@@ -501,6 +498,7 @@ export const en: Dictionary = {
     },
     brandTakeoff: 'BetterCalc — Quantity Takeoff',
     brandCompare: 'BetterCalc — Revision Compare',
+    goHome: 'Go to the BetterCalc home screen',
     backToOverview: 'Save and return to the project overview',
     unnamedProject: 'Untitled project',
     planName: 'Plan name',
@@ -676,8 +674,8 @@ export const en: Dictionary = {
     panelsWaste: 'Skirting waste (%)',
     wallHeight: 'Wall height for paint / plaster (m)',
     workTypeWaste: '{label} waste (%)',
-    empty: 'No quantities to calculate yet. Mark rooms on the plan in the "Rooms" tab.',
-    emptyWithAreas: 'No quantities to calculate yet. Mark rooms on the plan in the "Rooms" tab. You have demolition / construction marks — the PDF and Excel exports will include them.',
+    empty: 'No quantities to calculate yet. Mark rooms on the plan in the "Finishes" tab.',
+    emptyWithAreas: 'No quantities to calculate yet. Mark rooms on the plan in the "Finishes" tab. You have demolition / construction marks — the PDF and Excel exports will include them.',
     noWorkItems: 'The rooms have no work types yet — add a work type to a room to see its quantities.',
     details: 'Details',
     apartment: 'Apt.',

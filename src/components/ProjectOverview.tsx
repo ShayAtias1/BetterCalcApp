@@ -9,7 +9,7 @@ import { exportProjectToPdf } from '../lib/exportProjectPdf';
 import { projectExportDetails, trackedExport } from '../lib/analytics';
 import { notifyExportFailed } from '../lib/exportFailure';
 import Icon from './Icon';
-import BrandLogo from './BrandLogo';
+import { BrandHomeLink } from './BrandLogo';
 import NewComparisonDialog from './compare/NewComparisonDialog';
 import LanguageSwitch from './LanguageSwitch';
 import type { Comparison } from '../types/compare';
@@ -133,9 +133,7 @@ export default function ProjectOverview() {
     <div className="workspace home">
       <div className="top-bar">
         <div className="top-bar-group identity">
-          <div className="app-brand" title="BetterCalc">
-            <BrandLogo />
-          </div>
+          <BrandHomeLink title={t('topBar.goHome')} />
           <input
             className="project-name-input"
             dir="auto"

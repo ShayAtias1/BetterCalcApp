@@ -58,17 +58,17 @@ function Workspace() {
             <button className={tab === 'rooms' ? 'active' : ''} onClick={() => setTab('rooms')}>
               {t('workspace.tabs.rooms')}
             </button>
-            <button className={tab === 'measure' ? 'active' : ''} onClick={() => setTab('measure')}>
-              {t('workspace.tabs.measure')}
-            </button>
-            <button className={tab === 'markup' ? 'active' : ''} onClick={() => setTab('markup')}>
-              {t('workspace.tabs.markup')}
-            </button>
             <button className={tab === 'concrete' ? 'active' : ''} onClick={() => setTab('concrete')}>
               {t('workspace.tabs.concrete')}
             </button>
             <button className={tab === 'rebar' ? 'active' : ''} onClick={() => setTab('rebar')}>
               {t('workspace.tabs.rebar')}
+            </button>
+            <button className={tab === 'measure' ? 'active' : ''} onClick={() => setTab('measure')}>
+              {t('workspace.tabs.measure')}
+            </button>
+            <button className={tab === 'markup' ? 'active' : ''} onClick={() => setTab('markup')}>
+              {t('workspace.tabs.markup')}
             </button>
           </div>
           <div className="sidebar-content">

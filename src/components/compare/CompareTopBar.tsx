@@ -3,7 +3,7 @@ import { selectCompareSaveState, useCompareStore } from '../../store/compareStor
 import { useAppStore } from '../../store/appStore';
 import TopBarMenu, { type MenuId } from '../TopBarMenu';
 import Icon, { type IconName } from '../Icon';
-import BrandLogo from '../BrandLogo';
+import { BrandHomeLink } from '../BrandLogo';
 import ViewModeSwitch from './ViewModeSwitch';
 import LanguageSwitch from '../LanguageSwitch';
 import { useT } from '../../i18n';
@@ -93,9 +93,7 @@ export default function CompareTopBar({
       {/* Group 1 — identity: the same mark and name field as the takeoff bar, plus the one piece
           of comparison context that must never require opening the sidebar. */}
       <div className="top-bar-group identity">
-        <div className="app-brand" title={t('topBar.brandCompare')}>
-          <BrandLogo />
-        </div>
+        <BrandHomeLink title={t('topBar.goHome')} />
         {currentProject && (
           <>
             <button className="btn-ghost small breadcrumb-project" onClick={() => void close()} title={t('topBar.backToOverview')}>

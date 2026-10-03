@@ -5,7 +5,7 @@ import LanguageSwitch from './LanguageSwitch';
 import GridMenuSection from './GridMenuSection';
 import TopBarMenu, { type MenuId } from './TopBarMenu';
 import Icon, { type IconName } from './Icon';
-import BrandLogo from './BrandLogo';
+import { BrandHomeLink } from './BrandLogo';
 import { exportAllPlanPagesToPdf, exportPlanPageToPdf } from '../lib/exportRegionPdf';
 import { planForReport } from '../lib/reportTitle';
 import { trackedExport } from '../lib/analytics';
@@ -139,18 +139,14 @@ export default function TopBar() {
 
   return (
     <div className="top-bar" data-save-state={saveState}>
-      {/* Group 1 — identity: where we are. Project (back to its overview) › plan (editable name). */}
+      {/* Group 1 — identity: where we are. Logo (home), back to the project overview, then the plan (editable name). */}
       <div className="top-bar-group identity">
-        <div className="app-brand" title={t('topBar.brandTakeoff')}>
-          <BrandLogo />
-        </div>
+        <BrandHomeLink title={t('topBar.goHome')} />
         {currentProject && (
-          <>
-            <button className="btn-ghost small breadcrumb-project" onClick={backToOverview} title={t('topBar.backToOverview')}>
-              {currentProject.name || t('topBar.unnamedProject')}
-            </button>
-            <Icon name="chevron-next" size={13} />
-          </>
+          <button className="btn-ghost small back-to-overview" onClick={backToOverview} title={t('topBar.backToOverview')}>
+            <Icon name="chevron-previous" size={13} />
+            {t('topBar.projectOverview')}
+          </button>
         )}
         <input
           className="project-name-input"

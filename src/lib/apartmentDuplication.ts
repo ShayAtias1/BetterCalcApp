@@ -21,7 +21,9 @@ export function apartmentPageNumbers(project: Plan, apartmentNumber: string): nu
 export function apartmentNumbersInProject(project: Plan): string[] {
   const seen = new Set<string>();
   for (const room of project.rooms) {
-    if (room.apartmentNumber) seen.add(room.apartmentNumber);
+    // Read as text whatever was saved: a number-valued field (older or hand-edited data) must
+    // not break the sort below.
+    if (room.apartmentNumber) seen.add(String(room.apartmentNumber));
   }
   return Array.from(seen).sort((a, b) => a.localeCompare(b, 'he', { numeric: true }));
 }

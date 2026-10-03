@@ -162,7 +162,7 @@ export const he = {
 
   workspace: {
     tabs: {
-      rooms: 'חדרים ודירות',
+      rooms: 'עבודות גמר',
       measure: 'מדידות',
       markup: 'סימונים',
       concrete: 'בטון',
@@ -171,10 +171,7 @@ export const he = {
   },
 
   pageStatus: {
-    page: 'עמוד {page}',
-    pageOf: 'עמוד {page} מתוך {count}',
     calibrated: 'מכויל',
-    calibratedWithReference: "מכויל · {meters} מ' ייחוס",
     notCalibrated: 'לא כויל — לא ניתן לחשב כמויות',
     recalibrate: 'כייל מחדש',
     calibrateNow: 'כייל עכשיו',
@@ -503,6 +500,7 @@ export const he = {
     },
     brandTakeoff: 'BetterCalc — חישוב כמויות',
     brandCompare: 'BetterCalc — השוואת תוכניות',
+    goHome: 'מעבר למסך הבית של BetterCalc',
     backToOverview: 'שמירה וחזרה לסקירת הפרויקט',
     unnamedProject: 'פרויקט ללא שם',
     planName: 'שם התוכנית',
@@ -679,8 +677,8 @@ export const he = {
     panelsWaste: 'פחת פנלים (%)',
     wallHeight: "גובה קיר לצבע/טיח (מ')",
     workTypeWaste: 'פחת {label} (%)',
-    empty: 'אין עדיין כמויות לחישוב. סמן חדרים על התוכנית בטאב "חדרים ודירות".',
-    emptyWithAreas: 'אין עדיין כמויות לחישוב. סמן חדרים על התוכנית בטאב "חדרים ודירות". יש לך סימוני הריסה/בנייה — ייצוא ה-PDF וה-Excel יכללו אותם.',
+    empty: 'אין עדיין כמויות לחישוב. סמן חדרים על התוכנית בטאב "עבודות גמר".',
+    emptyWithAreas: 'אין עדיין כמויות לחישוב. סמן חדרים על התוכנית בטאב "עבודות גמר". יש לך סימוני הריסה/בנייה — ייצוא ה-PDF וה-Excel יכללו אותם.',
     noWorkItems: 'לחדרים אין עדיין סוגי עבודה — הוסף סוג עבודה לחדר כדי לראות את כמויותיו.',
     details: 'פרטים',
     apartment: 'דירה',
