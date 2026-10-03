@@ -3124,3 +3124,17 @@ html[dir='rtl'] .qty-table .col-room {
 .qty-domain-empty {
   margin: var(--s-4);
 }
+
+/* Mesh sheets (procurement): secondary to the reinforcement levels above. */
+.rebar-sheets {
+  margin-bottom: var(--s-3);
+  padding-top: var(--s-2);
+  border-top: 1px dashed var(--border);
+}
+.rebar-sheets-count {
+  font-weight: 700;
+  color: var(--text-h);
+}
+.rebar-sheets-line {
+  margin: 2px 0 0;
+}

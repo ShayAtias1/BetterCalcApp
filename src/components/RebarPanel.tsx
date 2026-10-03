@@ -3,6 +3,7 @@ import { useAppStore } from '../store/appStore';
 import type { Calibration } from '../types';
 import type { BarSpec, MeshReinforcement, RebarBars, RebarItem, RebarLayerDirection, RebarLevel, RebarMesh } from '../types/structural';
 import { REBAR_DIAMETERS_MM, calculateRebar, type RebarCalc } from '../lib/rebar';
+import { calculateMeshSheets, type MeshSheetsResult } from '../lib/meshSheets';
 import { levelChoice, meshLevels, specNotation, withDirection, withMode, withoutDirection, withoutExtra, withSpec } from '../lib/rebarMesh';
 import type { MeshLevelChoice } from '../lib/structuralMutations';
 import { cmToMeters, metersToCm } from '../lib/structuralUnits';
@@ -342,6 +343,64 @@ function LevelSection({
   );
 }
 
+// ---------- mesh sheets (procurement) ----------
+
+/** Sheet size and overlap, and how many physical sheets the zone needs — secondary to the reinforcement above it. */
+function MeshSheets({ mesh, result }: { mesh: RebarMesh; result: MeshSheetsResult }) {
+  const t = useT();
+  const updateItem = useAppStore((s) => s.updateRebarItem);
+  const { settings, plan } = result;
+  const set = (patch: NonNullable<RebarMesh['sheets']>) => updateItem(mesh.id, { sheets: { ...mesh.sheets, ...patch } });
+  const fmt2 = (v: number) => formatNumber(round(v, 2));
+
+  let body: React.ReactNode = null;
+  if (result.status === 'ok' && plan) {
+    const long = plan.chosen;
+    body = (
+      <>
+        <div className="rebar-sheets-count">{t('rebar.sheets.required', { count: result.totalSheets! })}</div>
+        {result.levels.length > 1 && (
+          <p className="muted rebar-sheets-line">
+            {result.levels.map((l) => `${t(l.level === 'bottom' ? 'rebar.levelBottom' : 'rebar.levelTop')}: ${l.sheets}`).join(' · ')}
+          </p>
+        )}
+        <p className="muted rebar-sheets-line">{t('rebar.sheets.orientation', { dim: `${fmt2(long.alongLongM)} ${t('units.m')}` })}</p>
+        <p className="muted rebar-sheets-line">{t('rebar.sheets.purchasedArea', { area: `${formatNumber(round(result.purchasedAreaM2!, 1))} ${t('units.m2')}` })}</p>
+        <p className="muted rebar-sheets-line">{t('rebar.sheets.zoneArea', { area: `${formatNumber(round(result.zoneAreaM2!, 1))} ${t('units.m2')}` })}</p>
+      </>
+    );
+  } else if (result.status === 'invalid-settings') {
+    body = <div className="warning-box">{t(result.settingsProblem === 'overlap' ? 'rebar.sheets.invalidOverlap' : 'rebar.sheets.invalidSize')}</div>;
+  } else if (result.status === 'not-rectangular') {
+    body = <p className="muted">{t('rebar.sheets.needsRectangle')}</p>;
+  } else if (result.status === 'no-levels') {
+    body = <p className="muted">{t('rebar.sheets.noLevels')}</p>;
+  } else {
+    body = <p className="muted">{t('rebar.sheets.noSize')}</p>;
+  }
+
+  return (
+    <section className="rebar-sheets" aria-label={t('rebar.sheets.title')}>
+      <span className="section-label">{t('rebar.sheets.title')}</span>
+      <div className="form-grid rebar-sheets-fields">
+        <div className="form-row">
+          <label>{t('rebar.sheets.length')} ({t('units.m')})</label>
+          <NumberField value={settings.lengthM} onChange={(v) => set({ lengthM: v ?? 0 })} />
+        </div>
+        <div className="form-row">
+          <label>{t('rebar.sheets.width')} ({t('units.m')})</label>
+          <NumberField value={settings.widthM} onChange={(v) => set({ widthM: v ?? 0 })} />
+        </div>
+        <div className="form-row">
+          <label>{t('rebar.sheets.overlap')} ({t('units.cm')})</label>
+          <NumberField value={metersToCm(settings.overlapM)} step="1" onChange={(v) => set({ overlapM: cmToMeters(v) ?? 0 })} />
+        </div>
+      </div>
+      {body}
+    </section>
+  );
+}
+
 // ---------- mesh zone ----------
 
 function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calibration | null }) {
@@ -353,6 +412,7 @@ function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calib
   const setReinforcement = useAppStore((s) => s.setRebarMeshReinforcement);
   const copyBottomToTop = useAppStore((s) => s.copyRebarBottomToTop);
   const calc = calculateRebar(mesh, calibration);
+  const sheets = calculateMeshSheets(mesh, calibration);
   const message = statusMessage(calc, t);
   const manual = !!mesh.sizeOverride;
   const choice = levelChoice(mesh);
@@ -411,6 +471,8 @@ function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calib
           }
         />
       )}
+
+      <MeshSheets mesh={mesh} result={sheets} />
 
       <label className="wi-check concrete-manual-toggle">
         <input type="checkbox" checked={manual} onChange={(e) => toggleManual(e.target.checked)} />

@@ -86,6 +86,16 @@ export type MeshReinforcement =
   | { mode: 'directional'; long?: BarSpec; short?: BarSpec; extra?: RebarLayer[] };
 
 /**
+ * Procurement settings for the physical mesh sheets of a zone, in metres. Every field is optional:
+ * an absent one means the default (lib/meshSheets), and nothing is written until the user edits it.
+ */
+export interface MeshSheetSettings {
+  lengthM?: number;
+  widthM?: number;
+  overlapM?: number;
+}
+
+/**
  * Area reinforcement: a marked zone plus its reinforcement levels. A level that is present is
  * enabled (Bottom, Top, or both); an absent one does not exist. Each level is specified on its own —
  * Top is never assumed to equal Bottom.
@@ -104,6 +114,8 @@ export interface RebarMesh extends MarkFields {
   layers?: RebarLayer[];
   wastePercent?: number;
   sizeOverride?: SizeOverride;
+  /** Physical sheet size and overlap for procurement (lib/meshSheets). Absent = defaults. */
+  sheets?: MeshSheetSettings;
 }
 
 /** Bars entered by quantity — no shape on the plan: diameter, how many, how long each. */
