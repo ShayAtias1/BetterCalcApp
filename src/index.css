@@ -3060,3 +3060,8 @@ html[dir='rtl'] .qty-table .col-room {
 .rebar-summary-tonnes {
   margin: 2px 0 0;
 }
+
+/* Project Overview: the structural totals stay compact — a narrow block, not a full-width report */
+.project-structural-block {
+  max-width: 560px;
+}

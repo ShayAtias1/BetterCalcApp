@@ -397,3 +397,292 @@ export function buildStructuralReport(plan: Plan, pages?: ReadonlySet<number>): 
     rebar: rebarItems.length > 0 ? { items: rebarItems, summary: buildRebarSummary(plan, pages) } : null,
   };
 }
+
+// ---------- project level ----------
+
+/** A plan's contribution to a project structural total. */
+export interface ProjectPlanShare {
+  planId: string;
+  planName: string;
+  /** Items (concrete elements, or rebar items) of the plan in this total. */
+  itemCount: number;
+  missingCount: number;
+  volumeM3: number;
+  orderM3: number;
+}
+
+export interface ProjectConcreteRow {
+  kind: ConcreteKind;
+  /** As typed (trimmed); '' = unspecified. */
+  grade: string;
+  elementCount: number;
+  missingCount: number;
+  volumeM3: number;
+  orderM3: number;
+  /** Which plans add into the row, in plan order. */
+  perPlan: ProjectPlanShare[];
+}
+
+export interface ProjectConcrete {
+  /** By kind (slab, wall, beam, column), then grade, unspecified last. */
+  rows: ProjectConcreteRow[];
+  /** One entry per plan that has concrete — its own totals, so a missing item stays attributable. */
+  perPlan: ProjectPlanShare[];
+  elementCount: number;
+  missingCount: number;
+  volumeM3: number;
+  orderM3: number;
+}
+
+export interface ProjectRebarShare {
+  planId: string;
+  planName: string;
+  itemCount: number;
+  missingItemCount: number;
+  lengthM: number;
+  weightKg: number;
+  orderLengthM: number;
+  orderWeightKg: number;
+  estimatedLengthM: number;
+  estimatedWeightKg: number;
+  basis: RebarBasis | null;
+}
+
+export interface ProjectRebarRow {
+  diameterMm: number;
+  lineCount: number;
+  lengthM: number;
+  weightKg: number;
+  orderLengthM: number;
+  orderWeightKg: number;
+  estimatedLengthM: number;
+  estimatedWeightKg: number;
+  /** exact / mixed / estimated across every plan and page that adds into this diameter. */
+  basis: RebarBasis;
+  perPlan: ProjectRebarShare[];
+}
+
+export interface ProjectRebar {
+  /** Diameter ascending. */
+  rows: ProjectRebarRow[];
+  perPlan: ProjectRebarShare[];
+  itemCount: number;
+  missingItemCount: number;
+  lengthM: number;
+  weightKg: number;
+  orderLengthM: number;
+  orderWeightKg: number;
+  estimatedLengthM: number;
+  estimatedWeightKg: number;
+  basis: RebarBasis | null;
+}
+
+export interface ProjectStructural {
+  concrete: ProjectConcrete | null;
+  rebar: ProjectRebar | null;
+}
+
+interface Sums {
+  items: number;
+  missing: number;
+  net: number;
+  order: number;
+}
+const emptySums = (): Sums => ({ items: 0, missing: 0, net: 0, order: 0 });
+
+interface RebarSums {
+  lines: number;
+  estimatedLines: number;
+  missingItems: number;
+  items: number;
+  length: number;
+  weight: number;
+  orderLength: number;
+  orderWeight: number;
+  estimatedLength: number;
+  estimatedWeight: number;
+}
+const emptyRebar = (): RebarSums => ({ lines: 0, estimatedLines: 0, missingItems: 0, items: 0, length: 0, weight: 0, orderLength: 0, orderWeight: 0, estimatedLength: 0, estimatedWeight: 0 });
+const rebarBasis = (a: RebarSums): RebarBasis | null => (a.lines === 0 ? null : a.estimatedLines === 0 ? 'exact' : a.estimatedLines === a.lines ? 'estimated' : 'mixed');
+
+/**
+ * The project's concrete and rebar across all its plans, read from the same per-plan item rows the
+ * plan reports use (so every number comes from the calculation engines). Sums are of UNROUNDED values
+ * — never of the plans' rounded figures — and each result is rounded once at the end (2 decimals).
+ * Plans are not floors and pages are not floors: nothing is grouped by either, and each plan's own
+ * share is kept so a total can be traced and a missing item attributed. A section is null when no
+ * plan has an item of that kind.
+ */
+export function buildProjectStructural(plans: Plan[]): ProjectStructural {
+  // ----- concrete -----
+  const cGroups = new Map<string, { kind: ConcreteKind; grade: string; total: Sums; perPlan: Map<string, { name: string; sums: Sums }> }>();
+  const cPlans = new Map<string, { name: string; sums: Sums }>();
+  const cTotal = emptySums();
+
+  // ----- rebar -----
+  const rGroups = new Map<number, { total: RebarSums; perPlan: Map<string, { name: string; sums: RebarSums }> }>();
+  const rPlans = new Map<string, { name: string; sums: RebarSums; missingIds: Set<string>; itemIds: Set<string> }>();
+  const rTotal = emptyRebar();
+  const rMissing = new Set<string>();
+  const rItems = new Set<string>();
+
+  for (const plan of plans) {
+    for (const it of buildConcreteItems(plan)) {
+      const key = JSON.stringify([it.kind, it.grade]);
+      let g = cGroups.get(key);
+      if (!g) {
+        g = { kind: it.kind, grade: it.grade, total: emptySums(), perPlan: new Map() };
+        cGroups.set(key, g);
+      }
+      let gp = g.perPlan.get(plan.id);
+      if (!gp) {
+        gp = { name: plan.name, sums: emptySums() };
+        g.perPlan.set(plan.id, gp);
+      }
+      let pp = cPlans.get(plan.id);
+      if (!pp) {
+        pp = { name: plan.name, sums: emptySums() };
+        cPlans.set(plan.id, pp);
+      }
+      for (const s of [g.total, gp.sums, pp.sums, cTotal]) {
+        s.items += 1;
+        if (it.netM3 === null || it.orderM3 === null) s.missing += 1;
+        else {
+          s.net += it.netM3;
+          s.order += it.orderM3;
+        }
+      }
+    }
+
+    for (const row of buildRebarItems(plan)) {
+      const itemKey = `${plan.id}|${row.itemId}`;
+      let pp = rPlans.get(plan.id);
+      if (!pp) {
+        pp = { name: plan.name, sums: emptyRebar(), missingIds: new Set(), itemIds: new Set() };
+        rPlans.set(plan.id, pp);
+      }
+      pp.itemIds.add(itemKey);
+      rItems.add(itemKey);
+      if (row.netLengthM === null || row.netWeightKg === null || row.diameterMm === null) {
+        pp.missingIds.add(itemKey);
+        rMissing.add(itemKey);
+        continue;
+      }
+      let g = rGroups.get(row.diameterMm);
+      if (!g) {
+        g = { total: emptyRebar(), perPlan: new Map() };
+        rGroups.set(row.diameterMm, g);
+      }
+      let gp = g.perPlan.get(plan.id);
+      if (!gp) {
+        gp = { name: plan.name, sums: emptyRebar() };
+        g.perPlan.set(plan.id, gp);
+      }
+      for (const a of [g.total, gp.sums, pp.sums, rTotal]) {
+        a.lines += 1;
+        a.length += row.netLengthM;
+        a.weight += row.netWeightKg;
+        a.orderLength += row.orderLengthM ?? 0;
+        a.orderWeight += row.orderWeightKg ?? 0;
+        if (row.estimated) {
+          a.estimatedLines += 1;
+          a.estimatedLength += row.netLengthM;
+          a.estimatedWeight += row.netWeightKg;
+        }
+      }
+    }
+  }
+
+  const planShare = (planId: string, p: { name: string; sums: Sums }): ProjectPlanShare => ({
+    planId,
+    planName: p.name,
+    itemCount: p.sums.items,
+    missingCount: p.sums.missing,
+    volumeM3: round(p.sums.net, 2),
+    orderM3: round(p.sums.order, 2),
+  });
+
+  const concrete: ProjectConcrete | null =
+    cTotal.items === 0
+      ? null
+      : {
+          rows: [...cGroups.values()]
+            .sort(
+              (a, b) =>
+                (KIND_ORDER.get(a.kind) ?? 0) - (KIND_ORDER.get(b.kind) ?? 0) ||
+                Number(a.grade === '') - Number(b.grade === '') ||
+                (a.grade < b.grade ? -1 : a.grade > b.grade ? 1 : 0)
+            )
+            .map((g) => ({
+              kind: g.kind,
+              grade: g.grade,
+              elementCount: g.total.items,
+              missingCount: g.total.missing,
+              volumeM3: round(g.total.net, 2),
+              orderM3: round(g.total.order, 2),
+              perPlan: [...g.perPlan.entries()].map(([id, p]) => planShare(id, p)),
+            })),
+          perPlan: [...cPlans.entries()].map(([id, p]) => planShare(id, p)),
+          elementCount: cTotal.items,
+          missingCount: cTotal.missing,
+          volumeM3: round(cTotal.net, 2),
+          orderM3: round(cTotal.order, 2),
+        };
+
+  const rebarShare = (planId: string, name: string, a: RebarSums, missingItems: number): ProjectRebarShare => ({
+    planId,
+    planName: name,
+    itemCount: a.items,
+    missingItemCount: missingItems,
+    lengthM: round(a.length, 2),
+    weightKg: round(a.weight, 2),
+    orderLengthM: round(a.orderLength, 2),
+    orderWeightKg: round(a.orderWeight, 2),
+    estimatedLengthM: round(a.estimatedLength, 2),
+    estimatedWeightKg: round(a.estimatedWeight, 2),
+    basis: rebarBasis(a),
+  });
+
+  const rebar: ProjectRebar | null =
+    rItems.size === 0
+      ? null
+      : {
+          rows: [...rGroups.entries()]
+            .sort(([a], [b]) => a - b)
+            .map(([diameterMm, g]) => ({
+              diameterMm,
+              lineCount: g.total.lines,
+              lengthM: round(g.total.length, 2),
+              weightKg: round(g.total.weight, 2),
+              orderLengthM: round(g.total.orderLength, 2),
+              orderWeightKg: round(g.total.orderWeight, 2),
+              estimatedLengthM: round(g.total.estimatedLength, 2),
+              estimatedWeightKg: round(g.total.estimatedWeight, 2),
+              basis: rebarBasis(g.total)!,
+              perPlan: [...g.perPlan.entries()].map(([id, p]) => ({ ...rebarShare(id, p.name, p.sums, 0), itemCount: p.sums.lines })),
+            })),
+          perPlan: [...rPlans.entries()].map(([id, p]) => ({ ...rebarShare(id, p.name, p.sums, p.missingIds.size), itemCount: p.itemIds.size })),
+          itemCount: rItems.size,
+          missingItemCount: rMissing.size,
+          lengthM: round(rTotal.length, 2),
+          weightKg: round(rTotal.weight, 2),
+          orderLengthM: round(rTotal.orderLength, 2),
+          orderWeightKg: round(rTotal.orderWeight, 2),
+          estimatedLengthM: round(rTotal.estimatedLength, 2),
+          estimatedWeightKg: round(rTotal.estimatedWeight, 2),
+          basis: rebarBasis(rTotal),
+        };
+
+  return { concrete, rebar };
+}
+
+/**
+ * How a project report treats its finishes summary: 'table' when there are finishes totals, 'skip'
+ * when there are none but the project has concrete or rebar (the report is not empty — it just has
+ * nothing to say under that heading), and 'empty' only when there is neither, which is when the
+ * "no quantities" message is true.
+ */
+export function finishesSummaryMode(finishesTotalCount: number, structural: ProjectStructural): 'table' | 'skip' | 'empty' {
+  if (finishesTotalCount > 0) return 'table';
+  return structural.concrete || structural.rebar ? 'skip' : 'empty';
+}

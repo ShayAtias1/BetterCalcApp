@@ -8,6 +8,8 @@ import { buildProjectQuantities, planStatusLabel, roomCategoryQuantity, type Pro
 import { workTypeDefinition } from './workTypes';
 import { round } from './geometry';
 import { sheetRef } from './excelSheetRef';
+import { addProjectStructuralSheets } from './exportStructuralExcel';
+import { buildProjectStructural, buildStructuralReport } from './structuralQuantities';
 
 // Same palette as the single-plan workbook (exportExcel.ts).
 const C_HEADER = 'FF1F4E79';
@@ -262,5 +264,11 @@ export function buildProjectWorkbook(project: Project, plans: Plan[], language: 
   addSummarySheet(summary, project, q, totalCell, x);
   addRoomsSheet(workbook, q, categories, x);
   addWorkItemsSheet(workbook, plans, x);
+
+  // Concrete and rebar sheets, after every existing one and only when some plan has such items.
+  const structural = buildProjectStructural(plans);
+  if (structural.concrete || structural.rebar) {
+    addProjectStructuralSheets(workbook, plans.map((p) => ({ planName: p.name, report: buildStructuralReport(p) })), structural, x);
+  }
   return workbook;
 }

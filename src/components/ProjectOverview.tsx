@@ -1,3 +1,5 @@
+import ProjectStructuralSummary from './ProjectStructuralSummary';
+import { buildProjectStructural, finishesSummaryMode } from '../lib/structuralQuantities';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { formatDate, formatNumber, useLanguage, useT, type TranslateFn } from '../i18n';
 import { useAppStore } from '../store/appStore';
@@ -70,6 +72,8 @@ export default function ProjectOverview() {
   const language = useLanguage();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the labels inside depend on the UI language
   const quantities = useMemo(() => buildProjectQuantities(plans), [plans, language]);
+  const structural = useMemo(() => buildProjectStructural(plans), [plans]);
+  const summaryMode = finishesSummaryMode(quantities.totals.length, structural);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -292,6 +296,8 @@ export default function ProjectOverview() {
               )}
             </div>
 
+            {/* The finishes summary stays as it was; a project with only concrete/rebar shows no empty finishes panel. */}
+            {summaryMode !== 'skip' && (
             <div className="home-panel">
               <div className="home-panel-text">
                 <h2>{t('projectOverview.summaryTitle')}</h2>
@@ -341,6 +347,9 @@ export default function ProjectOverview() {
                 </div>
               )}
             </div>
+            )}
+
+            <ProjectStructuralSummary structural={structural} />
           </div>
         )}
       </div>

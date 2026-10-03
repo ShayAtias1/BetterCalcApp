@@ -5,6 +5,8 @@ import type { Plan, Project } from '../types';
 import type { Language } from '../i18n';
 import { exportContext, type ExportContext } from './exportLanguage';
 import { buildProjectQuantities, planStatusLabel, roomCategoryQuantity, type CategoryAmount } from './projectQuantities';
+import { buildProjectStructural, finishesSummaryMode } from './structuralQuantities';
+import { buildProjectStructuralPdfLayout, writeBlocks } from './structuralPdfLayout';
 
 /*
  * The project quantity report: vector text and table lines throughout (see lib/pdfText — Hebrew is
@@ -142,11 +144,18 @@ export async function exportProjectToPdf(project: Project, plans: Plan[], langua
   const AMOUNT_HEADERS = amountHeaders(x);
   const notCalibrated = t('exports.common.notCalibrated');
 
-  report.section(t('exports.projectPdf.summary'));
-  if (q.totals.length === 0) {
-    report.note(t('exports.projectPdf.empty'));
-  } else {
-    report.table([t('exports.common.item'), ...AMOUNT_HEADERS], [18, 12, 12, 12, 12], q.totals.map((total) => ({ cells: [total.label, ...amountCells(total, fmt)] })));
+  // Concrete and rebar across the plans. The "no quantities" note below is only true when there is
+  // neither finishes work nor structural data.
+  const structural = buildProjectStructural(plans);
+  const summaryMode = finishesSummaryMode(q.totals.length, structural);
+
+  if (summaryMode !== 'skip') {
+    report.section(t('exports.projectPdf.summary'));
+    if (summaryMode === 'empty') {
+      report.note(t('exports.projectPdf.empty'));
+    } else {
+      report.table([t('exports.common.item'), ...AMOUNT_HEADERS], [18, 12, 12, 12, 12], q.totals.map((total) => ({ cells: [total.label, ...amountCells(total, fmt)] })));
+    }
   }
   if (q.uncalibratedRoomCount > 0) report.note(t('exports.projectPdf.uncalibratedNote', { count: q.uncalibratedRoomCount }));
 
@@ -196,6 +205,9 @@ export async function exportProjectToPdf(project: Project, plans: Plan[], langua
       )
     );
   }
+
+  // After the finishes: the structural aggregates and their by-plan tables (no item schedules here).
+  writeBlocks(report, buildProjectStructuralPdfLayout(structural, x));
 
   const bytes = await pdfDoc.save();
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, '_');

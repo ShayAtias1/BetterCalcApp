@@ -349,7 +349,7 @@ test('concrete and rebar together: both sheets, selected-page filtering applies 
 
 // ---------- PDF ----------
 
-test('PDF layout: summary and item tables, ≈ on estimates, dashes and a missing note, nothing for no data', () => {
+test('PDF layout: summary and item tables, ~ on estimates, dashes and a missing note, nothing for no data', () => {
   const p = structuralOnly(
     [el({ mark: 'S01', grade: 'B30' }), el({ mark: 'S02', depthM: undefined })],
     [mesh([layer()], { mark: 'M01', points: L_SHAPE }), mesh([layer()], { mark: 'M02' }), bars({ mark: 'R01' }), mesh([layer({ diameterMm: 0 })], { mark: 'M03' })]
@@ -371,7 +371,7 @@ test('PDF layout: summary and item tables, ≈ on estimates, dashes and a missin
   const mixedTotal = rSummary.rows.at(-1)!;
   assert.equal(mixedTotal.cells[6], 'Includes estimate');
   const est = rItems.rows.find((r) => r.cells[1] === 'M01')!;
-  assert.ok(est.cells[4].startsWith('≈ ')); // the printed estimate is marked
+  assert.ok(est.cells[4].startsWith('~ ')); // the printed estimate is marked
   assert.equal(est.cells[3], '—'); // no bar count
   assert.equal(est.cells[7], 'Estimate');
   assert.equal(rItems.rows.find((r) => r.cells[1] === 'M02')!.cells[3], '41 × 10');
