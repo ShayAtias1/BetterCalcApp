@@ -5,6 +5,8 @@ import type { ConcreteElement, ConcreteKind } from '../types/structural';
 import { calculateConcrete, type ConcreteCalc } from '../lib/concrete';
 import { CONCRETE_KINDS } from '../lib/structuralMutations';
 import { concreteOf } from '../lib/structuralPlan';
+import { markLabel, markPatch } from '../lib/structuralMarks';
+import { cmToMeters, metersToCm } from '../lib/structuralUnits';
 import { zoneGeometry } from '../lib/zoneGeometry';
 import { round } from '../lib/geometry';
 import { CONCRETE_COLOR } from './ConcreteZones';
@@ -50,14 +52,14 @@ export default function ConcretePanel() {
         <div className="detail-header">
           <span className="color-dot" style={{ background: CONCRETE_COLOR }} />
           <span className="detail-header-text">
-            <span className="detail-title" dir="auto">{selected.mark || t(`concrete.kinds.${selected.kind}`)}</span>
+            <span className="detail-title" dir="auto">{markLabel(selected, t)}</span>
             <span className="detail-subtitle">{t(`concrete.kinds.${selected.kind}`)}</span>
           </span>
           <button
             className="icon-btn danger"
             title={t('concrete.delete')}
             onClick={() => {
-              if (confirm(t('concrete.deleteConfirm', { mark: selected.mark }))) deleteElement(selected.id);
+              if (confirm(t('concrete.deleteConfirm', { mark: markLabel(selected, t) }))) deleteElement(selected.id);
             }}
           >
             <Icon name="trash" />
@@ -66,6 +68,7 @@ export default function ConcretePanel() {
         <ConcreteDetail
           key={selected.id}
           element={selected}
+          siblings={elements}
           calibration={project.pages[selected.pageNumber]?.calibration ?? null}
           onUpdate={(patch) => updateElement(selected.id, patch)}
           onChangeKind={(kind) => changeKind(selected.id, kind)}
@@ -143,7 +146,7 @@ export default function ConcretePanel() {
               <li key={el.id} onClick={() => select(el)}>
                 <span className="color-dot" style={{ background: CONCRETE_COLOR }} />
                 <span className="room-list-name" dir="auto">
-                  {el.mark} · {t(`concrete.kinds.${el.kind}`)}
+                  {markLabel(el, t)} · {t(`concrete.kinds.${el.kind}`)}
                 </span>
                 {el.pageNumber !== currentPage && <span className="room-list-page">{t('concrete.page', { page: el.pageNumber })}</span>}
                 <span className="room-list-apt">{calc.volumeM3 === null ? '—' : volumeText(calc, t, 'volumeM3')}</span>
@@ -160,11 +163,14 @@ export default function ConcretePanel() {
 
 function ConcreteDetail({
   element,
+  siblings,
   calibration,
   onUpdate,
   onChangeKind,
 }: {
   element: ConcreteElement;
+  /** Every concrete element of the plan, for numbering an automatic mark. */
+  siblings: ConcreteElement[];
   calibration: Calibration | null;
   onUpdate: (patch: Partial<Omit<ConcreteElement, 'id'>>) => void;
   onChangeKind: (kind: ConcreteKind) => void;
@@ -229,7 +235,8 @@ function ConcreteDetail({
       <div className="form-grid">
         <div className="form-row">
           <label>{t('concrete.mark')}</label>
-          <input dir="auto" value={element.mark} onChange={(e) => onUpdate({ mark: e.target.value })} />
+          {/* Empty = automatic: the placeholder shows the name it will have in this language. */}
+          <input dir="auto" value={element.mark} placeholder={markLabel(element, t)} onChange={(e) => onUpdate(markPatch(siblings, element, e.target.value))} />
         </div>
         <div className="form-row">
           <label>{t('concrete.grade')}</label>
@@ -237,9 +244,14 @@ function ConcreteDetail({
         </div>
         <div className="form-row">
           <label>
-            {depthLabel} ({t('units.m')})
+            {depthLabel} ({t(element.kind === 'slab' ? 'units.cm' : 'units.m')})
           </label>
-          <NumberField value={element.depthM} onChange={(v) => onUpdate({ depthM: v })} />
+          {/* A slab's thickness is typed in centimetres and stored in metres, like every other length. */}
+          {element.kind === 'slab' ? (
+            <NumberField value={metersToCm(element.depthM)} step="1" onChange={(v) => onUpdate({ depthM: cmToMeters(v) })} />
+          ) : (
+            <NumberField value={element.depthM} onChange={(v) => onUpdate({ depthM: v })} />
+          )}
         </div>
         <div className="form-row">
           <label>{t('concrete.waste')}</label>

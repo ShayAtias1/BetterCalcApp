@@ -7,6 +7,7 @@
  */
 
 import { round } from './geometry';
+import { markLabel } from './structuralMarks';
 import type { ExportContext } from './exportLanguage';
 import { basisText, concreteStatusText, rebarStatusText, reinforcementNotation } from './structuralExportText';
 import type { ProjectStructural, StructuralReport } from './structuralQuantities';
@@ -98,7 +99,7 @@ function concreteBlocks(concrete: NonNullable<StructuralReport['concrete']>, x: 
       ],
       weights: [10, 12, 14, 8, 12, 14, 12, 12, 18],
       rows: items.map((it) => ({
-        cells: [it.mark, t(`concrete.kinds.${it.kind}`), it.grade || noGrade, `${it.pageNumber}`, fmt(it.footprintM2), fmt(it.depthM), fmt(it.netM3), fmt(it.orderM3), it.status === 'ok' ? '' : concreteStatusText(it.status, it.kind, x)],
+        cells: [markLabel(it, t), t(`concrete.kinds.${it.kind}`), it.grade || noGrade, `${it.pageNumber}`, fmt(it.footprintM2), fmt(it.depthM), fmt(it.netM3), fmt(it.orderM3), it.status === 'ok' ? '' : concreteStatusText(it.status, it.kind, x)],
       })),
     },
   ];
@@ -182,7 +183,7 @@ function rebarBlocks(rebar: NonNullable<StructuralReport['rebar']>, x: ExportCon
         return {
           cells: [
             `${it.pageNumber}`,
-            it.mark,
+            markLabel(it, t),
             notation ? `${notation}${side}` : DASH,
             it.barCount !== null && it.barLengthM !== null ? `${it.barCount} × ${x.number(round(it.barLengthM, 2))}` : DASH,
             fmt(it.netLengthM, it.estimated),

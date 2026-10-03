@@ -10,7 +10,6 @@ import {
   addRebarMeshFromRooms,
   newRebarBars,
   newRebarMesh,
-  nextRebarMark,
   oppositeDirection,
   removeRebarItem,
   removeRebarLayer,
@@ -18,6 +17,7 @@ import {
   updateRebarLayer,
 } from '../../src/lib/structuralMutations.ts';
 import { rebarOf } from '../../src/lib/structuralPlan.ts';
+import { nextAutoNumber } from '../../src/lib/structuralMarks.ts';
 import { calculateRebar, rebarNotation } from '../../src/lib/rebar.ts';
 import { clonePlanForDuplicate } from '../../src/lib/planDuplication.ts';
 import type { Plan, Point } from '../../src/types/index.ts';
@@ -33,15 +33,18 @@ const L_SHAPE: Point[] = [{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 300 }, 
 const near = (a: number | null, b: number, eps = 1e-9) => assert.ok(a !== null && Math.abs(a - b) < eps, `${a} vs ${b}`);
 const fresh = (): Plan => structuredClone(PLAN_A);
 
-test('marks: M01 for mesh zones, R01 for manual bars, counted separately', () => {
+test('automatic numbers: counted separately for mesh zones and manual bars', () => {
   let plan = fresh();
-  assert.equal(nextRebarMark(rebarOf(plan), 'mesh'), 'M01');
-  assert.equal(nextRebarMark(rebarOf(plan), 'bars'), 'R01');
+  assert.equal(nextAutoNumber(rebarOf(plan), 'mesh'), 1);
+  assert.equal(nextAutoNumber(rebarOf(plan), 'bars'), 1);
   plan = addRebarItem(plan, newRebarMesh(plan, 1, rect(100, 100)));
   plan = addRebarItem(plan, newRebarBars(plan, 1));
   plan = addRebarItem(plan, newRebarMesh(plan, 1, rect(100, 100)));
-  assert.deepEqual(rebarOf(plan).map((i) => i.mark), ['M01', 'R01', 'M02']);
-  assert.equal(nextRebarMark(rebarOf(plan), 'bars'), 'R02');
+  assert.deepEqual(rebarOf(plan).map((i) => [i.kind, i.mark, i.autoNumber]), [['mesh', '', 1], ['bars', '', 1], ['mesh', '', 2]]);
+  assert.equal(nextAutoNumber(rebarOf(plan), 'bars'), 2);
+  // old letter marks are read as the same numbers
+  const old = { rebarItems: [{ ...rebarOf(plan)[0], mark: 'M07', autoNumber: undefined }, { ...rebarOf(plan)[1], mark: 'R03', autoNumber: undefined }] } as unknown as Plan;
+  assert.deepEqual(rebarOf(old).map((i) => [i.mark, i.autoNumber]), [['', 7], ['', 3]]);
 });
 
 test('a new mesh zone is minimal: points, page, mark, one empty layer, zero waste — not calculable until filled in', () => {
@@ -148,9 +151,9 @@ test('rooms → rebar: outlines copied (deep) as independent mesh zones with new
     assert.deepEqual(m.points, rooms[i].points);
     assert.notEqual(m.points[0], rooms[i].points[0]);
     assert.equal(m.pageNumber, rooms[i].pageNumber);
-    assert.equal(m.mark, `M${String(i + 1).padStart(2, '0')}`);
+    assert.equal(m.autoNumber, i + 1);
     assert.equal(m.layers.length, 1);
-    assert.deepEqual(Object.keys(m).sort(), ['id', 'kind', 'layers', 'mark', 'pageNumber', 'points', 'wastePercent']);
+    assert.deepEqual(Object.keys(m).sort(), ['autoNumber', 'id', 'kind', 'layers', 'mark', 'pageNumber', 'points', 'wastePercent']);
   });
   assert.equal(new Set(created.map((m) => m.id)).size, created.length);
   assert.equal(JSON.stringify(plan.rooms), before);

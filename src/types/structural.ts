@@ -8,6 +8,7 @@
 // grouping is by plan and page — and no link between a concrete element and rebar.
 
 import type { Point } from './index';
+import type { MarkFields } from '../lib/structuralMarks';
 
 /**
  * A replacement for the zone's measured size, entered by hand in metres. For zones where the drawn
@@ -28,14 +29,14 @@ export type ConcreteKind = 'slab' | 'wall' | 'beam' | 'column';
  * `volume = footprint area × depthM × quantity`, where `depthM` is the slab's thickness or the
  * wall's, beam's or column's height. A wall or beam is its plan footprint, drawn as a rectangle.
  */
-export interface ConcreteElement {
+export interface ConcreteElement extends MarkFields {
   id: string;
   pageNumber: number;
   kind: ConcreteKind;
   /** Footprint outline, native page pixels. */
   points: Point[];
-  /** Auto-numbered per kind and plan (S01, W01, B01, C01); editable. */
-  mark: string;
+  // `mark` / `markManual` / `autoNumber`: the user's own mark, or an automatic number shown as
+  // "Slab 01" in the language on screen — see lib/structuralMarks.
   /** Optional concrete grade, free text (e.g. "B30"); empty = unspecified. */
   grade?: string;
   /** Thickness (slab) or height (wall, beam, column) in metres. Undefined = not entered yet, which is "not calculable", not 0. */
@@ -63,24 +64,22 @@ export interface RebarLayer {
 }
 
 /** Area reinforcement: a marked zone plus the layers that exist in it. */
-export interface RebarMesh {
+export interface RebarMesh extends MarkFields {
   id: string;
   kind: 'mesh';
   pageNumber: number;
   points: Point[];
-  mark: string;
   layers: RebarLayer[];
   wastePercent?: number;
   sizeOverride?: SizeOverride;
 }
 
 /** Bars entered by quantity — no shape on the plan: diameter, how many, how long each. */
-export interface RebarBars {
+export interface RebarBars extends MarkFields {
   id: string;
   kind: 'bars';
   /** The page the row was added on; only used to group the summary. */
   pageNumber: number;
-  mark: string;
   diameterMm: number;
   count: number;
   lengthM: number;

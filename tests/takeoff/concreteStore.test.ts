@@ -32,7 +32,7 @@ test('a polygon creates a concrete element of the chosen kind, with page, mark, 
   const e = elements()[0];
   assert.equal(e.kind, 'wall');
   assert.equal(e.pageNumber, 2);
-  assert.equal(e.mark, 'W01');
+  assert.equal(e.autoNumber, 1);
   assert.deepEqual(e.points, tri);
   assert.equal(s.selectedConcreteId, e.id);
   assert.equal(s.selectedRoomId, null);
@@ -50,7 +50,7 @@ test('a rectangle creates an element with the four corners; marks count per kind
   store().finishRectangle({ x: 0, y: 0 }, { x: 20, y: 20 });
   store().setConcreteKind('slab');
   store().finishRectangle({ x: 300, y: 300 }, { x: 400, y: 400 });
-  assert.deepEqual(elements().map((e) => e.mark), ['S01', 'C01', 'S02']);
+  assert.deepEqual(elements().map((e) => [e.kind, e.autoNumber]), [['slab', 1], ['column', 1], ['slab', 2]]);
   assert.deepEqual(elements()[0].points, [{ x: 10, y: 10 }, { x: 110, y: 10 }, { x: 110, y: 60 }, { x: 10, y: 60 }]);
 });
 
@@ -156,7 +156,7 @@ test('changing the kind is one undo step, updates the summary at once, and leave
   store().updateConcreteElement(id, { depthM: 2 });
   store().changeConcreteElementKind(id, 'wall');
   assert.equal(elements()[0].kind, 'wall');
-  assert.equal(elements()[0].mark, 'W01');
+  assert.equal(elements()[0].autoNumber, 1);
   assert.deepEqual(elements()[0].points, [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]);
   const historyAfter = store().history.length; // includes the pending depth edit the change flushed
   assert.deepEqual(buildConcreteSummary(store().project!).rows.map((r) => r.kind), ['wall']);
@@ -166,7 +166,7 @@ test('changing the kind is one undo step, updates the summary at once, and leave
 
   store().undo(); // exactly the kind change, not the depth edit before it
   assert.equal(elements()[0].kind, 'slab');
-  assert.equal(elements()[0].mark, 'S01');
+  assert.equal(elements()[0].autoNumber, 1);
   assert.equal(elements()[0].depthM, 2);
   store().redo();
   assert.equal(elements()[0].kind, 'wall');
@@ -185,7 +185,7 @@ test('copyRoomsToConcrete: one room selects its zone; an apartment makes one zon
   assert.equal(store().selectedConcreteId, elements()[0].id);
   assert.equal(store().currentPage, rooms[0].pageNumber);
   assert.deepEqual(elements()[0].points, rooms[0].points);
-  assert.equal(elements()[0].mark, 'B01');
+  assert.equal(elements()[0].autoNumber, 1);
   assert.equal(store().history.length, 1);
 
   // an apartment's rooms

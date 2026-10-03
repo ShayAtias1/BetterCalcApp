@@ -208,7 +208,7 @@ test('project workbook: Plan column first, one row per element/layer, project su
   const cs = wb.getWorksheet('בטון')!;
   assert.deepEqual(rowOf(cs, 1).slice(0, 3), ['תוכנית', 'עמוד', 'סימון']);
   assert.equal(rowOf(cs, 1).length, 12);
-  assert.deepEqual([rowOf(cs, 2)[0], rowOf(cs, 2)[2], rowOf(cs, 3)[0], rowOf(cs, 3)[11]], ['Plan A', 'S01', 'Plan A', 'חסר גובה']);
+  assert.deepEqual([rowOf(cs, 2)[0], rowOf(cs, 2)[2], rowOf(cs, 3)[0], rowOf(cs, 3)[11]], ['Plan A', 'תקרה 01', 'Plan A', 'חסר גובה']);
   assert.equal(rowOf(cs, 4)[0], 'Plan B');
   assert.equal(typeof rowOf(cs, 2)[8], 'number');
   assert.equal(rowOf(cs, 3)[8], '—'); // missing: a dash, not 0

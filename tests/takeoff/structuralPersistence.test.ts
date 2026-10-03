@@ -18,6 +18,9 @@ const MESH: RebarItem = {
   points: SLAB.points,
   layers: [{ id: 'l-1', diameterMm: 12, spacingM: 0.15, direction: 'long' }, { id: 'l-2', diameterMm: 10, spacingM: 0.2, direction: 'short' }],
 };
+// What reading returns for SLAB: its old letter mark `S01` is the automatic number 1.
+const SLAB_READ: ConcreteElement = { ...SLAB, mark: '', autoNumber: 1 };
+const MESH_READ = { ...MESH, mark: '', autoNumber: 1 };
 const BARS: RebarItem = { id: 'r-2', kind: 'bars', pageNumber: 2, mark: 'B01', diameterMm: 16, count: 10, lengthM: 6 };
 
 const withZones = (): Plan => ({ ...structuredClone(PLAN_A), concreteElements: [SLAB], rebarItems: [MESH, BARS] });
@@ -43,8 +46,8 @@ test('zones survive a save/load round trip (JSON and structured clone, as Indexe
   // (The fixture deliberately holds a NaN elsewhere, which JSON cannot carry — so JSON is checked on the zones only.)
   assert.deepEqual(structuredClone(plan), plan);
   const viaJson = JSON.parse(JSON.stringify(plan)) as Plan;
-  assert.deepEqual(concreteOf(viaJson), [SLAB]);
-  assert.deepEqual(rebarOf(viaJson), [MESH, BARS]);
+  assert.deepEqual(concreteOf(viaJson), [SLAB_READ]);
+  assert.deepEqual(rebarOf(viaJson), [MESH_READ, BARS]); // BARS' `B01` is not an automatic shape for manual bars (R01), so it stays text
 });
 
 test('duplicating a plan without zones adds no keys', () => {
@@ -61,7 +64,7 @@ test('duplicating a plan copies concrete and rebar with new ids and no shared re
 
   assert.equal(c.length, 1);
   assert.notEqual(c[0].id, SLAB.id);
-  assert.deepEqual({ ...c[0], id: SLAB.id }, SLAB);
+  assert.deepEqual({ ...c[0], id: SLAB.id }, SLAB_READ);
 
   assert.equal(r.length, 2);
   const [mesh, bars] = r;

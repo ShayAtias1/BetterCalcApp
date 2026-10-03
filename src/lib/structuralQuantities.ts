@@ -256,7 +256,9 @@ export function buildRebarSummary(plan: Plan, onlyPages?: ReadonlySet<number>): 
 export interface ConcreteItemRow {
   id: string;
   pageNumber: number;
+  /** The user's own mark, '' when automatic — print it with `markLabel` in the report language. */
   mark: string;
+  autoNumber?: number;
   kind: ConcreteKind;
   /** As typed (trimmed); '' = unspecified. */
   grade: string;
@@ -282,6 +284,7 @@ export function buildConcreteItems(plan: Plan, pages?: ReadonlySet<number>): Con
         id: el.id,
         pageNumber: el.pageNumber,
         mark: el.mark,
+        autoNumber: el.autoNumber,
         kind: el.kind,
         grade: el.grade?.trim() ?? '',
         footprintM2: calc.footprintM2,
@@ -304,7 +307,9 @@ export function buildConcreteItems(plan: Plan, pages?: ReadonlySet<number>): Con
 export interface RebarItemRow {
   itemId: string;
   pageNumber: number;
+  /** The user's own mark, '' when automatic — print it with `markLabel` in the report language. */
   mark: string;
+  autoNumber?: number;
   kind: 'mesh' | 'bars';
   diameterMm: number | null;
   spacingMm: number | null;
@@ -335,7 +340,7 @@ export function buildRebarItems(plan: Plan, pages?: ReadonlySet<number>): RebarI
     const calc = calculateRebar(item, plan.pages[item.pageNumber]?.calibration ?? null);
     const ok = calc.status === 'ok';
     const factor = 1 + calc.wastePercent / 100;
-    const base = { itemId: item.id, pageNumber: item.pageNumber, mark: item.mark, kind: item.kind, wastePercent: calc.wastePercent, status: calc.status };
+    const base = { itemId: item.id, pageNumber: item.pageNumber, mark: item.mark, autoNumber: item.autoNumber, kind: item.kind, wastePercent: calc.wastePercent, status: calc.status };
 
     if (item.kind === 'bars') {
       const l = calc.layers[0];

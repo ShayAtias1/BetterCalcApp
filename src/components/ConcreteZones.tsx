@@ -1,6 +1,8 @@
 import type { ConcreteElement } from '../types/structural';
 import { polygonCentroid } from '../lib/geometry';
 import { labelDirection } from '../lib/textDirection';
+import { markLabel } from '../lib/structuralMarks';
+import { metersToCm } from '../lib/structuralUnits';
 import { formatNumber, useLanguage, useT } from '../i18n';
 
 /** One colour for every concrete zone: a warm stone grey, apart from the room palette. */
@@ -41,9 +43,11 @@ export default function ConcreteZones({
         const selected = el.id === selectedId;
         const pts = el.points.map((p) => `${p.x},${p.y}`).join(' ');
         const c = polygonCentroid(el.points);
-        const parts = [el.mark];
+        const mark = markLabel(el, t);
+        const parts = [mark];
         if (typeof el.depthM === 'number' && Number.isFinite(el.depthM) && el.depthM > 0) {
-          parts.push(`${formatNumber(el.depthM)} ${t('units.m')}`);
+          // A slab's thickness is read in centimetres; a wall, beam or column's height in metres.
+          parts.push(el.kind === 'slab' ? `${formatNumber(metersToCm(el.depthM)!)} ${t('units.cm')}` : `${formatNumber(el.depthM)} ${t('units.m')}`);
         }
         if (el.grade?.trim()) parts.push(el.grade.trim());
         const label = parts.join(' · ');

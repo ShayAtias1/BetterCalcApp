@@ -14,6 +14,8 @@ import { buildStructuralPdfLayout } from '../../src/lib/structuralPdfLayout.ts';
 import { buildStructuralReport, buildConcreteItems, buildRebarItems, buildConcreteSummary, buildRebarSummary } from '../../src/lib/structuralQuantities.ts';
 import { hasStructuralData, structuralPageNumbers, withStructuralPages } from '../../src/lib/structuralPlan.ts';
 import { exportContext } from '../../src/lib/exportLanguage.ts';
+import { markLabel } from '../../src/lib/structuralMarks.ts';
+import { translatorFor } from '../../src/i18n/index.ts';
 import type { Plan, Point } from '../../src/types/index.ts';
 import type { ConcreteElement, RebarItem, RebarLayer } from '../../src/types/structural.ts';
 
@@ -106,6 +108,8 @@ test('with structural data the finishes sheets are untouched and the new sheets 
   assert.deepEqual(withStructural.slice(base.length).map((s) => s.name), ['בטון', 'זיון']);
 });
 
+const he = translatorFor('he');
+
 // ---------- builders and page filter ----------
 
 test('item rows: ordered by page, numbers null (never 0) where unknown, applied quantity and waste shown', () => {
@@ -115,7 +119,7 @@ test('item rows: ordered by page, numbers null (never 0) where unknown, applied 
     el({ pageNumber: 3, mark: 'S03' }), // page without a scale
     el({ pageNumber: 1, mark: 'S04', depthM: undefined }), // thickness missing
   ]));
-  assert.deepEqual(rows.map((r) => r.mark), ['S01', 'S04', 'S02', 'S03']);
+  assert.deepEqual(rows.map((r) => markLabel(r, he)), ['תקרה 01', 'תקרה 04', 'תקרה 02', 'תקרה 03']);
   assert.equal(rows[0].grade, 'B30');
   assert.equal(rows[0].quantity, 2);
   near(rows[0].netM3, 32); // 80 m² × 0.2 × 2
@@ -137,7 +141,7 @@ test('rebar rows: one per mesh layer or manual-bars item; exact has counts, esti
     mesh([layer({ diameterMm: 0 })], { mark: 'M03' }),
     mesh([], { mark: 'M04' }),
   ]));
-  assert.deepEqual(rows.map((r) => r.mark), ['M01', 'M01', 'M02', 'R01', 'M03', 'M04']);
+  assert.deepEqual(rows.map((r) => markLabel(r, he)), ['רשת 01', 'רשת 01', 'רשת 02', 'מוטות 01', 'רשת 03', 'רשת 04']);
   assert.deepEqual([rows[0].diameterMm, rows[0].spacingMm, rows[0].direction, rows[0].barCount], [12, 200, 'long', 41]);
   near(rows[0].barLengthM, 10);
   near(rows[0].netLengthM, 410);
@@ -165,7 +169,7 @@ test('page filtering: structural data follows the page set exactly like rooms do
   assert.deepEqual(structuralPageNumbers(p), [1, 2, 3]);
   const pages = new Set([2, 3]);
   const report = buildStructuralReport(p, pages);
-  assert.deepEqual(report.concrete!.items.map((i) => i.mark), ['S02', 'S03']);
+  assert.deepEqual(report.concrete!.items.map((i) => markLabel(i, he)), ['תקרה 02', 'תקרה 03']);
   assert.deepEqual(report.rebar!.items.map((i) => i.pageNumber), [2, 3]);
   assert.equal(report.concrete!.summary.elementCount, 2);
   assert.equal(report.rebar!.summary.itemCount, 2);
@@ -212,7 +216,7 @@ test('concrete sheet: a structural-only plan gets just that sheet; values are nu
   // header + 5 items + total
   assert.equal(rowOf(sheet, 1).length, 11);
   const [s01, c01, w01, s02, c02] = [2, 3, 4, 5, 6].map((r) => rowOf(sheet, r));
-  assert.deepEqual(s01.slice(0, 4), [1, 'S01', 'תקרה', 'B30']);
+  assert.deepEqual(s01.slice(0, 4), [1, 'תקרה 01', 'תקרה', 'B30']);
   assert.equal(typeof s01[7], 'number');
   near(s01[7], 16);
   near(s01[9], 16.8);
@@ -250,7 +254,7 @@ test('concrete sheet: a structural-only plan gets just that sheet; values are nu
 test('concrete sheet in English', async () => {
   const sheet = (await reread(build(structuralOnly([el({ mark: 'S01', grade: 'B30' })]), 'en'))).getWorksheet('Concrete')!;
   assert.deepEqual(rowOf(sheet, 1).slice(0, 4), ['Page', 'Mark', 'Type', 'Concrete grade']);
-  assert.deepEqual(rowOf(sheet, 2).slice(1, 4), ['S01', 'Slab', 'B30']);
+  assert.deepEqual(rowOf(sheet, 2).slice(1, 4), ['Slab 01', 'Slab', 'B30']);
   assert.equal(sheet.views[0].rightToLeft, false);
   assert.equal(sheet.getRow(3).getCell(1).value, 'Grand total');
 });
@@ -272,7 +276,7 @@ test('rebar sheet: numbers stay numbers, estimates are marked by format and Basi
   const rows = [2, 3, 4, 5, 6, 7].map((r) => rowOf(sheet, r));
   const [l1, l2, est, man, bad, size] = rows;
 
-  assert.deepEqual([l1[1], l1[2], l1[3], l1[4], l1[5]], ['M01', 'רשת', 12, 200, 'צלע ארוכה']);
+  assert.deepEqual([l1[1], l1[2], l1[3], l1[4], l1[5]], ['רשת 01', 'רשת', 12, 200, 'צלע ארוכה']);
   assert.equal(l1[6], 41); // bars (numeric)
   near(l1[7], 10); // bar length
   near(l1[8], 410);
@@ -290,7 +294,7 @@ test('rebar sheet: numbers stay numbers, estimates are marked by format and Basi
   assert.equal(sheet.getCell('I2').numFmt, '#,##0.00'); // an exact row has no ≈
 
   // manual bars: no spacing or direction
-  assert.deepEqual([man[1], man[2], man[3], man[4], man[5]], ['R01', 'מוטות', 16, '—', '—']);
+  assert.deepEqual([man[1], man[2], man[3], man[4], man[5]], ['מוטות 01', 'מוטות', 16, '—', '—']);
   assert.equal(man[6], 10);
   near(man[8], 60);
   near(man[11], 66);
@@ -340,9 +344,9 @@ test('concrete and rebar together: both sheets, selected-page filtering applies 
   const all = await reread(buildQuantitiesWorkbook([], [], 'he', buildStructuralReport(p)));
   assert.deepEqual(all.worksheets.map((s) => s.name), ['בטון', 'זיון']);
   const filtered = await reread(buildQuantitiesWorkbook([], [], 'he', buildStructuralReport(withStructuralPages(p, new Set([2])))));
-  assert.equal(filtered.getWorksheet('בטון')!.getRow(2).getCell(2).value, 'S02');
+  assert.equal(filtered.getWorksheet('בטון')!.getRow(2).getCell(2).value, 'תקרה 02');
   assert.equal(filtered.getWorksheet('בטון')!.getRow(3).getCell(1).value, 'סה"כ כללי');
-  assert.equal(filtered.getWorksheet('זיון')!.getRow(2).getCell(2).value, 'R02');
+  assert.equal(filtered.getWorksheet('זיון')!.getRow(2).getCell(2).value, 'מוטות 02');
   // a page with nothing structural: no structural sheets at all
   assert.equal((await reread(buildQuantitiesWorkbook([], [], 'he', buildStructuralReport(withStructuralPages(p, new Set([9])))))).worksheets.length, 0);
 });
@@ -370,12 +374,12 @@ test('PDF layout: summary and item tables, ~ on estimates, dashes and a missing 
 
   const mixedTotal = rSummary.rows.at(-1)!;
   assert.equal(mixedTotal.cells[6], 'Includes estimate');
-  const est = rItems.rows.find((r) => r.cells[1] === 'M01')!;
+  const est = rItems.rows.find((r) => r.cells[1] === 'Mesh 01')!;
   assert.ok(est.cells[4].startsWith('~ ')); // the printed estimate is marked
   assert.equal(est.cells[3], '—'); // no bar count
   assert.equal(est.cells[7], 'Estimate');
-  assert.equal(rItems.rows.find((r) => r.cells[1] === 'M02')!.cells[3], '41 × 10');
-  assert.equal(rItems.rows.find((r) => r.cells[1] === 'M03')!.cells[7], 'Data missing');
+  assert.equal(rItems.rows.find((r) => r.cells[1] === 'Mesh 02')!.cells[3], '41 × 10');
+  assert.equal(rItems.rows.find((r) => r.cells[1] === 'Mesh 03')!.cells[7], 'Data missing');
   const notes = blocks.filter((b) => b.type === 'note').map((b) => (b as { text: string }).text);
   assert.ok(notes.some((t) => t.startsWith('Includes estimate: ')));
   assert.ok(notes.some((t) => t === 'Missing data: 1 — not included in the totals.'));

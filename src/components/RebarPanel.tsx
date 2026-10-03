@@ -5,6 +5,7 @@ import type { RebarBars, RebarItem, RebarLayer, RebarMesh } from '../types/struc
 import { REBAR_DIAMETERS_MM, calculateRebar, rebarNotation, type RebarCalc, type RebarLayerCalc } from '../lib/rebar';
 import { oppositeDirection } from '../lib/structuralMutations';
 import { rebarOf } from '../lib/structuralPlan';
+import { markLabel, markPatch } from '../lib/structuralMarks';
 import { zoneGeometry } from '../lib/zoneGeometry';
 import { round } from '../lib/geometry';
 import { REBAR_COLOR } from './RebarZones';
@@ -55,14 +56,14 @@ export default function RebarPanel() {
         <div className="detail-header">
           <span className="color-dot" style={{ background: REBAR_COLOR }} />
           <span className="detail-header-text">
-            <span className="detail-title" dir="auto">{selected.mark || t(selected.kind === 'mesh' ? 'rebar.mesh' : 'rebar.bars')}</span>
+            <span className="detail-title" dir="auto">{markLabel(selected, t)}</span>
             <span className="detail-subtitle">{t(selected.kind === 'mesh' ? 'rebar.meshZone' : 'rebar.manualBars')}</span>
           </span>
           <button
             className="icon-btn danger"
             title={t('rebar.delete')}
             onClick={() => {
-              if (confirm(t('rebar.deleteConfirm', { mark: selected.mark }))) deleteItem(selected.id);
+              if (confirm(t('rebar.deleteConfirm', { mark: markLabel(selected, t) }))) deleteItem(selected.id);
             }}
           >
             <Icon name="trash" />
@@ -129,7 +130,7 @@ export default function RebarPanel() {
               <li key={item.id} onClick={() => select(item)}>
                 <span className="color-dot" style={{ background: REBAR_COLOR }} />
                 <span className="room-list-name" dir="auto">
-                  {item.mark} · <span dir="ltr">{itemSummary(item, t)}</span>
+                  {markLabel(item, t)} · <span dir="ltr">{itemSummary(item, t)}</span>
                 </span>
                 {item.pageNumber !== currentPage && <span className="room-list-page">{t('concrete.page', { page: item.pageNumber })}</span>}
                 <span className="room-list-apt">{calc.weightKg === null ? '—' : `${calc.estimated ? '≈ ' : ''}${kg(calc.weightKg, t)}`}</span>
@@ -223,6 +224,8 @@ function LayerResult({ layer, result }: { layer: RebarLayer; result: RebarLayerC
 function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calibration | null }) {
   const t = useT();
   const updateItem = useAppStore((s) => s.updateRebarItem);
+  const plan = useAppStore((s) => s.project);
+  const siblings = plan ? rebarOf(plan) : [];
   const addLayer = useAppStore((s) => s.addRebarLayer);
   const updateLayer = useAppStore((s) => s.updateRebarLayer);
   const removeLayer = useAppStore((s) => s.removeRebarLayer);
@@ -248,7 +251,7 @@ function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calib
       <div className="form-grid">
         <div className="form-row">
           <label>{t('concrete.mark')}</label>
-          <input dir="auto" value={mesh.mark} onChange={(e) => updateItem(mesh.id, { mark: e.target.value })} />
+          <input dir="auto" value={mesh.mark} placeholder={markLabel(mesh, t)} onChange={(e) => updateItem(mesh.id, markPatch(siblings, mesh, e.target.value))} />
         </div>
         <div className="form-row">
           <label>{t('concrete.waste')}</label>
@@ -329,6 +332,8 @@ function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calib
 function BarsDetail({ bars }: { bars: RebarBars }) {
   const t = useT();
   const updateItem = useAppStore((s) => s.updateRebarItem);
+  const plan = useAppStore((s) => s.project);
+  const siblings = plan ? rebarOf(plan) : [];
   const calc = calculateRebar(bars, null);
 
   return (
@@ -338,7 +343,7 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
       <div className="form-grid">
         <div className="form-row">
           <label>{t('concrete.mark')}</label>
-          <input dir="auto" value={bars.mark} onChange={(e) => updateItem(bars.id, { mark: e.target.value })} />
+          <input dir="auto" value={bars.mark} placeholder={markLabel(bars, t)} onChange={(e) => updateItem(bars.id, markPatch(siblings, bars, e.target.value))} />
         </div>
         <div className="form-row">
           <label>{t('rebar.diameter')}</label>

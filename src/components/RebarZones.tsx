@@ -2,7 +2,8 @@ import type { RebarItem, RebarMesh } from '../types/structural';
 import { polygonCentroid } from '../lib/geometry';
 import { rebarNotation } from '../lib/rebar';
 import { labelDirection } from '../lib/textDirection';
-import { useLanguage } from '../i18n';
+import { markLabel } from '../lib/structuralMarks';
+import { useLanguage, useT } from '../i18n';
 
 /** One colour for every rebar zone: a rust orange, apart from the room and concrete colours. */
 export const REBAR_COLOR = '#c2410c';
@@ -24,6 +25,7 @@ export default function RebarZones({
   strokeW: number;
   zoom: number;
 }) {
+  const t = useT();
   const language = useLanguage();
   const meshes = items.filter((i): i is RebarMesh => i.kind === 'mesh' && i.points.length >= 3);
   if (meshes.length === 0) return null;
@@ -35,6 +37,7 @@ export default function RebarZones({
         const pts = m.points.map((p) => `${p.x},${p.y}`).join(' ');
         const c = polygonCentroid(m.points);
         const notation = rebarNotation(m.layers);
+        const mark = markLabel(m, t);
         const size = 10.5 / zoom;
         const halo = { paintOrder: 'stroke', stroke: '#fff', strokeWidth: 3 / zoom, strokeLinejoin: 'round' as const };
         return (
@@ -49,8 +52,8 @@ export default function RebarZones({
               strokeLinecap="round"
             />
             {/* The mark is the user's text and reads in its own direction; the notation is always left-to-right. */}
-            <text x={c.x} y={notation ? c.y - size * 0.6 : c.y} fontSize={size} fill={REBAR_COLOR} fontWeight={600} textAnchor="middle" dominantBaseline="middle" direction={labelDirection(m.mark, language)} {...halo}>
-              {m.mark}
+            <text x={c.x} y={notation ? c.y - size * 0.6 : c.y} fontSize={size} fill={REBAR_COLOR} fontWeight={600} textAnchor="middle" dominantBaseline="middle" direction={labelDirection(mark, language)} {...halo}>
+              {mark}
             </text>
             {notation && (
               <text x={c.x} y={c.y + size * 0.75} fontSize={size * 0.95} fill={REBAR_COLOR} textAnchor="middle" dominantBaseline="middle" direction="ltr" {...halo}>

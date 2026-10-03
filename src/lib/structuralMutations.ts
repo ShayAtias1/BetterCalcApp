@@ -9,35 +9,13 @@ import type { Plan, Point, Room } from '../types';
 import { polygonAreaPx } from './geometry';
 import type { ConcreteElement, ConcreteKind, RebarBars, RebarItem, RebarLayer, RebarMesh } from '../types/structural';
 import { concreteOf, rebarOf } from './structuralPlan';
-
-/** The letter each kind's automatic mark starts with: S01, W01, B01, C01. */
-export const CONCRETE_MARK_PREFIX: Record<ConcreteKind, string> = { slab: 'S', wall: 'W', beam: 'B', column: 'C' };
+import { hasManualMark, nextAutoNumber } from './structuralMarks';
 
 export const CONCRETE_KINDS: ConcreteKind[] = ['slab', 'wall', 'beam', 'column'];
 
 /**
- * The next automatic mark of a kind: one above the highest `<letter><number>` mark that kind already
- * has in the plan, padded to two digits. Marks the user typed in another shape are ignored, and a
- * deleted element's number is not reused while a higher one remains.
- */
-export function nextConcreteMark(elements: ConcreteElement[], kind: ConcreteKind): string {
-  return nextNumberedMark(elements.filter((e) => e.kind === kind).map((e) => e.mark), CONCRETE_MARK_PREFIX[kind]);
-}
-
-/** `<prefix><number>` one above the highest such mark in `marks`, padded to two digits. */
-function nextNumberedMark(marks: string[], prefix: string): string {
-  const pattern = new RegExp(`^${prefix}(\\d+)$`);
-  let highest = 0;
-  for (const mark of marks) {
-    const n = Number(pattern.exec(mark.trim())?.[1]);
-    if (Number.isFinite(n) && n > highest) highest = n;
-  }
-  return `${prefix}${String(highest + 1).padStart(2, '0')}`;
-}
-
-/**
  * A new, deliberately minimal element for a finished zone: the geometry, the page, the kind and the
- * automatic mark. The vertical dimension is left unset (not calculable until entered) — the form
+ * automatic mark number. The vertical dimension is left unset (not calculable until entered) — the form
  * opens straight after.
  */
 export function newConcreteElement(plan: Plan, pageNumber: number, kind: ConcreteKind, points: Point[]): ConcreteElement {
@@ -46,7 +24,8 @@ export function newConcreteElement(plan: Plan, pageNumber: number, kind: Concret
     pageNumber,
     kind,
     points: points.map((p) => ({ x: p.x, y: p.y })),
-    mark: nextConcreteMark(concreteOf(plan), kind),
+    mark: '',
+    autoNumber: nextAutoNumber(concreteOf(plan), kind),
     wastePercent: 0,
   };
 }
@@ -58,7 +37,7 @@ export function addConcreteElement(plan: Plan, element: ConcreteElement): Plan {
 /**
  * Copies the outlines of existing rooms into new concrete zones of one kind. Only the page and the
  * native points are taken — never the room's name, work items, openings or quantity settings — and
- * every zone gets its own id and the next automatic mark of that kind, in the order given. The rooms
+ * every zone gets its own id and the next automatic number of that kind, in the order given. The rooms
  * are not touched. A room without a usable outline (fewer than three points, or no area) is skipped.
  */
 export function addConcreteFromRooms(plan: Plan, rooms: Room[], kind: ConcreteKind): { plan: Plan; created: ConcreteElement[] } {
@@ -89,19 +68,18 @@ export function updateConcreteElement(plan: Plan, id: string, patch: Partial<Omi
 }
 
 /**
- * Changes an element's kind and nothing about its zone. The mark follows the kind only while it is
- * still an automatic one — `<old letter><number>` — and is then renumbered for the new kind;
- * a mark the user typed is kept. The vertical dimension stays (thickness and height are the same
- * field). A quantity only belongs to columns, so it is dropped when the new kind is not a column —
- * otherwise a hidden "4" would silently multiply a slab. Same kind or unknown id: the plan unchanged.
+ * Changes an element's kind and nothing about its zone. An automatic mark follows the kind (it is
+ * renumbered for the new kind); a mark the user typed is kept. The vertical dimension stays
+ * (thickness and height are the same field). A quantity only belongs to columns, so it is dropped
+ * when the new kind is not a column — otherwise a hidden "4" would silently multiply a slab. Same
+ * kind or unknown id: the plan unchanged.
  */
 export function changeConcreteKind(plan: Plan, id: string, kind: ConcreteKind): Plan {
   const element = concreteOf(plan).find((e) => e.id === id);
   if (!element || element.kind === kind) return plan;
-  const wasAutoMark = new RegExp(`^${CONCRETE_MARK_PREFIX[element.kind]}\\d+$`).test(element.mark.trim());
   return updateConcreteElement(plan, id, {
     kind,
-    mark: wasAutoMark ? nextConcreteMark(concreteOf(plan), kind) : element.mark,
+    ...(hasManualMark(element) ? {} : { autoNumber: nextAutoNumber(concreteOf(plan).filter((e) => e.id !== id), kind) }),
     ...(kind === 'column' ? {} : { quantity: undefined }),
   });
 }
@@ -115,26 +93,20 @@ export function removeConcreteElement(plan: Plan, id: string): Plan {
 
 // ---------- rebar ----------
 
-/** The letter each rebar kind's automatic mark starts with: M01 for a mesh zone, R01 for manual bars. */
-export const REBAR_MARK_PREFIX: Record<RebarItem['kind'], string> = { mesh: 'M', bars: 'R' };
-
-export function nextRebarMark(items: RebarItem[], kind: RebarItem['kind']): string {
-  return nextNumberedMark(items.filter((i) => i.kind === kind).map((i) => i.mark), REBAR_MARK_PREFIX[kind]);
-}
-
 /** A layer the user still has to fill in: 0 means "not entered", which the engine reports as not calculable. */
 export function newRebarLayer(template: Partial<Omit<RebarLayer, 'id'>> = {}): RebarLayer {
   return { id: uuid(), diameterMm: 0, spacingM: 0, direction: 'long', ...template };
 }
 
-/** A new mesh zone for a finished outline: geometry, page, automatic mark and one empty layer. */
+/** A new mesh zone for a finished outline: geometry, page, automatic mark number and one empty layer. */
 export function newRebarMesh(plan: Plan, pageNumber: number, points: Point[]): RebarMesh {
   return {
     id: uuid(),
     kind: 'mesh',
     pageNumber,
     points: points.map((p) => ({ x: p.x, y: p.y })),
-    mark: nextRebarMark(rebarOf(plan), 'mesh'),
+    mark: '',
+    autoNumber: nextAutoNumber(rebarOf(plan), 'mesh'),
     layers: [newRebarLayer()],
     wastePercent: 0,
   };
@@ -142,7 +114,7 @@ export function newRebarMesh(plan: Plan, pageNumber: number, points: Point[]): R
 
 /** A new manual-bars row on a page: nothing entered yet, so nothing is calculable. */
 export function newRebarBars(plan: Plan, pageNumber: number): RebarBars {
-  return { id: uuid(), kind: 'bars', pageNumber, mark: nextRebarMark(rebarOf(plan), 'bars'), diameterMm: 0, count: 0, lengthM: 0, wastePercent: 0 };
+  return { id: uuid(), kind: 'bars', pageNumber, mark: '', autoNumber: nextAutoNumber(rebarOf(plan), 'bars'), diameterMm: 0, count: 0, lengthM: 0, wastePercent: 0 };
 }
 
 export function addRebarItem(plan: Plan, item: RebarItem): Plan {

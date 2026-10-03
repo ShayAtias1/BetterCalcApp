@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { columnWidths, type ExportContext } from './exportLanguage';
+import { markLabel } from './structuralMarks';
 import { basisText, concreteStatusText, rebarStatusText } from './structuralExportText';
 import type {
   ConcreteItemRow,
@@ -207,7 +208,7 @@ function addConcreteSheet(workbook: ExcelJS.Workbook, data: ConcreteSheetData, w
   data.items.forEach(({ planName, item: it }, i) => {
     const row = rowFor(planName, [
       it.pageNumber,
-      it.mark,
+      markLabel(it, t),
       t(`concrete.kinds.${it.kind}`),
       it.grade || noGrade,
       num(it.footprintM2),
@@ -344,7 +345,7 @@ function addRebarSheet(workbook: ExcelJS.Workbook, data: RebarSheetData, withPla
     const calculable = it.netLengthM !== null;
     const row = rowFor(planName, [
       it.pageNumber,
-      it.mark,
+      markLabel(it, t),
       t(it.kind === 'mesh' ? 'rebar.mesh' : 'rebar.bars'),
       num(it.diameterMm),
       num(it.spacingMm),
