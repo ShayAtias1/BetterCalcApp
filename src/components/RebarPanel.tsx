@@ -9,6 +9,7 @@ import { zoneGeometry } from '../lib/zoneGeometry';
 import { round } from '../lib/geometry';
 import { REBAR_COLOR } from './RebarZones';
 import ExistingAreaPicker from './ExistingAreaPicker';
+import RebarSummary from './RebarSummary';
 import NumberField from './NumberField';
 import Icon from './Icon';
 
@@ -72,6 +73,8 @@ export default function RebarPanel() {
         ) : (
           <BarsDetail key={selected.id} bars={selected} />
         )}
+        {/* Under the form, so an edit can be seen landing in the totals as it is typed. */}
+        <RebarSummary plan={project} />
       </div>
     );
   }
@@ -135,6 +138,8 @@ export default function RebarPanel() {
           })}
         </ul>
       </div>
+
+      <RebarSummary plan={project} />
     </div>
   );
 }
