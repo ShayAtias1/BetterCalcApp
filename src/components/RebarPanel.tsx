@@ -349,24 +349,23 @@ function LevelSection({
 function MeshSheets({ mesh, result }: { mesh: RebarMesh; result: MeshSheetsResult }) {
   const t = useT();
   const updateItem = useAppStore((s) => s.updateRebarItem);
-  const { settings, plan } = result;
+  const { settings } = result;
   const set = (patch: NonNullable<RebarMesh['sheets']>) => updateItem(mesh.id, { sheets: { ...mesh.sheets, ...patch } });
-  const fmt2 = (v: number) => formatNumber(round(v, 2));
 
   let body: React.ReactNode = null;
-  if (result.status === 'ok' && plan) {
-    const long = plan.chosen;
+  if (result.status === 'ok') {
     body = (
       <>
-        <div className="rebar-sheets-count">{t('rebar.sheets.required', { count: result.totalSheets! })}</div>
-        {result.levels.length > 1 && (
-          <p className="muted rebar-sheets-line">
-            {result.levels.map((l) => `${t(l.level === 'bottom' ? 'rebar.levelBottom' : 'rebar.levelTop')}: ${l.sheets}`).join(' · ')}
-          </p>
+        {result.levels.length > 1 ? (
+          <>
+            {result.levels.map((l) => (
+              <p className="rebar-sheets-line" key={l.level}>{`${t(l.level === 'bottom' ? 'rebar.levelBottom' : 'rebar.levelTop')}: ${l.sheets}`}</p>
+            ))}
+            <div className="rebar-sheets-count">{`${t('rebar.sheets.total')}: ${result.totalSheets}`}</div>
+          </>
+        ) : (
+          <div className="rebar-sheets-count">{t('rebar.sheets.required', { count: result.totalSheets! })}</div>
         )}
-        <p className="muted rebar-sheets-line">{t('rebar.sheets.orientation', { dim: `${fmt2(long.alongLongM)} ${t('units.m')}` })}</p>
-        <p className="muted rebar-sheets-line">{t('rebar.sheets.purchasedArea', { area: `${formatNumber(round(result.purchasedAreaM2!, 1))} ${t('units.m2')}` })}</p>
-        <p className="muted rebar-sheets-line">{t('rebar.sheets.zoneArea', { area: `${formatNumber(round(result.zoneAreaM2!, 1))} ${t('units.m2')}` })}</p>
       </>
     );
   } else if (result.status === 'invalid-settings') {
