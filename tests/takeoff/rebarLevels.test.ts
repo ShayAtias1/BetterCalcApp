@@ -10,7 +10,7 @@ import { calculateRebar } from '../../src/lib/rebar.ts';
 import { meshLayers, normalizeMesh } from '../../src/lib/rebarMesh.ts';
 import { rebarOf } from '../../src/lib/structuralPlan.ts';
 import { buildQuantitiesWorkbook } from '../../src/lib/exportExcel.ts';
-import { buildProjectStructural, buildRebarItems, buildRebarSummary, buildStructuralReport } from '../../src/lib/structuralQuantities.ts';
+import { buildProjectStructural, buildRebarItems, buildRebarLevelRows, buildRebarSummary, buildStructuralReport } from '../../src/lib/structuralQuantities.ts';
 import { buildStructuralPdfLayout } from '../../src/lib/structuralPdfLayout.ts';
 import { exportContext } from '../../src/lib/exportLanguage.ts';
 import type { Plan, Point } from '../../src/types/index.ts';
@@ -270,4 +270,20 @@ test('every character the level texts print has a glyph in the report fonts', ()
     const printed = blocks.flatMap((blk) => (blk.type === 'section' ? [blk.title] : blk.type === 'note' ? [blk.text] : [...blk.headers, ...blk.rows.flatMap((r) => r.cells)]));
     for (const text of printed) for (const ch of text) assert.ok(covered(ch), `U+${ch.codePointAt(0)!.toString(16)} (${ch}) in "${text}" [${lang}]`);
   }
+});
+
+test('level rows: one row per level with its directions folded in; weights are the sums of the item rows', () => {
+  const m = mesh({ bottom: { mode: 'directional', long: { diameterMm: 12, spacingM: 0.2 }, short: { diameterMm: 10, spacingM: 0.15 } }, top: uniform(10, 0.15), wastePercent: 5 });
+  const plan = planWith([m]);
+  const rows = buildRebarItems(plan);
+  const levels = buildRebarLevelRows(plan);
+  assert.deepEqual(levels.map((l) => [l.level, l.parts.length]), [['bottom', 2], ['top', 1]]);
+  const [bottom, top] = levels;
+  near(bottom.netWeightKg, rows[0].netWeightKg! + rows[1].netWeightKg!);
+  near(bottom.orderWeightKg, rows[0].orderWeightKg! + rows[1].orderWeightKg!);
+  assert.equal(top.netWeightKg, rows[2].netWeightKg);
+  // nothing changes in total: the levels add up to the engine's weight
+  near(bottom.netWeightKg! + top.netWeightKg!, calc(m).weightKg!);
+  // a level with an uncalculable part has no weight at all
+  assert.equal(buildRebarLevelRows(planWith([mesh({ bottom: uniform(0, 0) })]))[0].netWeightKg, null);
 });

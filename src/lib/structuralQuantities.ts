@@ -406,6 +406,43 @@ export function buildRebarItems(plan: Plan, pages?: ReadonlySet<number>): RebarI
 }
 
 /**
+ * One row per mesh LEVEL (or manual-bars item): the directional rows of `buildRebarItems` folded
+ * together, so a level's two directions are one row with its own net and order weight. The sums are
+ * of the item rows' own values (null when any part is null); no weight is calculated here.
+ */
+export interface RebarLevelRow {
+  key: string;
+  itemId: string;
+  pageNumber: number;
+  mark: string;
+  autoNumber?: number;
+  kind: 'mesh' | 'bars';
+  level: RebarLevel | null;
+  /** The item rows the level is made of: one per direction (one for uniform and for manual bars). */
+  parts: RebarItemRow[];
+  netWeightKg: number | null;
+  orderWeightKg: number | null;
+  estimated: boolean;
+  status: RebarStatus;
+}
+
+export function buildRebarLevelRows(plan: Plan, pages?: ReadonlySet<number>): RebarLevelRow[] {
+  const out: RebarLevelRow[] = [];
+  for (const r of buildRebarItems(plan, pages)) {
+    const last = out.at(-1);
+    if (last && r.kind === 'mesh' && last.itemId === r.itemId && last.level === r.level) {
+      last.parts.push(r);
+      last.netWeightKg = last.netWeightKg === null || r.netWeightKg === null ? null : last.netWeightKg + r.netWeightKg;
+      last.orderWeightKg = last.orderWeightKg === null || r.orderWeightKg === null ? null : last.orderWeightKg + r.orderWeightKg;
+      last.estimated ||= r.estimated;
+      continue;
+    }
+    out.push({ key: `${r.itemId}|${r.level ?? ''}`, itemId: r.itemId, pageNumber: r.pageNumber, mark: r.mark, autoNumber: r.autoNumber, kind: r.kind, level: r.level, parts: [r], netWeightKg: r.netWeightKg, orderWeightKg: r.orderWeightKg, estimated: r.estimated, status: r.status });
+  }
+  return out;
+}
+
+/**
  * Everything a plan's structural report prints. A section is null when the plan (on those pages) has
  * no item of that kind, so a report of a plan without concrete or rebar has no structural part at all.
  */

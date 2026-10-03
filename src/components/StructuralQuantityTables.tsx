@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { formatNumber, useT } from '../i18n';
 import type { Plan } from '../types';
-import { buildConcreteItems, buildConcreteSummary, buildRebarItems, buildRebarSummary, type RebarItemRow } from '../lib/structuralQuantities';
+import { buildConcreteItems, buildConcreteSummary, buildRebarLevelRows, buildRebarSummary, type RebarItemRow, type RebarLevelRow } from '../lib/structuralQuantities';
 import { calculateMeshSheets } from '../lib/meshSheets';
 import { rebarOf } from '../lib/structuralPlan';
 import { markLabel } from '../lib/structuralMarks';
@@ -105,42 +105,9 @@ const BASIS_KEY = {
   estimated: 'quantitiesPanel.basis.estimate',
 } as const;
 
-/** One detail row of the rebar table: a mesh level (both its directions together) or a manual-bars item. */
-interface RebarDetail {
-  key: string;
-  itemId: string;
-  pageNumber: number;
-  mark: string;
-  autoNumber?: number;
-  kind: 'mesh' | 'bars';
-  level: RebarItemRow['level'];
-  parts: RebarItemRow[];
-  netWeightKg: number | null;
-  orderWeightKg: number | null;
-  estimated: boolean;
-  status: RebarItemRow['status'];
-}
-
-/** The item rows the reports use (one per direction) folded into one row per mesh level. */
-function detailRows(rows: RebarItemRow[]): RebarDetail[] {
-  const out: RebarDetail[] = [];
-  for (const r of rows) {
-    const last = out.at(-1);
-    if (last && last.itemId === r.itemId && last.level === r.level && r.kind === 'mesh') {
-      last.parts.push(r);
-      last.netWeightKg = last.netWeightKg === null || r.netWeightKg === null ? null : last.netWeightKg + r.netWeightKg;
-      last.orderWeightKg = last.orderWeightKg === null || r.orderWeightKg === null ? null : last.orderWeightKg + r.orderWeightKg;
-      last.estimated ||= r.estimated;
-      continue;
-    }
-    out.push({ key: `${r.itemId}|${r.level ?? ''}`, itemId: r.itemId, pageNumber: r.pageNumber, mark: r.mark, autoNumber: r.autoNumber, kind: r.kind, level: r.level, parts: [r], netWeightKg: r.netWeightKg, orderWeightKg: r.orderWeightKg, estimated: r.estimated, status: r.status });
-  }
-  return out;
-}
-
 export function RebarQuantityTable({ plan }: { plan: Plan }) {
   const t = useT();
-  const details = useMemo(() => detailRows(buildRebarItems(plan)), [plan]);
+  const details = useMemo(() => buildRebarLevelRows(plan), [plan]);
   const summary = useMemo(() => buildRebarSummary(plan), [plan]);
   // The physical sheet count of every mesh, per level (lib/meshSheets).
   const sheets = useMemo(() => {
@@ -152,7 +119,7 @@ export function RebarQuantityTable({ plan }: { plan: Plan }) {
 
   const weight = (v: number | null, estimated: boolean) => (v === null ? DASH : <span dir="ltr">{`${estimated ? '≈ ' : ''}${formatNumber(round(v, 2))}`}</span>);
   const notation = (r: RebarItemRow) => (r.diameterMm === null ? null : r.spacingCm === null ? `Ø${r.diameterMm}` : `Ø${r.diameterMm} @ ${r.spacingCm}`);
-  const specification = (d: RebarDetail) => {
+  const specification = (d: RebarLevelRow) => {
     if (d.kind === 'bars') return notation(d.parts[0]) ?? DASH;
     const first = d.parts[0];
     if (first.level === null) return DASH;
@@ -162,7 +129,7 @@ export function RebarQuantityTable({ plan }: { plan: Plan }) {
     }
     return d.parts.map((p) => `${t(p.direction === 'short' ? 'rebar.overlay.short' : 'rebar.overlay.long')} ${notation(p) ?? DASH}`).join(' | ');
   };
-  const quantity = (d: RebarDetail) => {
+  const quantity = (d: RebarLevelRow) => {
     if (d.kind === 'bars') {
       const count = d.parts[0].barCount;
       return count === null ? DASH : t('quantitiesPanel.barsQty', { count });
@@ -170,7 +137,7 @@ export function RebarQuantityTable({ plan }: { plan: Plan }) {
     const n = d.level === null ? undefined : sheets.get(d.itemId)?.levels.find((l) => l.level === d.level)?.sheets;
     return n === undefined ? DASH : t('quantitiesPanel.sheetsQty', { count: n });
   };
-  const statusCell = (d: RebarDetail) =>
+  const statusCell = (d: RebarLevelRow) =>
     d.status === 'ok' ? (
       <span className={`qty-status ${d.estimated ? 'estimate' : ''}`}>{t(d.estimated ? BASIS_KEY.estimated : BASIS_KEY.exact)}</span>
     ) : (
