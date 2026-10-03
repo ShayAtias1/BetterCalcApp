@@ -642,7 +642,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { currentProject } = get();
     if (!currentProject) return;
     const loaded = await loadProjectWithPlans(currentProject.id);
-    if (loaded) set({ currentProject: loaded.project, projectPlans: loaded.plans, projectComparisons: loaded.comparisons });
+    // The user may have left the project while this was loading (the logo goes straight home):
+    // a stale result must not bring the closed project back.
+    if (loaded && get().currentProject?.id === currentProject.id) {
+      set({ currentProject: loaded.project, projectPlans: loaded.plans, projectComparisons: loaded.comparisons });
+    }
   },
   openPlan: async (planId) => {
     const { project } = get();
