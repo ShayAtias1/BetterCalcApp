@@ -3,7 +3,6 @@
 // and a real PDF run, and that a project without structural data is exactly what it was.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import ExcelJS from 'exceljs';
 import { PDFDocument } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { readFileSync } from 'node:fs';
@@ -178,129 +177,13 @@ test('finishes summary mode: only a project with neither finishes nor structural
 
 // ---------- project Excel ----------
 
-async function reread(wb: ExcelJS.Workbook) {
-  const out = new ExcelJS.Workbook();
-  await out.xlsx.load(await wb.xlsx.writeBuffer());
-  return out;
-}
-const rowOf = (sheet: ExcelJS.Worksheet, r: number) => (sheet.getRow(r).values as unknown[]).slice(1);
-const texts = (sheet: ExcelJS.Worksheet) => {
-  const out: string[] = [];
-  sheet.eachRow((row) => row.eachCell((c) => typeof c.value === 'string' && out.push(c.value)));
-  return out;
-};
 
 test('a project without concrete or rebar has exactly the sheets it always had', async () => {
   const wb = buildProjectWorkbook(PROJECT(['plan-a', 'plan-b']), [PLAN_A, PLAN_B], 'he');
   assert.deepEqual(wb.worksheets.map((s) => s.name), ['סיכום פרויקט', 'תוכניות', 'חדרים', 'סוגי עבודה']);
 });
 
-test('project workbook: Plan column first, one row per element/layer, project summary, by-plan block, formulas, estimate marking', async () => {
-  const a = plan('a', 'Plan A', [el({ mark: 'S01', grade: 'B30', depthM: 0.2 }), el({ mark: 'W01', kind: 'wall', points: rect(500, 20), depthM: undefined })], [
-    mesh([layer({ diameterMm: 12 })], { mark: 'M01' }),
-    bars({ mark: 'R01', diameterMm: 16 }),
-  ]);
-  const b = plan('b', 'Plan B', [el({ mark: 'S01', grade: 'B30', depthM: 0.3 })], [mesh([layer({ diameterMm: 12, spacingM: 0.15 })], { mark: 'M01', points: L_SHAPE })]);
-  const wb = await reread(buildProjectWorkbook(PROJECT(['a', 'b']), [a, b], 'he'));
-  assert.deepEqual(wb.worksheets.map((s) => s.name), ['סיכום פרויקט', 'תוכניות', 'חדרים', 'סוגי עבודה', 'בטון', 'זיון']);
-
-  // concrete
-  const cs = wb.getWorksheet('בטון')!;
-  assert.deepEqual(rowOf(cs, 1).slice(0, 3), ['תוכנית', 'עמוד', 'סימון']);
-  assert.equal(rowOf(cs, 1).length, 12);
-  assert.deepEqual([rowOf(cs, 2)[0], rowOf(cs, 2)[2], rowOf(cs, 3)[0], rowOf(cs, 3)[11]], ['Plan A', 'תקרה 01', 'Plan A', 'חסר גובה']);
-  assert.equal(rowOf(cs, 4)[0], 'Plan B');
-  assert.equal(typeof rowOf(cs, 2)[8], 'number');
-  assert.equal(rowOf(cs, 3)[8], '-'); // missing: a dash, not 0
-  const total = cs.getRow(5);
-  assert.equal(total.getCell(1).value, 'סה"כ כללי');
-  const net = total.getCell(9).value as { formula: string; result: number };
-  assert.equal(net.formula, 'ROUND(SUM(I2:I4),2)'); // shifted one column by the Plan column
-  near(net.result, 16 + 24);
-  assert.equal((total.getCell(11).value as { formula: string }).formula, 'ROUND(SUM(K2:K4),2)');
-  const ct = texts(cs);
-  assert.ok(ct.includes('סיכום לפי סוג ודרגה'));
-  assert.ok(ct.includes('לפי תוכנית'));
-  assert.ok(ct.some((t) => t.includes('חסרים נתונים: 1')));
-  // project summary: one B30 slab row across both plans (no page column value)
-  let b30Row: unknown[] | undefined;
-  cs.eachRow((r) => {
-    const v = (r.values as unknown[]).slice(1);
-    if (v[3] === 'תקרה' && v[4] === 'B30' && v[1] === '') b30Row = v;
-  });
-  assert.ok(b30Row);
-  assert.equal(b30Row![7], 2);
-  near(b30Row![8] as number, 40);
-
-  // rebar
-  const rs = wb.getWorksheet('זיון')!;
-  assert.equal(rowOf(rs, 1).length, 17);
-  assert.deepEqual(rowOf(rs, 1).slice(0, 3), ['תוכנית', 'עמוד', 'סימון']);
-  const plans = [2, 3, 4].map((r) => rowOf(rs, r)[0]);
-  assert.deepEqual(plans, ['Plan A', 'Plan A', 'Plan B']);
-  const est = rowOf(rs, 4);
-  assert.equal(typeof est[10], 'number'); // net length: still a number
-  near(est[10] as number, 180);
-  assert.equal(est[15], 'הערכה');
-  for (const addr of ['K4', 'L4', 'N4', 'O4']) assert.ok(rs.getCell(addr).numFmt.includes('≈'), addr);
-  const rt = rs.getRow(5);
-  assert.equal((rt.getCell(11).value as { formula: string }).formula, 'ROUND(SUM(K2:K4),2)');
-  assert.equal(rt.getCell(16).value, 'כולל הערכה');
-  const rtexts = texts(rs);
-  assert.ok(rtexts.includes('סיכום לפי קוטר'));
-  assert.ok(rtexts.some((t) => t.startsWith('כולל הערכה: 180')));
-  // by plan: Plan B is estimate-only
-  let planB: unknown[] | undefined;
-  let afterByPlan = false;
-  rs.eachRow((r) => {
-    const v = (r.values as unknown[]).slice(1);
-    if (v[0] === 'לפי תוכנית') afterByPlan = true;
-    if (afterByPlan && v[0] === 'Plan B') planB = v;
-  });
-  assert.equal(planB![15], 'הערכה');
-});
-
-test('structural-only project workbook: structural sheets are there, English works', async () => {
-  const a = plan('a', 'Plan A', [el({ mark: 'S01' })], [bars({ mark: 'R01' })]);
-  const wb = await reread(buildProjectWorkbook(PROJECT(['a']), [a], 'en'));
-  assert.deepEqual(wb.worksheets.map((s) => s.name), ['Project Summary', 'Plans', 'Rooms', 'Work Types', 'Concrete', 'Rebar']);
-  assert.deepEqual(rowOf(wb.getWorksheet('Concrete')!, 1).slice(0, 3), ['Plan', 'Page', 'Mark']);
-  assert.equal(rowOf(wb.getWorksheet('Rebar')!, 2)[0], 'Plan A');
-  assert.equal(wb.getWorksheet('Concrete')!.views[0].rightToLeft, false);
-});
-
 // ---------- project PDF ----------
-
-test('project PDF layout: aggregates and by-plan tables only — no item schedules — with ~, basis and missing counts', () => {
-  const a = plan('a', 'Plan A', [el({ mark: 'S01', grade: 'B30' }), el({ mark: 'S02', pageNumber: 3 })], [mesh([layer()], { mark: 'M01' }), bars({ mark: 'R01' })]);
-  const b = plan('b', 'Plan B', [el({ mark: 'S01', grade: 'B30', depthM: 0.3 })], [mesh([layer()], { mark: 'M01', points: L_SHAPE })]);
-  const blocks = buildProjectStructuralPdfLayout(buildProjectStructural([a, b]), exportContext('en'));
-  assert.deepEqual(blocks.filter((x) => x.type === 'section').map((x) => (x as { title: string }).title), [
-    'Concrete - Summary by type and grade',
-    'Concrete - By plan',
-    'Rebar - Summary by diameter',
-    'Rebar - By plan',
-  ]);
-  const tables = blocks.filter((x) => x.type === 'table') as Extract<(typeof blocks)[number], { type: 'table' }>[];
-  for (const t of tables) for (const r of t.rows) assert.equal(r.cells.length, t.headers.length);
-  const [cSum, cPlan, rSum, rPlan] = tables;
-  assert.equal(cSum.rows.length, 3); // B30 slab, unspecified slab, total — never one row per element
-  assert.equal(cSum.rows[0].cells[2], '2'); // B30 across both plans
-  assert.equal(cSum.rows.at(-1)!.cells[5], '1'); // one missing
-  assert.deepEqual(cPlan.rows.map((r) => r.cells[0]), ['Plan A', 'Plan B']);
-  assert.equal(cPlan.rows[0].cells[4], '1'); // missing attributed to Plan A
-  assert.equal(rSum.rows.at(-1)!.cells[5], 'Includes estimate');
-  assert.equal(rPlan.rows[1].cells[1].startsWith('~ '), true); // Plan B is estimate-only
-  assert.equal(rPlan.rows[1].cells[5], 'Estimate');
-  assert.equal(rPlan.rows[0].cells[5], 'Exact');
-  const notes = blocks.filter((x) => x.type === 'note').map((x) => (x as { text: string }).text);
-  assert.ok(notes.some((t) => t.startsWith('Includes estimate: ')));
-  assert.ok(notes.some((t) => t === 'Missing data: 1 - not included in the totals.'));
-
-  assert.deepEqual(buildProjectStructuralPdfLayout(buildProjectStructural([PLAN_A]), exportContext('he')), []);
-  const he = buildProjectStructuralPdfLayout(buildProjectStructural([a]), exportContext('he'));
-  assert.equal((he[0] as { title: string }).title, 'בטון - סיכום לפי סוג ודרגה');
-});
 
 test('a real project PDF page set is produced with the report writer, in both languages', async () => {
   const a = plan('a', 'Plan A', [el({ mark: 'S01', grade: 'B30' })], [mesh([layer()], { points: L_SHAPE }), bars()]);

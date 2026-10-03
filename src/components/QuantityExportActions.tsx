@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import Icon from './Icon';
+import ExportContentPicker from './ExportContentPicker';
 import { useAppStore } from '../store/appStore';
 import { planForReport } from '../lib/reportTitle';
 import { buildReportCategoryTotals, buildRoomSummaries } from '../lib/quantities';
@@ -8,15 +9,11 @@ import { exportQuantitiesToPdf, getExportablePageNumbers } from '../lib/exportQu
 import { quantityExportDetails, trackedExport } from '../lib/analytics';
 import { notifyExportFailed } from '../lib/exportFailure';
 import { hasStructuralData, withStructuralPages } from '../lib/structuralPlan';
-import { EXPORT_SECTIONS, availableContent, everything, hasAnyContent, isEverything, NO_CONTENT, type ExportContent, type ExportSection } from '../lib/exportContent';
+import { EXPORT_SECTIONS, availableContent, everything, hasAnyContent, type ExportContent } from '../lib/exportContent';
 import { useLanguage, useT } from '../i18n';
 
-const CONTENT_LABEL = {
-  plan: 'quantityExport.contentPlan',
-  finishes: 'quantityExport.contentFinishes',
-  concrete: 'quantityExport.contentConcrete',
-  rebar: 'quantityExport.contentRebar',
-} as const;
+/** The workbook has no plan drawing, so no plan section. */
+const EXCEL_SECTIONS = ['finishes', 'concrete', 'rebar'] as const;
 
 /**
  * The two actions that produce BetterCalc's main deliverable — the quantity report — plus their
@@ -38,7 +35,7 @@ export default function QuantityExportActions({ variant, onPicked }: { variant: 
   const [exportingPdf, setExportingPdf] = useState(false);
   // The PDF dialog: what to export (sections) and which pages - two separate choices.
   const [pdfDialog, setPdfDialog] = useState<{ pages: Set<number>; content: ExportContent } | null>(null);
-  const [excelDialog, setExcelDialog] = useState<{ mode: 'specific' | 'all'; page: number } | null>(null);
+  const [excelDialog, setExcelDialog] = useState<{ mode: 'specific' | 'all'; page: number; content: ExportContent } | null>(null);
 
   const summaries = useMemo(() => (project ? buildRoomSummaries(project) : []), [project]);
 
@@ -48,21 +45,25 @@ export default function QuantityExportActions({ variant, onPicked }: { variant: 
   // Concrete and rebar are exportable on their own: a plan with only those still has a report.
   const canExport = summaries.length > 0 || hasAreaMeasurements || hasStructuralData(project);
   const exportablePages = getExportablePageNumbers(project);
+  const available = availableContent(project, summaries.length > 0 || hasAreaMeasurements, exportablePages.length > 0);
+  // The workbook has no plan drawing: only the three quantity domains.
+  const excelAvailable: ExportContent = { ...available, plan: false };
   const surface = variant === 'menu' ? 'topbar_menu' : 'quantities_panel';
 
-  const runExportExcel = async (pageNumbers: number[]) => {
+  const runExportExcel = async (pageNumbers: number[], content: ExportContent) => {
     setExportingExcel(true);
     try {
       const roomPageById = new Map(project.rooms.map((r) => [r.id, r.pageNumber]));
       const pageSet = new Set(pageNumbers);
-      const filteredSummaries = summaries.filter((s) => pageSet.has(roomPageById.get(s.roomId) ?? -1));
+      // Finishes only when chosen: without it the workbook carries neither rooms nor area measurements.
+      const filteredSummaries = content.finishes ? summaries.filter((s) => pageSet.has(roomPageById.get(s.roomId) ?? -1)) : [];
       const filteredTotals = buildReportCategoryTotals(project, filteredSummaries);
-      const filteredAreaMeasurements = (project.measurements ?? []).filter(
+      const filteredAreaMeasurements = (content.finishes ? project.measurements ?? [] : []).filter(
         (m) => m.tool === 'area' && m.areaKind && typeof m.areaM2 === 'number' && pageSet.has(m.pageNumber)
       );
       await trackedExport(
         { export_kind: 'quantity_excel', surface, ...quantityExportDetails(project, filteredSummaries, pageNumbers, exportablePages.length) },
-        () => exportQuantitiesToExcel(withStructuralPages(planForReport(project, projectName), pageSet), filteredSummaries, filteredTotals, filteredAreaMeasurements, language)
+        () => exportQuantitiesToExcel(withStructuralPages(planForReport(project, projectName), pageSet), filteredSummaries, filteredTotals, filteredAreaMeasurements, content, language)
       );
     } catch (err) {
       notifyExportFailed(err);
@@ -71,16 +72,12 @@ export default function QuantityExportActions({ variant, onPicked }: { variant: 
     }
   };
 
+  // Always asks what to export; the page choice (a page or all) is part of the same dialog.
   const handleExportExcel = () => {
     onPicked?.();
-    if (exportablePages.length <= 1) {
-      void runExportExcel(exportablePages);
-      return;
-    }
-    setExcelDialog({ mode: 'specific', page: exportablePages.includes(currentPage) ? currentPage : exportablePages[0] });
+    setExcelDialog({ mode: exportablePages.length > 1 ? 'specific' : 'all', page: exportablePages.includes(currentPage) ? currentPage : exportablePages[0], content: everything(excelAvailable) });
   };
 
-  const available = availableContent(project, summaries.length > 0 || hasAreaMeasurements, exportablePages.length > 0);
 
   const runExportPdf = async (pageNumbers: number[], content: ExportContent) => {
     setExportingPdf(true);
@@ -143,32 +140,7 @@ export default function QuantityExportActions({ variant, onPicked }: { variant: 
         <div className="modal-backdrop">
           <div className="modal">
             <h3>{t('quantityExport.pdfTitle')}</h3>
-            <span className="section-label">{t('quantityExport.whatToExport')}</span>
-            <ul className="page-checkbox-list export-content-list">
-              {EXPORT_SECTIONS.map((section: ExportSection) => (
-                <li key={section}>
-                  <label>
-                    <input
-                      type="checkbox"
-                      disabled={!available[section]}
-                      checked={pdfDialog.content[section]}
-                      onChange={(e) => setPdfDialog({ ...pdfDialog, content: { ...pdfDialog.content, [section]: e.target.checked } })}
-                    />
-                    {t(CONTENT_LABEL[section])}
-                  </label>
-                </li>
-              ))}
-              <li className="export-content-all">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={isEverything(pdfDialog.content, available)}
-                    onChange={(e) => setPdfDialog({ ...pdfDialog, content: e.target.checked ? everything(available) : NO_CONTENT })}
-                  />
-                  {t('quantityExport.contentEverything')}
-                </label>
-              </li>
-            </ul>
+            <ExportContentPicker sections={EXPORT_SECTIONS} labels="pdf" content={pdfDialog.content} available={available} onChange={(content) => setPdfDialog({ ...pdfDialog, content })} />
             <p className="muted">{t('quantityExport.contentHint')}</p>
             {exportablePages.length > 1 && (
               <>
@@ -226,52 +198,57 @@ export default function QuantityExportActions({ variant, onPicked }: { variant: 
       {excelDialog && (
         <div className="modal-backdrop">
           <div className="modal">
-            <h3>{t('quantityExport.whichPages')}</h3>
-            <p>{t('quantityExport.excelPagesIntro')}</p>
-            <div className="form-row">
-              <label>
-                <input
-                  type="radio"
-                  name="excel-export-mode"
-                  checked={excelDialog.mode === 'specific'}
-                  onChange={() => setExcelDialog({ ...excelDialog, mode: 'specific' })}
-                />{' '}
-                {t('quantityExport.specificPage')}
-              </label>
-              {excelDialog.mode === 'specific' && (
-                <select
-                  value={excelDialog.page}
-                  onChange={(e) => setExcelDialog({ ...excelDialog, page: parseInt(e.target.value, 10) })}
-                >
-                  {exportablePages.map((p) => (
-                    <option key={p} value={p}>
-                      {p === currentPage ? t('quantityExport.pageCurrent', { page: p }) : t('quantityExport.page', { page: p })}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-            <div className="form-row">
-              <label>
-                <input
-                  type="radio"
-                  name="excel-export-mode"
-                  checked={excelDialog.mode === 'all'}
-                  onChange={() => setExcelDialog({ ...excelDialog, mode: 'all' })}
-                />{' '}
-                {t('quantityExport.allPagesSummary')}
-              </label>
-            </div>
+            <h3>{t('quantityExport.excelTitle')}</h3>
+            <ExportContentPicker
+              sections={EXCEL_SECTIONS}
+              content={excelDialog.content}
+              available={excelAvailable}
+              onChange={(content) => setExcelDialog({ ...excelDialog, content })}
+            />
+            {exportablePages.length > 1 && (
+              <>
+                <span className="section-label">{t('quantityExport.whichPages')}</span>
+                <p>{t('quantityExport.excelPagesIntro')}</p>
+                <div className="form-row">
+                  <label>
+                    <input
+                      type="radio"
+                      name="excel-export-mode"
+                      checked={excelDialog.mode === 'specific'}
+                      onChange={() => setExcelDialog({ ...excelDialog, mode: 'specific' })}
+                    />{' '}
+                    {t('quantityExport.specificPage')}
+                  </label>
+                  {excelDialog.mode === 'specific' && (
+                    <select value={excelDialog.page} onChange={(e) => setExcelDialog({ ...excelDialog, page: parseInt(e.target.value, 10) })}>
+                      {exportablePages.map((p) => (
+                        <option key={p} value={p}>
+                          {p === currentPage ? t('quantityExport.pageCurrent', { page: p }) : t('quantityExport.page', { page: p })}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div className="form-row">
+                  <label>
+                    <input type="radio" name="excel-export-mode" checked={excelDialog.mode === 'all'} onChange={() => setExcelDialog({ ...excelDialog, mode: 'all' })} />{' '}
+                    {t('quantityExport.allPagesSummary')}
+                  </label>
+                </div>
+              </>
+            )}
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setExcelDialog(null)}>
                 {t('common.cancel')}
               </button>
               <button
                 className="btn-primary"
+                disabled={!hasAnyContent(excelDialog.content)}
                 onClick={() => {
                   const pages = excelDialog.mode === 'all' ? exportablePages : [excelDialog.page];
+                  const content = excelDialog.content;
                   setExcelDialog(null);
-                  void runExportExcel(pages);
+                  void runExportExcel(pages, content);
                 }}
               >
                 {t('common.export')}

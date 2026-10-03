@@ -557,6 +557,20 @@ export interface ProjectRebar {
   estimatedLengthM: number;
   estimatedWeightKg: number;
   basis: RebarBasis | null;
+  /**
+   * Physical mesh sheets across the plans, per sheet configuration (size and overlap): sheets of
+   * different configurations are never added into one number. First-seen order.
+   */
+  sheetGroups: ProjectSheetGroup[];
+}
+
+export interface ProjectSheetGroup {
+  lengthM: number;
+  widthM: number;
+  overlapM: number;
+  /** Mesh levels counted in this group, and the sheets they need. */
+  levels: number;
+  sheets: number;
 }
 
 export interface ProjectStructural {
@@ -607,6 +621,7 @@ export function buildProjectStructural(plans: Plan[]): ProjectStructural {
   const rTotal = emptyRebar();
   const rMissing = new Set<string>();
   const rItems = new Set<string>();
+  const sheetGroups = new Map<string, ProjectSheetGroup>();
 
   for (const plan of plans) {
     for (const it of buildConcreteItems(plan)) {
@@ -634,6 +649,16 @@ export function buildProjectStructural(plans: Plan[]): ProjectStructural {
           s.order += it.orderM3;
         }
       }
+    }
+
+    for (const level of buildRebarLevelRows(plan)) {
+      if (!level.sheets || level.sheets.count === null) continue;
+      const { lengthM, widthM, overlapM } = level.sheets.settings;
+      const key = JSON.stringify([lengthM, widthM, overlapM]);
+      const group = sheetGroups.get(key) ?? { lengthM, widthM, overlapM, levels: 0, sheets: 0 };
+      group.levels += 1;
+      group.sheets += level.sheets.count;
+      sheetGroups.set(key, group);
     }
 
     for (const row of buildRebarItems(plan)) {
@@ -753,6 +778,7 @@ export function buildProjectStructural(plans: Plan[]): ProjectStructural {
           estimatedLengthM: round(rTotal.estimatedLength, 2),
           estimatedWeightKg: round(rTotal.estimatedWeight, 2),
           basis: rebarBasis(rTotal),
+          sheetGroups: [...sheetGroups.values()],
         };
 
   return { concrete, rebar };

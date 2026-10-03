@@ -9,6 +9,8 @@ import { exportProjectToPdf } from '../lib/exportProjectPdf';
 import { projectExportDetails, trackedExport } from '../lib/analytics';
 import { notifyExportFailed } from '../lib/exportFailure';
 import Icon from './Icon';
+import ExportContentPicker from './ExportContentPicker';
+import { everything, hasAnyContent, type ExportContent } from '../lib/exportContent';
 import { BrandHomeLink } from './BrandLogo';
 import NewComparisonDialog from './compare/NewComparisonDialog';
 import LanguageSwitch from './LanguageSwitch';
@@ -77,6 +79,15 @@ export default function ProjectOverview() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  // The project export asks what to include: Finishes, Concrete, Rebar (no plan drawings here).
+  const [exportDialog, setExportDialog] = useState<{ kind: 'excel' | 'pdf'; content: ExportContent } | null>(null);
+  const exportAvailable: ExportContent = {
+    plan: false,
+    // Finishes is offered whenever there are rooms - and for a project with nothing at all, so the old empty report still exports.
+    finishes: plans.some((p) => p.rooms.length > 0) || !(structural.concrete || structural.rebar),
+    concrete: !!structural.concrete,
+    rebar: !!structural.rebar,
+  };
 
   if (!project) return null;
 
@@ -188,7 +199,7 @@ export default function ProjectOverview() {
                   <button
                     className="btn-secondary"
                     disabled={!!busy || plans.length === 0}
-                    onClick={() => void run('excel', () => runProjectExport('project_excel', () => exportProjectToExcel(project, plans, language)))}
+                    onClick={() => setExportDialog({ kind: 'excel', content: everything(exportAvailable) })}
                     title={t('projectOverview.excelHint')}
                   >
                     <Icon name="sheet" />
@@ -197,7 +208,7 @@ export default function ProjectOverview() {
                   <button
                     className="btn-secondary"
                     disabled={!!busy || plans.length === 0}
-                    onClick={() => void run('pdf', () => runProjectExport('project_pdf', () => exportProjectToPdf(project, plans, language)))}
+                    onClick={() => setExportDialog({ kind: 'pdf', content: everything(exportAvailable) })}
                     title={t('projectOverview.pdfHint')}
                   >
                     <Icon name="download" />
@@ -354,6 +365,39 @@ export default function ProjectOverview() {
 
       {addingComparison && (
         <NewComparisonDialog onClose={() => setAddingComparison(false)} onCreate={(input) => run('comparison', () => createComparison(input))} />
+      )}
+      {exportDialog && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <h3>{t(exportDialog.kind === 'excel' ? 'quantityExport.projectExcelTitle' : 'quantityExport.projectPdfTitle')}</h3>
+            <ExportContentPicker
+              sections={['finishes', 'concrete', 'rebar']}
+              content={exportDialog.content}
+              available={exportAvailable}
+              onChange={(content) => setExportDialog({ ...exportDialog, content })}
+            />
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setExportDialog(null)}>
+                {t('common.cancel')}
+              </button>
+              <button
+                className="btn-primary"
+                disabled={!hasAnyContent(exportDialog.content)}
+                onClick={() => {
+                  const { kind, content } = exportDialog;
+                  setExportDialog(null);
+                  void run(kind, () =>
+                    kind === 'excel'
+                      ? runProjectExport('project_excel', () => exportProjectToExcel(project, plans, content, language))
+                      : runProjectExport('project_pdf', () => exportProjectToPdf(project, plans, content, language))
+                  );
+                }}
+              >
+                {t('common.export')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {adding && <AddPlanDialog onClose={() => setAdding(false)} onAdd={(file, name) => run('add', () => addPlan(file, name))} />}
     </div>

@@ -7,6 +7,7 @@ import { exportContext, type ExportContext } from './exportLanguage';
 import { buildProjectQuantities, planStatusLabel, roomCategoryQuantity, type CategoryAmount } from './projectQuantities';
 import { buildProjectStructural, finishesSummaryMode } from './structuralQuantities';
 import { buildProjectStructuralPdfLayout, writeBlocks } from './structuralPdfLayout';
+import { type ExportContent } from './exportContent';
 
 /*
  * The project quantity report: vector text and table lines throughout (see lib/pdfText — Hebrew is
@@ -126,7 +127,7 @@ const amountHeaders = ({ t }: ExportContext) => {
 };
 const amountCells = (a: CategoryAmount, fmt: (v: number | null | undefined) => string) => [fmt(a.quantityM2), fmt(a.orderM2), fmt(a.lengthM), fmt(a.orderLengthM)];
 
-export async function exportProjectToPdf(project: Project, plans: Plan[], language: Language) {
+export async function exportProjectToPdf(project: Project, plans: Plan[], content: ExportContent, language: Language) {
   const x = exportContext(language);
   const { t } = x;
   const fmt = (v: number | null | undefined) => (v == null ? DASH : x.number(v));
@@ -149,65 +150,69 @@ export async function exportProjectToPdf(project: Project, plans: Plan[], langua
   const structural = buildProjectStructural(plans);
   const summaryMode = finishesSummaryMode(q.totals.length, structural);
 
-  if (summaryMode !== 'skip') {
-    report.section(t('exports.projectPdf.summary'));
-    if (summaryMode === 'empty') {
-      report.note(t('exports.projectPdf.empty'));
-    } else {
-      report.table([t('exports.common.item'), ...AMOUNT_HEADERS], [18, 12, 12, 12, 12], q.totals.map((total) => ({ cells: [total.label, ...amountCells(total, fmt)] })));
+  // Finishes: left out entirely when the user did not choose them.
+  if (content.finishes) {
+    if (summaryMode !== 'skip') {
+      report.section(t('exports.projectPdf.summary'));
+      if (summaryMode === 'empty') {
+        report.note(t('exports.projectPdf.empty'));
+      } else {
+        report.table([t('exports.common.item'), ...AMOUNT_HEADERS], [18, 12, 12, 12, 12], q.totals.map((total) => ({ cells: [total.label, ...amountCells(total, fmt)] })));
+      }
     }
-  }
-  if (q.uncalibratedRoomCount > 0) report.note(t('exports.projectPdf.uncalibratedNote', { count: q.uncalibratedRoomCount }));
+    if (q.uncalibratedRoomCount > 0) report.note(t('exports.projectPdf.uncalibratedNote', { count: q.uncalibratedRoomCount }));
 
-  report.section(t('exports.projectPdf.plans'));
-  report.table(
-    [
-      t('exports.common.plan'),
-      t('exports.projectPdf.planHeaders.rooms'),
-      t('exports.projectPdf.planHeaders.calibratedPages'),
-      t('exports.projectPdf.planHeaders.uncalibratedRooms'),
-      t('exports.projectPdf.planHeaders.status'),
-    ],
-    [22, 8, 10, 10, 14],
-    q.plans.map((r) => ({
-      cells: [r.plan.name, `${r.roomCount}`, `${r.calibratedPageCount}`, `${r.uncalibratedRoomCount}`, planStatusLabel(r.status, t)],
-    }))
-  );
-
-  if (q.totals.length > 0) {
-    report.section(t('exports.projectPdf.byPlan'));
+    report.section(t('exports.projectPdf.plans'));
     report.table(
-      [t('exports.common.item'), t('exports.common.plan'), ...AMOUNT_HEADERS],
-      [16, 20, 12, 12, 12, 12],
-      q.totals.flatMap((total) => [
-        { cells: [total.label, t('exports.common.total'), ...amountCells(total, fmt)], bg: C_TOTAL, bold: true },
-        ...total.perPlan.map((p) => ({ cells: ['', p.planName, ...amountCells(p, fmt)] })),
-      ])
+      [
+        t('exports.common.plan'),
+        t('exports.projectPdf.planHeaders.rooms'),
+        t('exports.projectPdf.planHeaders.calibratedPages'),
+        t('exports.projectPdf.planHeaders.uncalibratedRooms'),
+        t('exports.projectPdf.planHeaders.status'),
+      ],
+      [22, 8, 10, 10, 14],
+      q.plans.map((r) => ({
+        cells: [r.plan.name, `${r.roomCount}`, `${r.calibratedPageCount}`, `${r.uncalibratedRoomCount}`, planStatusLabel(r.status, t)],
+      }))
     );
 
-    report.section(t('exports.projectPdf.byRoom'));
-    const categories = q.totals.map((total) => total.category);
-    const labels = new Map(q.totals.map((total) => [total.category, total.label]));
-    report.table(
-      [t('exports.common.plan'), t('exports.common.apartment'), t('exports.common.room'), t('exports.common.item'), ...AMOUNT_HEADERS],
-      [16, 7, 16, 12, 10, 10, 10, 10],
-      q.plans.flatMap((r) =>
-        r.summaries.flatMap((s) =>
-          categories.flatMap((c) => {
-            const v = roomCategoryQuantity(s, c);
-            if (v.wastePercent == null) return [];
-            const cells = s.pageCalibrated
-              ? [fmt(v.quantityM2), fmt(v.orderM2), fmt(v.lengthM), fmt(v.orderLengthM)]
-              : [notCalibrated, notCalibrated, DASH, DASH];
-            return [{ cells: [r.plan.name, s.apartmentNumber || DASH, s.roomName, labels.get(c)!, ...cells] }];
-          })
+    if (q.totals.length > 0) {
+      report.section(t('exports.projectPdf.byPlan'));
+      report.table(
+        [t('exports.common.item'), t('exports.common.plan'), ...AMOUNT_HEADERS],
+        [16, 20, 12, 12, 12, 12],
+        q.totals.flatMap((total) => [
+          { cells: [total.label, t('exports.common.total'), ...amountCells(total, fmt)], bg: C_TOTAL, bold: true },
+          ...total.perPlan.map((p) => ({ cells: ['', p.planName, ...amountCells(p, fmt)] })),
+        ])
+      );
+
+      report.section(t('exports.projectPdf.byRoom'));
+      const categories = q.totals.map((total) => total.category);
+      const labels = new Map(q.totals.map((total) => [total.category, total.label]));
+      report.table(
+        [t('exports.common.plan'), t('exports.common.apartment'), t('exports.common.room'), t('exports.common.item'), ...AMOUNT_HEADERS],
+        [16, 7, 16, 12, 10, 10, 10, 10],
+        q.plans.flatMap((r) =>
+          r.summaries.flatMap((s) =>
+            categories.flatMap((c) => {
+              const v = roomCategoryQuantity(s, c);
+              if (v.wastePercent == null) return [];
+              const cells = s.pageCalibrated
+                ? [fmt(v.quantityM2), fmt(v.orderM2), fmt(v.lengthM), fmt(v.orderLengthM)]
+                : [notCalibrated, notCalibrated, DASH, DASH];
+              return [{ cells: [r.plan.name, s.apartmentNumber || DASH, s.roomName, labels.get(c)!, ...cells] }];
+            })
+          )
         )
-      )
-    );
+      );
+    }
   }
 
   // After the finishes: the structural aggregates and their by-plan tables (no item schedules here).
-  writeBlocks(report, buildProjectStructuralPdfLayout(structural, x));
+  writeBlocks(report, buildProjectStructuralPdfLayout(structural, x, { concrete: content.concrete, rebar: content.rebar }));
+  if (!content.finishes && !(content.concrete && structural.concrete) && !(content.rebar && structural.rebar)) throw new Error('The selected content has nothing to export.');
 
   const bytes = await pdfDoc.save();
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, '_');

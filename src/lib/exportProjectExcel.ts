@@ -10,6 +10,7 @@ import { round } from './geometry';
 import { sheetRef } from './excelSheetRef';
 import { addProjectStructuralSheets } from './exportStructuralExcel';
 import { buildProjectStructural, buildStructuralReport } from './structuralQuantities';
+import { ALL_CONTENT, type ExportContent } from './exportContent';
 
 // Same palette as the single-plan workbook (exportExcel.ts).
 const C_HEADER = 'FF1F4E79';
@@ -242,14 +243,17 @@ function addWorkItemsSheet(workbook: ExcelJS.Workbook, plans: Plan[], x: ExportC
 }
 
 /** The whole project in one workbook: summary, per-plan totals, rooms and work items. */
-export async function exportProjectToExcel(project: Project, plans: Plan[], language: Language) {
-  const buffer = await buildProjectWorkbook(project, plans, language).xlsx.writeBuffer();
+export async function exportProjectToExcel(project: Project, plans: Plan[], content: ExportContent, language: Language) {
+  const workbook = buildProjectWorkbook(project, plans, language, content);
+  // A selection with nothing to write would save a file Excel cannot open.
+  if (workbook.worksheets.length === 0) throw new Error('The selected content has nothing to export.');
+  const buffer = await workbook.xlsx.writeBuffer();
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, '_');
   saveAs(new Blob([buffer], { type: 'application/octet-stream' }), exportContext(language).t('exports.excel.projectFileName', { name: safeName }));
 }
 
 /** The project workbook exactly as `exportProjectToExcel` saves it — built apart so tests can read it. */
-export function buildProjectWorkbook(project: Project, plans: Plan[], language: Language): ExcelJS.Workbook {
+export function buildProjectWorkbook(project: Project, plans: Plan[], language: Language, content: ExportContent = ALL_CONTENT): ExcelJS.Workbook {
   const x = exportContext(language);
   const { t } = x;
   const q = buildProjectQuantities(plans, t);
@@ -258,17 +262,20 @@ export function buildProjectWorkbook(project: Project, plans: Plan[], language: 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'BetterCalc';
   workbook.created = new Date();
-  // Created first so it is the first tab; filled once the plans sheet exists to reference.
-  const summary = workbook.addWorksheet(t('exports.excel.sheets.projectSummary'), { views: [{ rightToLeft: x.rtl }] });
-  const totalCell = addPlansSheet(workbook, q, categories, x);
-  addSummarySheet(summary, project, q, totalCell, x);
-  addRoomsSheet(workbook, q, categories, x);
-  addWorkItemsSheet(workbook, plans, x);
+  if (content.finishes) {
+    // Created first so it is the first tab; filled once the plans sheet exists to reference.
+    const summary = workbook.addWorksheet(t('exports.excel.sheets.projectSummary'), { views: [{ rightToLeft: x.rtl }] });
+    const totalCell = addPlansSheet(workbook, q, categories, x);
+    addSummarySheet(summary, project, q, totalCell, x);
+    addRoomsSheet(workbook, q, categories, x);
+    addWorkItemsSheet(workbook, plans, x);
+  }
 
-  // Concrete and rebar sheets, after every existing one and only when some plan has such items.
+  // Concrete and rebar sheets, after every existing one and only when selected and some plan has such items.
   const structural = buildProjectStructural(plans);
-  if (structural.concrete || structural.rebar) {
-    addProjectStructuralSheets(workbook, plans.map((p) => ({ planName: p.name, report: buildStructuralReport(p) })), structural, x);
+  const selected = { concrete: content.concrete ? structural.concrete : null, rebar: content.rebar ? structural.rebar : null };
+  if (selected.concrete || selected.rebar) {
+    addProjectStructuralSheets(workbook, plans.map((p) => ({ planName: p.name, report: buildStructuralReport(p) })), selected, x);
   }
   return workbook;
 }

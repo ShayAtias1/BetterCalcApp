@@ -5,6 +5,7 @@
  */
 
 import type { Plan } from '../types';
+import type { StructuralReport } from './structuralQuantities';
 import { concreteOf, rebarOf } from './structuralPlan';
 
 export type ExportSection = 'plan' | 'finishes' | 'concrete' | 'rebar';
@@ -26,4 +27,9 @@ export const everything = (available: ExportContent = ALL_CONTENT): ExportConten
 /** Which sections the plan has anything for (pages are a separate filter). */
 export function availableContent(plan: Plan, hasFinishes: boolean, hasPlanPages: boolean): ExportContent {
   return { plan: hasPlanPages, finishes: hasFinishes, concrete: concreteOf(plan).length > 0, rebar: rebarOf(plan).length > 0 };
+}
+
+/** The structural sections the user left out are dropped from a report (a section that is null writes nothing). */
+export function selectStructural(report: StructuralReport, content: ExportContent): StructuralReport {
+  return { concrete: content.concrete ? report.concrete : null, rebar: content.rebar ? report.rebar : null };
 }

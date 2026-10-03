@@ -8,6 +8,7 @@ import { usedExtraCategories } from './quantities';
 import { sheetRef } from './excelSheetRef';
 import { addStructuralSheets } from './exportStructuralExcel';
 import { buildStructuralReport, type StructuralReport } from './structuralQuantities';
+import { selectStructural, type ExportContent } from './exportContent';
 
 const DASH = '-';
 
@@ -224,11 +225,15 @@ export async function exportQuantitiesToExcel(
   summaries: RoomQuantitySummary[],
   _totals: ReportCategoryTotal[],
   areaMeasurements: Measurement[],
+  /** What the user chose to export; the caller has already emptied `summaries` / `areaMeasurements` when Finishes is off. */
+  content: ExportContent,
   language: Language
 ) {
   // Concrete and rebar come from the plan itself; the caller has already limited them to the pages
   // being exported (withStructuralPages), as it limits the summaries and the area measurements.
-  const workbook = buildQuantitiesWorkbook(summaries, areaMeasurements, language, buildStructuralReport(project));
+  const workbook = buildQuantitiesWorkbook(summaries, areaMeasurements, language, selectStructural(buildStructuralReport(project), content));
+  // A selection with nothing to write (no finishes, no structural items on those pages) has no sheet to save.
+  if (workbook.worksheets.length === 0) throw new Error('The selected content has nothing to export on the selected pages.');
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/octet-stream' });
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, '_');

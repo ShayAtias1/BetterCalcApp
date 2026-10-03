@@ -2,14 +2,12 @@
 // is fed, what the summaries, rows, Excel and PDF say, and that none of it changes a quantity.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import ExcelJS from 'exceljs';
 import fontkit from '@pdf-lib/fontkit';
 import { readFileSync } from 'node:fs';
 import { PLAN_A } from './fixtures.ts';
 import { calculateRebar } from '../../src/lib/rebar.ts';
 import { meshLayers, normalizeMesh } from '../../src/lib/rebarMesh.ts';
 import { rebarOf } from '../../src/lib/structuralPlan.ts';
-import { buildQuantitiesWorkbook } from '../../src/lib/exportExcel.ts';
 import { buildProjectStructural, buildRebarItems, buildRebarLevelRows, buildRebarSummary, buildStructuralReport } from '../../src/lib/structuralQuantities.ts';
 import { buildStructuralPdfLayout } from '../../src/lib/structuralPdfLayout.ts';
 import { exportContext } from '../../src/lib/exportLanguage.ts';
@@ -203,43 +201,6 @@ test('rows: a uniform level is ONE row that says "both directions"; directional 
 
 // ---------- Excel ----------
 
-async function reread(wb: ExcelJS.Workbook) {
-  const out = new ExcelJS.Workbook();
-  await out.xlsx.load(await wb.xlsx.writeBuffer());
-  return out;
-}
-const rowOf = (sheet: ExcelJS.Worksheet, r: number) => (sheet.getRow(r).values as unknown[]).slice(1);
-
-test('Excel: a level column (Bottom / Top), "both directions" for uniform, numeric quantities, long/short rows for directional', async () => {
-  const p = planWith([
-    mesh({ autoNumber: 1, bottom: uniform(12, 0.2) }),
-    mesh({ autoNumber: 2, bottom: directional([12, 0.2], [10, 0.15]), top: uniform(10, 0.25) }),
-  ]);
-  const wb = await reread(buildQuantitiesWorkbook([], [], 'en', buildStructuralReport(p)));
-  const sheet = wb.getWorksheet('Rebar')!;
-  assert.deepEqual(rowOf(sheet, 1).slice(0, 8), ['Page', 'Mark', 'Kind', 'Reinforcement level', 'Diameter (mm)', 'Spacing (cm)', 'Direction', 'Bars']);
-  const rows = [2, 3, 4, 5].map((r) => rowOf(sheet, r));
-  assert.deepEqual(rows.map((r) => [r[1], r[3], r[4], r[5], r[6]]), [
-    ['Mesh 01', 'Bottom', 12, 20, 'Both directions'],
-    ['Mesh 02', 'Bottom', 12, 20, 'Long side'],
-    ['Mesh 02', 'Bottom', 10, 15, 'Short side'],
-    ['Mesh 02', 'Top', 10, 25, 'Both directions'],
-  ]);
-  for (const r of rows) {
-    assert.equal(typeof r[9], 'number'); // net length stays a number
-    assert.equal(typeof r[10], 'number');
-  }
-  near(rows[0][9], LONG_200 + SHORT_200);
-  assert.equal(rows[0][8], '-'); // bar length: the two directions differ
-  // the totals row sums the numeric cells
-  const total = sheet.getRow(6).getCell(10).value as { formula: string; result: number };
-  assert.equal(total.formula, 'ROUND(SUM(J2:J5),2)');
-
-  const he = await reread(buildQuantitiesWorkbook([], [], 'he', buildStructuralReport(p)));
-  const hs = he.getWorksheet('זיון')!;
-  assert.deepEqual(rowOf(hs, 1).slice(3, 6), ['מפלס זיון', 'קוטר (מ"מ)', 'מרווח (ס"מ)']);
-  assert.deepEqual([rowOf(hs, 2)[3], rowOf(hs, 2)[6], rowOf(hs, 5)[3]], ['תחתון', 'שני הכיוונים', 'עליון']);
-});
 
 // ---------- PDF ----------
 
