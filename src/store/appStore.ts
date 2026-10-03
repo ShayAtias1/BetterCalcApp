@@ -194,6 +194,12 @@ interface AppState {
   manuallyCreatedRoomId: string | null;
   calibrationPoints: Point[];
   drawingPoints: Point[];
+  /**
+   * What a finished polygon or rectangle becomes. 'room' is the original behavior and the default;
+   * the structural targets are for concrete and rebar zones. Session UI state — not persisted, not
+   * in history — and reset to 'room' whenever a plan is opened or closed.
+   */
+  drawTarget: DrawTarget;
   measureTool: MeasureTool | null;
   measurePoints: Point[];
   areaShape: AreaShape;
@@ -294,6 +300,7 @@ interface AppState {
 
   addDrawingPoint: (p: Point) => void;
   clearDrawingPoints: () => void;
+  setDrawTarget: (target: DrawTarget) => void;
   finishDrawing: () => void;
   finishRectangle: (p1: Point, p2: Point) => void;
 
@@ -406,6 +413,19 @@ function markDirty(set: (patch: Partial<AppState>) => void) {
   set({ dirty: true });
 }
 
+/** What a finished polygon or rectangle becomes; see `AppState.drawTarget`. */
+export type DrawTarget = 'room' | 'concrete' | 'rebar';
+
+/**
+ * Where a finished shape goes when the draw target is not 'room'. Placeholder until the concrete and
+ * rebar workflows exist: nothing in the UI sets a structural target yet, so this is unreachable in
+ * the product — and it deliberately creates nothing, so a half-built item can never be saved. It
+ * only drops the in-progress shape, like cancelling.
+ */
+function commitStructuralZone(set: (patch: Partial<AppState>) => void) {
+  set({ drawingPoints: [] });
+}
+
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 function scheduleSave(get: () => AppState, set: (patch: Partial<AppState>) => void) {
   markDirty(set);
@@ -439,6 +459,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   manuallyCreatedRoomId: null,
   calibrationPoints: [],
   drawingPoints: [],
+  drawTarget: 'room',
   measureTool: null,
   measurePoints: [],
   markupTool: null,
@@ -493,6 +514,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       currentPage: 1,
       selectedRoomId: null,
       selectedMarkupId: null,
+      drawTarget: 'room',
       exportRegions: {},
       activeApartmentNumber: '',
       history: [],
@@ -845,7 +867,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addDrawingPoint: (p) => set({ drawingPoints: [...get().drawingPoints, p] }),
   clearDrawingPoints: () => set({ drawingPoints: [] }),
+  setDrawTarget: (target) => set({ drawTarget: target }),
   finishDrawing: () => {
+    if (get().drawTarget !== 'room') return commitStructuralZone(set);
     const { project, drawingPoints, currentPage, activeApartmentNumber } = get();
     if (!project || drawingPoints.length < 3) {
       set({ drawingPoints: [] });
@@ -859,6 +883,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   finishRectangle: (p1, p2) => {
+    if (get().drawTarget !== 'room') return commitStructuralZone(set);
     const { project, currentPage, activeApartmentNumber } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
