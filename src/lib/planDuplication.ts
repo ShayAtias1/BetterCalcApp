@@ -3,9 +3,9 @@ import type { Plan } from '../types';
 
 /**
  * A fully independent copy of a plan: calibration, rooms (with openings and work items, overrides
- * included), measurements, markups and the plan's quantity defaults. Everything is deep-cloned and
- * every id is new — the plan's, and each room's, work item's, opening's, measurement's and
- * markup's — so nothing in the copy can ever point back into, or be edited through, the original.
+ * included), measurements, markups, concrete and rebar zones and the plan's quantity defaults. Everything is deep-cloned and
+ * every id is new — the plan's, and each room's, work item's, opening's, measurement's,
+ * markup's, concrete element's, rebar item's and rebar layer's — so nothing in the copy can ever point back into, or be edited through, the original.
  * The PDF blob is copied separately by the caller under the new plan id.
  */
 export function clonePlanForDuplicate(source: Plan, name: string): Plan {
@@ -25,5 +25,18 @@ export function clonePlanForDuplicate(source: Plan, name: string): Plan {
     })),
     measurements: (copy.measurements ?? []).map((m) => ({ ...m, id: uuid() })),
     markups: (copy.markups ?? []).map((m) => ({ ...m, id: uuid() })),
+    // Concrete and rebar zones, only when the source has them, so a plan without them stays without.
+    ...(Array.isArray(copy.concreteElements)
+      ? { concreteElements: copy.concreteElements.map((e) => ({ ...e, id: uuid() })) }
+      : {}),
+    ...(Array.isArray(copy.rebarItems)
+      ? {
+          rebarItems: copy.rebarItems.map((item) =>
+            item.kind === 'mesh'
+              ? { ...item, id: uuid(), layers: item.layers.map((l) => ({ ...l, id: uuid() })) }
+              : { ...item, id: uuid() }
+          ),
+        }
+      : {}),
   };
 }

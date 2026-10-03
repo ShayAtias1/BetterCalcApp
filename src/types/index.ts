@@ -1,6 +1,7 @@
 // Core domain types for the quantity-takeoff app.
 
 import { MEASUREMENT_DEFAULTS } from '../config/measurementDefaults';
+import type { ConcreteElement, RebarItem } from './structural';
 
 export type TilingCategory = 'regular' | 'as';
 
@@ -140,6 +141,12 @@ export interface Plan {
   rooms: Room[];
   measurements: Measurement[];
   markups: Markup[];
+  /**
+   * Concrete and rebar takeoff zones (types/structural). Optional: plans saved before they existed
+   * have neither array — read them through lib/structuralPlan, never directly.
+   */
+  concreteElements?: ConcreteElement[];
+  rebarItems?: RebarItem[];
   defaultCladdingHeightM: number;
   /** Panel (skirting) height in meters for items without their own `heightM`. Optional: projects saved before this existed fall back to PANEL_HEIGHT_M. */
   defaultPanelHeightM?: number;
