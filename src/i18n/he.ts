@@ -811,6 +811,16 @@ export const he = {
     missingSize: 'הזינו אורך ורוחב.',
     missingThickness: 'הזינו עובי כדי לחשב נפח.',
     missingHeight: 'הזינו גובה כדי לחשב נפח.',
+    summary: {
+      title: 'סיכום בטון',
+      elements: 'אלמנטים',
+      net: 'נטו',
+      order: 'להזמנה',
+      noGrade: 'ללא דרגה',
+      missing: 'חסרים נתונים: {count}',
+      total: 'סה"כ',
+      excluded: 'אלמנטים שחסרים בהם נתונים לא נכללים בנפחים.',
+    },
   },
 
   exports: {

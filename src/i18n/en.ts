@@ -807,6 +807,16 @@ export const en: Dictionary = {
     missingSize: 'Enter the length and the width.',
     missingThickness: 'Enter the thickness to calculate the volume.',
     missingHeight: 'Enter the height to calculate the volume.',
+    summary: {
+      title: 'Concrete summary',
+      elements: 'Elements',
+      net: 'Net',
+      order: 'To order',
+      noGrade: 'Unspecified',
+      missing: 'Missing data: {count}',
+      total: 'Total',
+      excluded: 'Elements with missing data are not included in the volumes.',
+    },
   },
 
   exports: {

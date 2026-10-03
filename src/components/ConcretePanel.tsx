@@ -9,6 +9,7 @@ import { concreteOf } from '../lib/structuralPlan';
 import { zoneGeometry } from '../lib/zoneGeometry';
 import { round } from '../lib/geometry';
 import { CONCRETE_COLOR } from './ConcreteZones';
+import ConcreteSummary from './ConcreteSummary';
 import Icon from './Icon';
 
 /** A number field that can be empty or half-typed ("0.") without fighting the stored value. */
@@ -93,6 +94,8 @@ export default function ConcretePanel() {
           calibration={project.pages[selected.pageNumber]?.calibration ?? null}
           onUpdate={(patch) => updateElement(selected.id, patch)}
         />
+        {/* Kept under the form so an edit can be seen landing in the totals as it is typed. */}
+        <ConcreteSummary plan={project} />
       </div>
     );
   }
@@ -166,6 +169,8 @@ export default function ConcretePanel() {
           })}
         </ul>
       </div>
+
+      <ConcreteSummary plan={project} />
     </div>
   );
 }

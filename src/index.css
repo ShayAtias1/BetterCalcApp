@@ -2901,3 +2901,48 @@ html[dir='rtl'] .qty-table .col-room {
 .concrete-manual-toggle {
   margin-bottom: var(--s-2);
 }
+
+/* Concrete summary (Concrete tab) */
+.concrete-summary {
+  margin-top: var(--s-4);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border);
+}
+.concrete-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px 46px 50px;
+  gap: 4px;
+  align-items: baseline;
+  padding: 3px 0;
+  font: var(--t-meta);
+  color: var(--text-h);
+}
+.concrete-summary-grid > span:not(.concrete-summary-label):not(:first-child) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+.concrete-summary-head {
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.concrete-summary-page-title {
+  margin-top: var(--s-2);
+  font: var(--t-label);
+  font-weight: 600;
+  color: var(--muted);
+}
+.concrete-summary-total {
+  margin-top: var(--s-2);
+  border-top: 1px solid var(--border);
+  padding-top: var(--s-2);
+  font-weight: 600;
+}
+.concrete-summary-missing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 1px 0 3px;
+  font: var(--t-meta);
+  color: var(--warning);
+}
