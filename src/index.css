@@ -1044,6 +1044,11 @@ button:disabled,
   border-bottom: 2px solid transparent;
   transition: color 0.12s ease, background 0.12s ease;
 }
+/* Four tabs (takeoff) outgrow equal thirds-and-quarters: size each by its label so none is cut off. */
+.sidebar-tabs.content-sized button {
+  flex: 1 1 auto;
+  padding-inline: 4px;
+}
 .sidebar-tabs button:hover:not(.active) {
   background: var(--bg-subtle);
   color: var(--text-h);
@@ -2879,4 +2884,20 @@ html[dir='rtl'] .qty-table .col-room {
 }
 .grid-menu-controls .menu-hint {
   margin: 0;
+}
+
+/* Concrete tab */
+.concrete-kinds {
+  display: flex;
+  gap: 4px;
+  margin-bottom: var(--s-3);
+}
+.concrete-kinds .btn-ghost {
+  flex: 1;
+}
+.concrete-results {
+  margin-bottom: var(--s-3);
+}
+.concrete-manual-toggle {
+  margin-bottom: var(--s-2);
 }

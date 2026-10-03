@@ -58,13 +58,16 @@ function sidesOf(a: number, b: number): { longM: number; shortM: number } {
 }
 
 /**
- * The zone's size, or null when it cannot be known: no usable override and either no scale or an
- * outline with fewer than three points. An override replaces the outline entirely.
+ * The zone's size, or null when it cannot be known. A size override, when there is one (even a
+ * half-filled one), REPLACES the outline entirely: it is used if both lengths are usable and
+ * otherwise the zone has no size — never a silent fall-back to the drawn outline. Without an
+ * override the outline needs a scale and at least three points.
  */
 export function zoneGeometry(points: Point[], metersPerPixel: number, override?: SizeOverride | null): ZoneGeometry | null {
-  const lengthM = finitePositive(override?.lengthM);
-  const widthM = finitePositive(override?.widthM);
-  if (lengthM !== null && widthM !== null) {
+  if (override) {
+    const lengthM = finitePositive(override.lengthM);
+    const widthM = finitePositive(override.widthM);
+    if (lengthM === null || widthM === null) return null;
     return { areaM2: lengthM * widthM, sides: sidesOf(lengthM, widthM), fromOverride: true };
   }
 

@@ -51,21 +51,19 @@ test('a polygon with fewer than three points still creates nothing and clears th
   assert.deepEqual(useAppStore.getState().drawingPoints, []);
 });
 
-test('structural targets create no room and no history entry, and just drop the shape in progress', () => {
-  for (const target of ['concrete', 'rebar'] as const) {
-    open();
-    useAppStore.getState().setDrawTarget(target);
-    useAppStore.setState({ drawingPoints: square, toolMode: 'draw' });
-    useAppStore.getState().finishDrawing();
-    useAppStore.getState().finishRectangle({ x: 0, y: 0 }, { x: 50, y: 50 });
-    const s = useAppStore.getState();
-    assert.equal(roomCount(), PLAN_A.rooms.length);
-    assert.equal(s.history.length, 0);
-    assert.deepEqual(s.drawingPoints, []);
-    assert.equal(s.selectedRoomId, null);
-    assert.equal(s.project!.concreteElements, undefined);
-    assert.equal(s.project!.rebarItems, undefined);
-  }
+test('the rebar target (not built yet) creates nothing and just drops the shape in progress', () => {
+  open();
+  useAppStore.getState().setDrawTarget('rebar');
+  useAppStore.setState({ drawingPoints: square, toolMode: 'draw' });
+  useAppStore.getState().finishDrawing();
+  useAppStore.getState().finishRectangle({ x: 0, y: 0 }, { x: 50, y: 50 });
+  const s = useAppStore.getState();
+  assert.equal(roomCount(), PLAN_A.rooms.length);
+  assert.equal(s.history.length, 0);
+  assert.deepEqual(s.drawingPoints, []);
+  assert.equal(s.selectedRoomId, null);
+  assert.equal(s.project!.concreteElements, undefined);
+  assert.equal(s.project!.rebarItems, undefined);
 });
 
 test('opening or closing a plan resets the target to room', () => {

@@ -26,6 +26,7 @@ export const en: Dictionary = {
     m2: 'm²',
     lm: 'lm',
     cm: 'cm',
+    m3: 'm³',
   },
 
   workTypes: {
@@ -165,6 +166,7 @@ export const en: Dictionary = {
       rooms: 'Rooms',
       measure: 'Measurements',
       markup: 'Markups',
+      concrete: 'Concrete',
     },
   },
 
@@ -765,6 +767,46 @@ export const en: Dictionary = {
       targetPlaceholder: 'e.g. 13',
       confirm: 'Duplicate Apartment',
     },
+  },
+
+  // Concrete takeoff: zones marked on the plan, the one vertical dimension, and the volume.
+  concrete: {
+    kinds: {
+      slab: 'Slab',
+      wall: 'Wall',
+      beam: 'Beam',
+      column: 'Column',
+    },
+    kindPicker: 'Concrete element type',
+    thickness: 'Thickness',
+    height: 'Height',
+    draw: '+ Mark Concrete Zone',
+    drawHint: 'Mark the concrete zone on the plan',
+    drawPolygon: 'Mark zone as polygon',
+    drawRect: 'Mark zone as rectangle',
+    zones: 'Concrete zones ({count})',
+    empty: 'No concrete zones marked yet. Choose an element type and trace its outline on the plan.',
+    page: 'Page {page}',
+    back: 'Back to concrete zones',
+    delete: 'Delete concrete zone',
+    deleteConfirm: 'Delete "{mark}"?',
+    mark: 'Mark',
+    grade: 'Concrete grade',
+    gradePlaceholder: 'Not specified',
+    waste: 'Waste (%)',
+    quantity: 'Quantity',
+    manualSize: 'Enter size manually',
+    manualSizeHint: 'The size you enter replaces the measurement from the plan.',
+    length: 'Length',
+    width: 'Width',
+    footprint: 'Footprint area',
+    volume: 'Net volume',
+    order: 'To order (incl. waste)',
+    notCalculable: 'Not calculable',
+    noScale: 'This page is not calibrated, so the zone cannot be measured. Calibrate the page or enter the size manually.',
+    missingSize: 'Enter the length and the width.',
+    missingThickness: 'Enter the thickness to calculate the volume.',
+    missingHeight: 'Enter the height to calculate the volume.',
   },
 
   exports: {

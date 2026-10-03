@@ -56,8 +56,9 @@ test('zone geometry: no scale means no size, but a size override needs no scale'
   near(o.areaM2, 0.15);
   near(o.sides!.longM, 0.5);
   assert.equal(o.fromOverride, true);
-  // an unusable override falls back to the outline
-  assert.equal(zoneGeometry(rect(0, 0, 100, 100), 0.01, { lengthM: 0, widthM: 2 })!.fromOverride, false);
+  // an incomplete override does NOT fall back to the outline: the zone simply has no size yet
+  assert.equal(zoneGeometry(rect(0, 0, 100, 100), 0.01, { lengthM: 0, widthM: 2 }), null);
+  assert.equal(zoneGeometry(rect(0, 0, 100, 100), 0.01, null)!.fromOverride, false);
 });
 
 test('slab: area × thickness, with waste', () => {
@@ -100,6 +101,20 @@ test('not calculable is reported as such, never as zero', () => {
   }
   // a missing scale is reported before a missing depth
   assert.equal(calculateConcrete(el({ depthM: undefined }), null).status, 'no-scale');
+});
+
+test('manual size replaces the measured footprint, and a half-filled one is missing-size, not the outline', () => {
+  // outline is 80 m² at scale; the override says 2 × 3 = 6 m² and wins
+  const c = calculateConcrete(el({ depthM: 0.5, sizeOverride: { lengthM: 2, widthM: 3 } }), CAL);
+  assert.equal(c.status, 'ok');
+  near(c.footprintM2, 6);
+  near(c.volumeM3, 3);
+  const half = calculateConcrete(el({ sizeOverride: { lengthM: 2, widthM: 0 } }), CAL);
+  assert.equal(half.status, 'missing-size');
+  assert.equal(half.volumeM3, null);
+  assert.equal(calculateConcrete(el({ sizeOverride: { lengthM: 0, widthM: 0 } }), null).status, 'missing-size');
+  // override on an uncalibrated page, depth still missing
+  assert.equal(calculateConcrete(el({ depthM: undefined, sizeOverride: { lengthM: 2, widthM: 3 } }), null).status, 'missing-depth');
 });
 
 test('unusable waste and quantity fall back instead of poisoning the result', () => {

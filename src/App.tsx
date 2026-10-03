@@ -12,17 +12,30 @@ import QuantitiesPanel from './components/QuantitiesPanel';
 import PageStatusBar from './components/PageStatusBar';
 import MeasureToolbar from './components/MeasureToolbar';
 import MarkupToolbar from './components/MarkupToolbar';
+import ConcretePanel from './components/ConcretePanel';
 import CompareWorkspace from './components/compare/CompareWorkspace';
 import BrandLogo from './components/BrandLogo';
 import LanguageSwitch from './components/LanguageSwitch';
 import { useT } from './i18n';
 
 /** Quantities is no longer one of these — it has the full-width bottom panel instead. */
-type SidebarTab = 'rooms' | 'measure' | 'markup';
+type SidebarTab = 'rooms' | 'measure' | 'markup' | 'concrete';
 
 function Workspace() {
   const t = useT();
   const [tab, setTab] = useState<SidebarTab>('rooms');
+  const planId = useAppStore((s) => s.project?.id);
+
+  // The Concrete tab is what makes a finished polygon or rectangle a concrete zone; every other tab
+  // keeps the original behavior (a room). Re-asserted when the plan changes, because opening or
+  // closing a plan resets the store's target while this tab state survives.
+  useEffect(() => {
+    const store = useAppStore.getState();
+    const concrete = tab === 'concrete';
+    store.setDrawTarget(concrete ? 'concrete' : 'room');
+    if (concrete) store.setSelectedRoomId(null);
+    else store.setSelectedConcreteId(null);
+  }, [tab, planId]);
 
   return (
     <div className="workspace">
@@ -39,7 +52,7 @@ function Workspace() {
         <div className="sidebar">
           {/* Page + calibration state sits above the tabs, so it is present in every tab. */}
           <PageStatusBar />
-          <div className="sidebar-tabs">
+          <div className="sidebar-tabs content-sized">
             <button className={tab === 'rooms' ? 'active' : ''} onClick={() => setTab('rooms')}>
               {t('workspace.tabs.rooms')}
             </button>
@@ -49,11 +62,15 @@ function Workspace() {
             <button className={tab === 'markup' ? 'active' : ''} onClick={() => setTab('markup')}>
               {t('workspace.tabs.markup')}
             </button>
+            <button className={tab === 'concrete' ? 'active' : ''} onClick={() => setTab('concrete')}>
+              {t('workspace.tabs.concrete')}
+            </button>
           </div>
           <div className="sidebar-content">
             {tab === 'rooms' && <RoomPanel />}
             {tab === 'measure' && <MeasureToolbar />}
             {tab === 'markup' && <MarkupToolbar />}
+            {tab === 'concrete' && <ConcretePanel />}
           </div>
         </div>
       </div>

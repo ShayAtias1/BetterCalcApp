@@ -36,6 +36,8 @@ import { labelDirection } from '../lib/textDirection';
 import { computeGrid } from '../lib/grid';
 import { useGridStore } from '../store/gridStore';
 import GridLayer from './GridLayer';
+import ConcreteZones from './ConcreteZones';
+import { concreteOf } from '../lib/structuralPlan';
 
 const VERTEX_HIT_RADIUS_SCREEN = 9;
 /** New masks start opaque white, the colour of the paper they hide. */
@@ -157,6 +159,9 @@ export default function PdfViewer() {
   const setNumPages = useAppStore((s) => s.setNumPages);
   const toolMode = useAppStore((s) => s.toolMode);
   const annotationsVisible = useAppStore((s) => s.annotationsVisible);
+  const drawTarget = useAppStore((s) => s.drawTarget);
+  const selectedConcreteId = useAppStore((s) => s.selectedConcreteId);
+  const setSelectedConcreteId = useAppStore((s) => s.setSelectedConcreteId);
   const gridEnabled = useGridStore((s) => s.enabled);
   const gridSpacingM = useGridStore((s) => s.spacingM);
   const gridOpacity = useGridStore((s) => s.opacity);
@@ -735,6 +740,13 @@ export default function PdfViewer() {
     }
 
     if (toolMode === 'select' && project) {
+      // In the Concrete tab a click picks a concrete zone and never a room; everywhere else this
+      // is the original room hit-test, untouched.
+      if (drawTarget === 'concrete') {
+        const zone = [...concreteOf(project)].reverse().find((z) => z.pageNumber === currentPage && polygonAreaPx(z.points) > 0 && pointInPolygon(native, z.points));
+        setSelectedConcreteId(zone ? zone.id : null);
+        return;
+      }
       const hit = [...project.rooms].reverse().find((r) => r.pageNumber === currentPage && polygonAreaPx(r.points) > 0 && pointInPolygon(native, r.points));
       setSelectedRoomId(hit ? hit.id : null);
     }
@@ -809,6 +821,13 @@ export default function PdfViewer() {
                   </g>
                 );
               })}
+
+            <ConcreteZones
+              elements={concreteOf(project).filter((z) => z.pageNumber === currentPage)}
+              selectedId={selectedConcreteId}
+              strokeW={strokeW}
+              zoom={zoom}
+            />
 
             {/* Detection suggestions: dashed, faint and unselectable, so they never read as rooms
                 that are already part of the project. They live in session state only. */}

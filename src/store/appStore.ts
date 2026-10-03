@@ -19,6 +19,9 @@ import {
 import { clonePlanForDuplicate } from '../lib/planDuplication';
 import { createEmptyComparison, useCompareStore } from './compareStore';
 import type { Comparison } from '../types/compare';
+import type { ConcreteElement, ConcreteKind } from '../types/structural';
+import { addConcreteElement, newConcreteElement, removeConcreteElement, updateConcreteElement as updateConcrete } from '../lib/structuralMutations';
+import { polygonAreaPx } from '../lib/geometry';
 import { createHistoryTracker } from '../lib/undoHistory';
 import { loadPdfPlanSource } from '../lib/planSource';
 import { runRoomDetection, type DetectionSummary } from '../lib/roomDetection';
@@ -200,6 +203,10 @@ interface AppState {
    * in history — and reset to 'room' whenever a plan is opened or closed.
    */
   drawTarget: DrawTarget;
+  /** The concrete zone open in the Concrete tab's form. Session UI state, like `selectedRoomId`: not persisted and cleared by undo, redo, page changes and plan switches. */
+  selectedConcreteId: string | null;
+  /** The kind the next drawn concrete zone gets (the Concrete tab's picker). Session UI state. */
+  concreteKind: ConcreteKind;
   measureTool: MeasureTool | null;
   measurePoints: Point[];
   areaShape: AreaShape;
@@ -301,6 +308,11 @@ interface AppState {
   addDrawingPoint: (p: Point) => void;
   clearDrawingPoints: () => void;
   setDrawTarget: (target: DrawTarget) => void;
+  setSelectedConcreteId: (id: string | null) => void;
+  setConcreteKind: (kind: ConcreteKind) => void;
+  /** Debounced into one undo step per burst, like typing in a room's fields. */
+  updateConcreteElement: (id: string, patch: Partial<Omit<ConcreteElement, 'id'>>) => void;
+  deleteConcreteElement: (id: string) => void;
   finishDrawing: () => void;
   finishRectangle: (p1: Point, p2: Point) => void;
 
@@ -417,13 +429,26 @@ function markDirty(set: (patch: Partial<AppState>) => void) {
 export type DrawTarget = 'room' | 'concrete' | 'rebar';
 
 /**
- * Where a finished shape goes when the draw target is not 'room'. Placeholder until the concrete and
- * rebar workflows exist: nothing in the UI sets a structural target yet, so this is unreachable in
- * the product — and it deliberately creates nothing, so a half-built item can never be saved. It
- * only drops the in-progress shape, like cancelling.
+ * Where a finished shape goes when the draw target is not 'room'. A concrete zone becomes a real
+ * element — and nothing else ever creates one: a shape with fewer than three points or no area is
+ * just dropped, like cancelling. The rebar target is still a placeholder that creates nothing.
  */
-function commitStructuralZone(set: (patch: Partial<AppState>) => void) {
-  set({ drawingPoints: [] });
+function commitStructuralZone(get: () => AppState, set: (patch: Partial<AppState>) => void, points: Point[]) {
+  const { project, drawTarget, currentPage, concreteKind } = get();
+  if (!project || drawTarget !== 'concrete' || points.length < 3 || polygonAreaPx(points) <= 0) {
+    set({ drawingPoints: [] });
+    return;
+  }
+  historyTracker.push(get, set, project);
+  const element = newConcreteElement(project, currentPage, concreteKind, points);
+  set({
+    project: { ...addConcreteElement(project, element), updatedAt: Date.now() },
+    drawingPoints: [],
+    selectedConcreteId: element.id,
+    selectedRoomId: null,
+    toolMode: 'select',
+  });
+  scheduleSave(get, set);
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -460,6 +485,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   calibrationPoints: [],
   drawingPoints: [],
   drawTarget: 'room',
+  selectedConcreteId: null,
+  concreteKind: 'slab',
   measureTool: null,
   measurePoints: [],
   markupTool: null,
@@ -514,6 +541,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       currentPage: 1,
       selectedRoomId: null,
       selectedMarkupId: null,
+      selectedConcreteId: null,
       drawTarget: 'room',
       exportRegions: {},
       activeApartmentNumber: '',
@@ -797,7 +825,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { project, history, future } = get();
     if (!project || history.length === 0) return;
     const previous = history[history.length - 1];
-    set({ project: previous, history: history.slice(0, -1), future: [project, ...future], selectedRoomId: null });
+    set({ project: previous, history: history.slice(0, -1), future: [project, ...future], selectedRoomId: null, selectedConcreteId: null });
     scheduleSave(get, set);
   },
   redo: () => {
@@ -808,7 +836,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { project, history, future } = get();
     if (!project || future.length === 0) return;
     const next = future[0];
-    set({ project: next, history: [...history, project], future: future.slice(1), selectedRoomId: null });
+    set({ project: next, history: [...history, project], future: future.slice(1), selectedRoomId: null, selectedConcreteId: null });
     scheduleSave(get, set);
   },
   setCurrentPage: (n) => {
@@ -821,6 +849,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       ...(pageChanged ? { detectionCandidates: [], detectionCandidatesPage: null } : {}),
       selectedRoomId: null,
       selectedMarkupId: null,
+      selectedConcreteId: null,
       drawingPoints: [],
       calibrationPoints: [],
       measurePoints: [],
@@ -867,9 +896,32 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addDrawingPoint: (p) => set({ drawingPoints: [...get().drawingPoints, p] }),
   clearDrawingPoints: () => set({ drawingPoints: [] }),
-  setDrawTarget: (target) => set({ drawTarget: target }),
+  // Changing the target drops a shape in progress: it was started for the previous target.
+  setDrawTarget: (target) => {
+    if (get().drawTarget === target) return;
+    set({ drawTarget: target, drawingPoints: [] });
+  },
+  setSelectedConcreteId: (id) => set({ selectedConcreteId: id }),
+  setConcreteKind: (kind) => set({ concreteKind: kind }),
+  updateConcreteElement: (id, patch) => {
+    const { project } = get();
+    if (!project) return;
+    historyTracker.pushDebounced(get, set, project);
+    set({ project: { ...updateConcrete(project, id, patch), updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
+  deleteConcreteElement: (id) => {
+    const { project, selectedConcreteId } = get();
+    if (!project) return;
+    historyTracker.push(get, set, project);
+    set({
+      project: { ...removeConcreteElement(project, id), updatedAt: Date.now() },
+      selectedConcreteId: selectedConcreteId === id ? null : selectedConcreteId,
+    });
+    scheduleSave(get, set);
+  },
   finishDrawing: () => {
-    if (get().drawTarget !== 'room') return commitStructuralZone(set);
+    if (get().drawTarget !== 'room') return commitStructuralZone(get, set, get().drawingPoints);
     const { project, drawingPoints, currentPage, activeApartmentNumber } = get();
     if (!project || drawingPoints.length < 3) {
       set({ drawingPoints: [] });
@@ -883,7 +935,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   finishRectangle: (p1, p2) => {
-    if (get().drawTarget !== 'room') return commitStructuralZone(set);
+    if (get().drawTarget !== 'room') {
+      return commitStructuralZone(get, set, [p1, { x: p2.x, y: p1.y }, p2, { x: p1.x, y: p2.y }]);
+    }
     const { project, currentPage, activeApartmentNumber } = get();
     if (!project) return;
     historyTracker.push(get, set, project);

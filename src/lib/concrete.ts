@@ -19,10 +19,11 @@ import { finiteNonNegative, finitePositive, zoneGeometry } from './zoneGeometry'
 /**
  * Why a quantity is missing — "not calculable" is never reported as 0:
  * - no-scale: the zone is measured off the plan and its page has no scale (and no size override).
+ * - missing-size: a manual size is switched on but its length or width is not entered yet.
  * - missing-depth: the thickness/height has not been entered (or is not above zero).
- * Checked in that order, since a missing scale blocks the whole page.
+ * Checked in that order: the footprint is needed before the depth can matter.
  */
-export type ConcreteStatus = 'ok' | 'no-scale' | 'missing-depth';
+export type ConcreteStatus = 'ok' | 'no-scale' | 'missing-size' | 'missing-depth';
 
 export interface ConcreteCalc {
   status: ConcreteStatus;
@@ -45,7 +46,7 @@ export function calculateConcrete(element: ConcreteElement, calibration: Calibra
   const depthM = finitePositive(element.depthM);
 
   const base = { footprintM2: zone?.areaM2 ?? null, wastePercent, quantity };
-  if (!zone) return { ...base, status: 'no-scale', volumeM3: null, orderM3: null };
+  if (!zone) return { ...base, status: element.sizeOverride ? 'missing-size' : 'no-scale', volumeM3: null, orderM3: null };
   if (depthM === null) return { ...base, status: 'missing-depth', volumeM3: null, orderM3: null };
 
   const volumeM3 = zone.areaM2 * depthM * quantity;

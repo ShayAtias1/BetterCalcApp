@@ -19,6 +19,7 @@ export const he = {
     m2: 'מ"ר',
     lm: 'מ"א',
     cm: 'ס"מ',
+    m3: 'מ"ק',
   },
 
   workTypes: {
@@ -163,6 +164,7 @@ export const he = {
       rooms: 'חדרים ודירות',
       measure: 'מדידות',
       markup: 'סימונים',
+      concrete: 'בטון',
     },
   },
 
@@ -769,6 +771,46 @@ export const he = {
       targetPlaceholder: 'לדוגמה: 13',
       confirm: 'שכפל דירה',
     },
+  },
+
+  // Concrete takeoff: zones marked on the plan, the one vertical dimension, and the volume.
+  concrete: {
+    kinds: {
+      slab: 'תקרה',
+      wall: 'קיר',
+      beam: 'קורה',
+      column: 'עמוד',
+    },
+    kindPicker: 'סוג אלמנט הבטון',
+    thickness: 'עובי',
+    height: 'גובה',
+    draw: '+ סימון אזור בטון',
+    drawHint: 'סמנו את אזור הבטון על התוכנית',
+    drawPolygon: 'סימון אזור כמצולע',
+    drawRect: 'סימון אזור כמלבן',
+    zones: 'אזורי בטון ({count})',
+    empty: 'עדיין לא סומנו אזורי בטון. בחרו סוג אלמנט וסמנו את קווי המתאר על התוכנית.',
+    page: 'עמוד {page}',
+    back: 'חזרה לאזורי הבטון',
+    delete: 'מחיקת אזור הבטון',
+    deleteConfirm: 'למחוק את "{mark}"?',
+    mark: 'סימון',
+    grade: 'דרגת בטון',
+    gradePlaceholder: 'לא צוין',
+    waste: 'פחת (%)',
+    quantity: 'כמות',
+    manualSize: 'הזנת מידות ידנית',
+    manualSizeHint: 'המידות שהוזנו מחליפות את המדידה מהתוכנית.',
+    length: 'אורך',
+    width: 'רוחב',
+    footprint: 'שטח בסיס',
+    volume: 'נפח נטו',
+    order: 'להזמנה (כולל פחת)',
+    notCalculable: 'לא ניתן לחישוב',
+    noScale: 'העמוד לא מכויל, ולכן אי אפשר למדוד את האזור. כיילו את העמוד או הזינו מידות ידנית.',
+    missingSize: 'הזינו אורך ורוחב.',
+    missingThickness: 'הזינו עובי כדי לחשב נפח.',
+    missingHeight: 'הזינו גובה כדי לחשב נפח.',
   },
 
   exports: {
