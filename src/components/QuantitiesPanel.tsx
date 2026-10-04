@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../store/appStore';
 import QuantityTable from './QuantityTable';
 import PhoneReview from './PhoneReview';
+import TopBarMenu, { type MenuId } from './TopBarMenu';
 import QuantityExportActions from './QuantityExportActions';
 import { ConcreteQuantityTable, RebarQuantityTable } from './StructuralQuantityTables';
 import { concreteOf, rebarOf } from '../lib/structuralPlan';
@@ -39,7 +40,9 @@ export default function QuantitiesPanel({ mobileOpen = false, onMobileClose }: {
   const project = useAppStore((s) => s.project);
 
   // Which domain the panel shows. Finishes, Concrete and Rebar stay separate tables, never one merged report.
+  const [menu, setMenu] = useState<MenuId | null>(null);
   const [domain, setDomain] = useState<'finishes' | 'concrete' | 'rebar'>('finishes');
+  useEffect(() => { if (!desktop && !mobileOpen) setMenu(null); }, [desktop, mobileOpen]);
   const [resizing, setResizing] = useState(false);
   // Calculation defaults: a secondary toggle in the header, deliberately not competing with export.
   const [showDefaults, setShowDefaults] = useState(false);
@@ -137,7 +140,9 @@ export default function QuantitiesPanel({ mobileOpen = false, onMobileClose }: {
           </button>
           )}
           <span className="top-bar-sep" />
-          <QuantityExportActions variant={reviewOnly ? "menu" : "buttons"} />
+          {reviewOnly ? <TopBarMenu id="export" openId={menu} setOpenId={setMenu} icon="file" label={t('common.export')} variant="ghost">
+            <QuantityExportActions variant="menu" onPicked={() => setMenu(null)} />
+          </TopBarMenu> : <QuantityExportActions variant="buttons" />}
           {desktop && <button
             className="icon-btn"
             onClick={toggleMaximized}

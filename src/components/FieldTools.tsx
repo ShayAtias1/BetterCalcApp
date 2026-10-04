@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import TopBarMenu, { type MenuId } from './TopBarMenu';
 import { useAppStore } from '../store/appStore';
 import { useFieldWorkflowStore } from '../store/fieldWorkflowStore';
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
@@ -11,6 +13,7 @@ export default function FieldTools({ controls }: { controls: Controls }) {
   const t = useT();
   const { layout } = useWorkspaceLayout();
   const phone = layout === 'narrow';
+  const [menu, setMenu] = useState<MenuId | null>(null);
   const calibrated = useAppStore((s) => !!s.project?.pages[s.currentPage]?.calibration);
   const canUndo = useAppStore((s) => s.history.length > 0);
   const launch = (tool: string) => {
@@ -38,22 +41,22 @@ export default function FieldTools({ controls }: { controls: Controls }) {
     onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
     <div className="field-tool-row">
       <button className="btn-ghost" onClick={controls.cancel}>{t('adaptive.browse')}</button>
-      <label className="field-tool-picker"><span className="sr-only">{t('field.tools')}</span>
-        <select value="" onChange={(e) => launch(e.target.value)}>
-          <option value="">{t('field.tools')}</option>
-          {!phone && <option value="calibrate">{t('toolbar.calibrate')}</option>}
-          {!phone && <>
-            <optgroup label={t('workspace.tabs.rooms')}><option value="room-rect">{t('field.rectangle')}</option><option value="room-poly">{t('field.polygon')}</option></optgroup>
-            <optgroup label={t('workspace.tabs.concrete')}><option value="concrete-rect">{t('field.rectangle')}</option><option value="concrete-poly">{t('field.polygon')}</option></optgroup>
-            <optgroup label={t('adaptive.mesh')}><option value="rebar-rect">{t('field.rectangle')}</option><option value="rebar-poly">{t('field.polygon')}</option></optgroup>
-            <option value="bars-area">{t('rebar.spatial.area')}</option>
-          </>}
-          <option value="distance" disabled={!calibrated}>{t('measureTools.distance')}</option>
-          <optgroup label={t('workspace.tabs.markup')}>
-            <option value="text">{t('markupTools.text')}</option><option value="arrow">{t('markupTools.arrow')}</option><option value="rectangle">{t('markupTools.rectangle')}</option>
-          </optgroup>
-        </select>
-      </label>
+      <TopBarMenu id="tools" openId={menu} setOpenId={setMenu} label={t('field.tools')} variant="ghost">
+        {!phone && <button className="menu-item" onClick={() => { setMenu(null); launch('calibrate'); }}>{t('toolbar.calibrate')}</button>}
+        {!phone && <>
+          {(['room', 'concrete', 'rebar'] as const).map((domain) => <div className="tool-menu-group" key={domain}>
+            <div className="menu-section-title">{t(domain === 'room' ? 'workspace.tabs.rooms' : domain === 'concrete' ? 'workspace.tabs.concrete' : 'adaptive.mesh')}</div>
+            <button className="menu-item" onClick={() => { setMenu(null); launch(`${domain}-rect`); }}>{t('field.rectangle')}</button>
+            <button className="menu-item" onClick={() => { setMenu(null); launch(`${domain}-poly`); }}>{t('field.polygon')}</button>
+          </div>)}
+          <button className="menu-item" onClick={() => { setMenu(null); launch('bars-area'); }}>{t('rebar.spatial.area')}</button>
+          <div className="menu-divider" />
+        </>}
+        <button className="menu-item" disabled={!calibrated} onClick={() => { setMenu(null); launch('distance'); }}>{t('measureTools.distance')}</button>
+        <div className="menu-section-title">{t('workspace.tabs.markup')}</div>
+        {(['text', 'arrow', 'rectangle'] as const).map((tool) => <button className="menu-item" key={tool}
+          onClick={() => { setMenu(null); launch(tool); }}>{t(`markupTools.${tool}`)}</button>)}
+      </TopBarMenu>
       {!phone && <button className="icon-btn" disabled={!canUndo || controls.activeDraft} onClick={() => { controls.cancel(); useAppStore.getState().undo(); }} aria-label={t('topBar.undo')}><Icon name="undo" /></button>}
     </div>
     {!calibrated && <p className="field-hint muted">{t('field.distanceNeedsScale')}</p>}

@@ -18,7 +18,9 @@ export default function AdaptiveHeader({ title, sheet, sheetCount, onSheet, onBa
       <span className={`save-state save-state-${saveState}`} role="status">{t(`topBar.save.${saveState}`)}</span>
       <TopBarMenu id="view" openId={menu} setOpenId={setMenu} icon="eye" label={t('adaptive.view')} variant="ghost">{view}</TopBarMenu>
       <TopBarMenu id="settings" openId={menu} setOpenId={setMenu} label={t('adaptive.more')} variant="ghost">
-        {more}<LanguageSwitch />
+        {more && <div className="menu-action-group" onClick={(event) => {
+          if (event.target instanceof Element && event.target.closest('button.menu-item')) setMenu(null);
+        }}>{more}</div>}<LanguageSwitch />
       </TopBarMenu>
     </div>
     <div className="adaptive-sheet-bar">
