@@ -3388,14 +3388,19 @@ html[dir='rtl'] .qty-table .col-room {
 [data-layout="narrow"] .project-overview .home-panel-head > .btn-primary { width: 100%; }
 [data-layout="narrow"] .project-overview .empty-state { padding-block: 16px; }
 
-/* Phone plan cards keep names/counts full-width, with separate status and action rows. */
+/* Phone plan cards keep names/counts full-width above a shared status/action row. */
+.plan-card-action-row { display: contents; }
 [data-layout="narrow"] .project-overview .plan-list { gap: 8px; }
 [data-layout="narrow"] .project-overview .plan-list li { display: grid; grid-template-columns: 24px minmax(0, 1fr) 44px; gap: 8px; padding: 10px; border-color: var(--border); }
 [data-layout="narrow"] .project-overview .plan-list li > svg { grid-column: 1; grid-row: 1; }
 [data-layout="narrow"] .project-overview .saved-list-text { grid-column: 2; grid-row: 1; min-width: 0; }
 [data-layout="narrow"] .project-overview .saved-list-name { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
 [data-layout="narrow"] .project-overview .saved-list-meta { white-space: normal; overflow-wrap: anywhere; }
-[data-layout="narrow"] .project-overview .plan-status { grid-column: 1 / 3; grid-row: 2; justify-self: start; max-width: 100%; white-space: normal; }
+[data-layout="narrow"] .project-overview .plan-card-action-row {
+  grid-column: 1 / -1; grid-row: 2; display: flex; align-items: center;
+  justify-content: space-between; gap: 8px; min-width: 0;
+}
+[data-layout="narrow"] .project-overview .plan-status { max-width: 100%; white-space: normal; }
 [data-layout="narrow"] .project-overview .plan-open-action { grid-column: 3; grid-row: 1; }
 [data-layout="narrow"] .project-overview .list-item-actions { grid-column: 1 / -1; grid-row: 3; justify-content: flex-end; opacity: 1; min-width: 0; }
 [data-layout="compact"] .project-overview .plan-list li { flex-wrap: wrap; }
