@@ -872,6 +872,9 @@ export const en: Dictionary = {
   rebar: {
     stirrupName: 'Stirrup',
     stirrup: {
+      spacingX: 'Spacing X',
+      spacingY: 'Spacing Y',
+
       placements: 'Placements',
       addPlacement: 'Add placement',
       line: 'Line',

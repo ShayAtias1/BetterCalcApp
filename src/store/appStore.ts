@@ -365,7 +365,7 @@ interface AppState {
   deleteDrawnBar: (itemId: string, barId: string) => void;
   removeBarsZone: (id: string) => void;
   moveStructuralZone: (kind: 'concrete' | 'mesh' | 'bars', id: string, offset: Point) => void;
-  editAreaGeometry: (kind: AreaGeometryKind, id: string, points: Point[]) => void;
+  editAreaGeometry: (kind: AreaGeometryKind, id: string, points: Point[], placementId?: string) => void;
   duplicateConcreteElement: (id: string) => void;
   deleteConcreteElement: (id: string) => void;
   /**
@@ -530,6 +530,16 @@ function commitStructuralZone(get: () => AppState, set: (patch: Partial<AppState
   const { project, drawTarget, currentPage, concreteKind } = get();
   if (!project || (drawTarget !== 'concrete' && drawTarget !== 'rebar') || points.length < 3 || polygonAreaPx(points) <= 0) {
     set({ drawingPoints: [] });
+    return;
+  }
+  if (drawTarget === 'rebar' && get().stirrupDrawing === 'area') {
+    const item = rebarOf(project).find((i) => i.id === get().selectedRebarId);
+    if (!item || item.kind !== 'stirrup' || !isRectangle(points)) return;
+    const placement: StirrupPlacement = { id: uuid(), kind: 'area', pageNumber: currentPage, points: structuredClone(points), spacingXM: 1, spacingYM: 1, quantityMode: 'automatic' };
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, item.id, { placements: [...item.placements, placement] }), updatedAt: Date.now() },
+      selectedStirrupPlacementId: placement.id, stirrupDrawing: null, drawingPoints: [], toolMode: 'select' });
+    scheduleSave(get, set);
     return;
   }
   if (drawTarget === 'rebar' && get().barsDrawing === 'zone') {
@@ -1228,9 +1238,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       barsDrawing: null, stirrupDrawing: null, drawingPoints: [], toolMode: 'select' });
     scheduleSave(get, set);
   },
-  editAreaGeometry: (kind, id, points) => {
+  editAreaGeometry: (kind, id, points, placementId) => {
     const { project } = get();
     if (!project || points.length < 3 || !points.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y)) || polygonAreaPx(points) <= 1e-9) return;
+    if (kind === 'stirrup') {
+      const item = rebarOf(project).find((i) => i.id === id);
+      const placement = item?.kind === 'stirrup' ? item.placements.find((p) => p.id === placementId) : undefined;
+      if (placement?.kind !== 'area' || !isRectangle(points)) return;
+      if (placement.points.every((point, index) => point.x === points[index]?.x && point.y === points[index]?.y)) return;
+      get().editStirrupPlacement(id, { ...placement, points: structuredClone(points) });
+      return;
+    }
     const source = kind === 'room' ? project.rooms.find((room) => room.id === id)
       : kind === 'concrete' ? concreteOf(project).find((element) => element.id === id)
       : rebarOf(project).find((item) => item.id === id && item.kind === (kind === 'bars' ? 'bars' : 'mesh'));

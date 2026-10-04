@@ -14,6 +14,7 @@ export default function StirrupOverlay({ plan, pageNumber, selectedItemId, selec
       const model = prepareStirrupPlacement(item, placement, plan.pages, t, formatNumber, zoom);
       const selected = item.id === selectedItemId && placement.id === selectedPlacementId;
       return <g key={`${item.id}|${placement.id}`}>
+        {placement.kind === 'area' && <polygon points={placement.points.map((p) => `${p.x},${p.y}`).join(' ')} fill={REBAR_COLOR} fillOpacity={0.03} stroke={REBAR_COLOR} strokeWidth={(selected ? 2.5 : 1.5) / zoom} strokeDasharray={`${3 / zoom} ${3 / zoom}`} />}
         {placement.kind === 'line' && <line x1={placement.start.x} y1={placement.start.y} x2={placement.end.x} y2={placement.end.y} stroke={REBAR_COLOR} strokeWidth={(selected ? 3 : 1.5) / zoom} />}
         {model.anchors.map((anchor, index) => model.glyphs ? <g key={index} transform={`translate(${anchor.x - 6 / zoom} ${anchor.y - 6 / zoom}) scale(${0.12 / zoom})`}>
           {model.shape.segments.map((segment) => <line key={segment.index} x1={segment.normalizedStart.x} y1={segment.normalizedStart.y} x2={segment.normalizedEnd.x} y2={segment.normalizedEnd.y} stroke={REBAR_COLOR} strokeWidth="8" />)}

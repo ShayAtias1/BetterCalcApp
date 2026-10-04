@@ -242,10 +242,10 @@ export default function PdfViewer() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const structuralDrag = useRef<{
-    kind: AreaGeometryKind; id: string; start: Point; points: Point[]; offset: Point; drawnBars?: DrawnStraightBar[]; handleIndex?: number; previewPoints?: Point[];
+    kind: AreaGeometryKind; id: string; placementId?: string; start: Point; points: Point[]; offset: Point; drawnBars?: DrawnStraightBar[]; handleIndex?: number; previewPoints?: Point[];
   } | null>(null);
   const [structuralPreview, setStructuralPreview] = useState<{
-    kind: AreaGeometryKind; id: string; points: Point[]; drawnBars?: DrawnStraightBar[];
+    kind: AreaGeometryKind; id: string; placementId?: string; points: Point[]; drawnBars?: DrawnStraightBar[];
   } | null>(null);
   const barDrag = useRef<{ itemId: string; bar: DrawnStraightBar; start: Point; endpoint: 'start' | 'end' | null; preview: DrawnStraightBar | null; stirrup?: boolean } | null>(null);
   const [barPreview, setBarPreview] = useState<{ itemId: string; bar: DrawnStraightBar; stirrup?: boolean } | null>(null);
@@ -266,6 +266,7 @@ export default function PdfViewer() {
       ? updateConcreteElement(project, structuralPreview.id, { points: structuralPreview.points })
       : (() => {
         const item = rebarOf(project).find((i) => i.id === structuralPreview.id);
+        if (item?.kind === 'stirrup') return updateRebarItem(project, item.id, { placements: item.placements.map((p) => p.id === structuralPreview.placementId && p.kind === 'area' ? { ...p, points: structuralPreview.points } : p) });
         if (item?.kind === 'bars' && structuralPreview.drawnBars) return updateRebarItem(project, item.id, { drawnBars: structuralPreview.drawnBars });
         return item?.kind === 'bars' && item.barsZone
           ? updateRebarItem(project, item.id, { barsZone: { ...item.barsZone, points: structuralPreview.points } })
@@ -361,7 +362,13 @@ export default function PdfViewer() {
       return item ? { kind: 'concrete' as const, id: item.id, points: item.points, color: CONCRETE_COLOR } : null;
     }
     if (drawTarget === 'rebar' && overlayVisible.rebar) {
-      const item = rebarOf(areaPlan).find((i) => i.id === selectedRebarId && i.pageNumber === currentPage);
+      const item = rebarOf(areaPlan).find((i) => i.id === selectedRebarId);
+      if (item?.kind === 'stirrup') {
+        const placement = item.placements.find((p) => p.id === selectedStirrupPlacementId && p.pageNumber === currentPage);
+        if (placement?.kind === 'area') return { kind: 'stirrup' as const, id: item.id, placementId: placement.id, points: placement.points, color: REBAR_COLOR };
+        return null;
+      }
+      if (item?.pageNumber !== currentPage) return null;
       if (item?.kind === 'mesh' && !(meshLayoutView.enabled && meshLayoutView.editing))
         return { kind: 'mesh' as const, id: item.id, points: item.points, color: REBAR_COLOR };
       if (item?.kind === 'bars' && item.barsZone && item.drawnBars === undefined)
@@ -596,7 +603,7 @@ export default function PdfViewer() {
       const markupTarget = drawTarget === 'room' && (e.target as Element).closest?.('[data-markup-id], [data-handle-markup-id]');
       if (handleIndex >= 0 || (!markupTarget && pointInPolygon(native, selectedArea.points))) {
         structuralDrag.current = { kind: selectedArea.kind, id: selectedArea.id, start: native,
-          points: selectedArea.points, offset: { x: 0, y: 0 }, ...(handleIndex >= 0 ? { handleIndex } : {}) };
+          placementId: 'placementId' in selectedArea ? selectedArea.placementId : undefined, points: selectedArea.points, offset: { x: 0, y: 0 }, ...(handleIndex >= 0 ? { handleIndex } : {}) };
         return;
       }
     }
@@ -607,7 +614,7 @@ export default function PdfViewer() {
       const selected = drawTarget === 'concrete'
         ? overlayVisible.concrete && concreteOf(project).find((item) => item.id === selectedConcreteId)
         : overlayVisible.rebar && rebarOf(project).find((item) => item.id === selectedRebarId);
-      if (selected?.kind === 'stirrup' && overlayVisible.rebar) {
+      if (selected && selected.kind === 'stirrup' && overlayVisible.rebar) {
         const placement = selected.placements.find((p) => p.id === selectedStirrupPlacementId && p.pageNumber === currentPage);
         if (placement?.kind === 'line') {
           const endpoint = nearestPointIndex([placement.start, placement.end], native, VERTEX_HIT_RADIUS_SCREEN / zoom);
@@ -688,7 +695,7 @@ export default function PdfViewer() {
       if (!points) return;
       drag.previewPoints = points;
       setStructuralPreview({
-        kind: drag.kind, id: drag.id,
+        kind: drag.kind, id: drag.id, placementId: drag.placementId,
         ...(drag.drawnBars ? { drawnBars: drag.drawnBars.map((bar) => translateBar(bar, offset)) } : {}),
         points,
       });
@@ -758,7 +765,7 @@ export default function PdfViewer() {
       // A click on a selected handle must keep its area selected, even without a drag.
       if (drag.handleIndex !== undefined) suppressStructuralClick.current = true;
       if (drag.drawnBars && drag.kind === 'bars') moveStructuralZone('bars', drag.id, drag.offset);
-      else if (drag.previewPoints) editAreaGeometry(drag.kind, drag.id, drag.previewPoints);
+      else if (drag.previewPoints) editAreaGeometry(drag.kind, drag.id, drag.previewPoints, drag.placementId);
       return;
     }
     if (isPanning.current) {
@@ -936,7 +943,7 @@ export default function PdfViewer() {
         if (overlayVisible.rebar) {
           for (const item of [...rebarOf(project)].reverse()) {
             if (item.kind === 'stirrup') {
-              const hit = [...item.placements].reverse().find((p) => p.pageNumber === currentPage && p.kind === 'line' && hitStraightBar(native, p, 6 / zoom));
+              const hit = [...item.placements].reverse().find((p) => p.pageNumber === currentPage && (p.kind === 'line' ? hitStraightBar(native, p, 6 / zoom) : pointInPolygon(native, p.points)));
               if (hit) { selectStirrupPlacement(item.id, hit.id); return; }
               continue;
             }

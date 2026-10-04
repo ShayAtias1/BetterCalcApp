@@ -2,7 +2,7 @@ import type { Point } from '../types';
 import { polygonAreaPx } from './geometry';
 import { rectangleLocalFrame } from './zoneGeometry';
 
-export type AreaGeometryKind = 'room' | 'concrete' | 'mesh' | 'bars';
+export type AreaGeometryKind = 'room' | 'concrete' | 'mesh' | 'bars' | 'stirrup';
 
 /** Rectangle corners resize along the original local axes, with the opposite corner anchored.
  * Polygon vertices move individually. Always derive from the drag's original geometry. */

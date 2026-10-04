@@ -18,6 +18,7 @@ export default function StirrupPlacements({ item }: { item: RebarStirrup }) {
   return <section className="rebar-level">
     <span className="section-label">{t('rebar.stirrup.placements')}</span>
     <button className="btn-ghost small" onClick={() => start(item.id, 'line')}>{t('rebar.stirrup.addPlacement')} · {t('rebar.stirrup.line')}</button>
+    <button className="btn-ghost small" onClick={() => start(item.id, 'area')}>{t('rebar.stirrup.addPlacement')} · {t('rebar.stirrup.area')}</button>
     {item.placements.map((placement, index) => {
       const result = resolveStirrupPlacement(placement, plan.pages);
       return <div className={`rebar-direction ${selected === placement.id ? 'active' : ''}`} key={placement.id}>
@@ -27,9 +28,16 @@ export default function StirrupPlacements({ item }: { item: RebarStirrup }) {
         </div>
         {placement.kind === 'line' && <div className="form-row"><label>{t('rebar.stirrup.spacing')} ({t('units.cm')})</label>
           <NumberField value={metersToCm(placement.spacingM) ?? undefined} onChange={(v) => edit(item.id, { ...placement, spacingM: cmToMeters(v) ?? 0 }, true)} /></div>}
+        {placement.kind === 'area' && <div className="form-grid">
+          {(['spacingXM', 'spacingYM'] as const).map((axis) => <div className="form-row" key={axis}>
+            <label>{t(axis === 'spacingXM' ? 'rebar.stirrup.spacingX' : 'rebar.stirrup.spacingY')} ({t('units.cm')})</label>
+            <NumberField value={metersToCm(placement[axis]) ?? undefined} onChange={(v) => edit(item.id, { ...placement, [axis]: cmToMeters(v) ?? 0 }, true)} />
+          </div>)}
+        </div>}
         <label className="wi-check"><input type="checkbox" checked={placement.quantityMode === 'manual'} onChange={(e) => edit(item.id, { ...placement,
           quantityMode: e.target.checked ? 'manual' : 'automatic', manualQuantity: e.target.checked ? result.quantity ?? 0 : undefined })} />{t('rebar.stirrup.manualQuantity')}</label>
         {placement.quantityMode === 'manual' && <NumberField value={placement.manualQuantity} step="1" onChange={(v) => edit(item.id, { ...placement, manualQuantity: v ?? 0 }, true)} />}
+        {placement.kind === 'area' && <p className="muted">{result.areaM2 === null ? '-' : formatNumber(round(result.areaM2, 2))} {t('units.m2')}{result.countX !== null ? ` · ${result.countX} × ${result.countY}` : ''}</p>}
         <p className="muted">{result.distributionLengthM === null ? '' : `${formatNumber(round(result.distributionLengthM, 2))} ${t('units.m')} · `}{t('rebar.stirrup.quantity')}: {result.quantity ?? '-'}</p>
         {result.status !== 'ok' && <p className="cal-missing">{t(result.status === 'no-scale' ? 'concrete.noScale' : 'rebar.invalidInput')}</p>}
       </div>;

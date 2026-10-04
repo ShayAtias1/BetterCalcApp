@@ -876,6 +876,9 @@ export const he = {
   rebar: {
     stirrupName: 'חישוק',
     stirrup: {
+      spacingX: 'מרווח X',
+      spacingY: 'מרווח Y',
+
       placements: 'פריסות',
       addPlacement: 'הוסף פריסה',
       line: 'קו',

@@ -2,7 +2,7 @@ import type { Plan, Point } from '../types';
 import type { RebarStirrup, StirrupPlacement } from '../types/structural';
 import { distancePx, pxToMeters, polygonCentroid } from './geometry';
 import { barCountForSpan, type RebarStatus } from './rebar';
-import { finitePositive } from './zoneGeometry';
+import { finitePositive, rectangleLocalFrame, zoneGeometry } from './zoneGeometry';
 import { prepareStirrupShape } from './stirrupShape';
 import { markLabel } from './structuralMarks';
 import type { TranslateFn } from '../i18n';
@@ -24,7 +24,37 @@ export function resolveStirrupPlacement(placement: StirrupPlacement, pages: Plan
   const result: StirrupPlacementResult = { placement, status: 'invalid-input', quantity: null, distributionLengthM: null,
     areaM2: null, countX: null, countY: null, anchors: [], anchorGapPx: 0 };
   const scale = finitePositive(pages[placement.pageNumber]?.calibration?.metersPerPixel);
-  if (placement.kind !== 'line') return result;
+  if (placement.kind === 'area') {
+    const frame = rectangleLocalFrame(placement.points);
+    if (!frame) return result;
+    const geometry = zoneGeometry(placement.points, scale ?? 0);
+    result.areaM2 = geometry?.areaM2 ?? null;
+    if (placement.quantityMode === 'manual') {
+      const quantity = placement.manualQuantity;
+      if (quantity !== undefined && Number.isSafeInteger(quantity) && quantity >= 0) return { ...result, status: 'ok', quantity };
+      return result;
+    }
+    if (!scale) return { ...result, status: 'no-scale' };
+    if (!geometry?.sides) return result;
+    const countX = barCountForSpan(geometry.sides.longM, placement.spacingXM);
+    const countY = barCountForSpan(geometry.sides.shortM, placement.spacingYM);
+    if (!countX || !countY || !Number.isSafeInteger(countX * countY)) return result;
+    const quantity = countX * countY;
+    const longPx = geometry.sides.longM / scale, shortPx = geometry.sides.shortM / scale;
+    result.quantity = quantity;
+    result.countX = countX; result.countY = countY;
+    result.status = 'ok';
+    result.anchorGapPx = Math.min(longPx / (countX - 1), shortPx / (countY - 1));
+    const anchor = (index: number): Point => {
+      const x = Math.floor(index / countY) * longPx / (countX - 1), y = (index % countY) * shortPx / (countY - 1);
+      return { x: frame.originPx.x + x * frame.xAxis.x + y * frame.yAxis.x,
+        y: frame.originPx.y + x * frame.xAxis.y + y * frame.yAxis.y };
+    };
+    const stride = Math.max(1, Math.ceil(quantity / MAX_DISPLAY_ANCHORS));
+    for (let index = 0; index < quantity; index += stride) result.anchors.push(anchor(index));
+    if ((quantity - 1) % stride !== 0) result.anchors.push(anchor(quantity - 1));
+    return result;
+  }
   const pixels = distancePx(placement.start, placement.end);
   if (!Number.isFinite(pixels) || pixels < 1e-9) return result;
   result.distributionLengthM = scale ? pxToMeters(pixels, scale) : null;
