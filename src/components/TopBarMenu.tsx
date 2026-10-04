@@ -19,6 +19,7 @@ export default function TopBarMenu({
   variant = 'secondary',
   title,
   highlighted,
+  desktopMaxWidth,
   children,
 }: {
   id: MenuId;
@@ -34,6 +35,7 @@ export default function TopBarMenu({
   variant?: 'secondary' | 'ghost' | 'primary';
   title?: string;
   highlighted?: boolean;
+  desktopMaxWidth?: number;
   children: ReactNode;
 }) {
   const anchorRef = useRef<HTMLButtonElement>(null);
@@ -57,7 +59,7 @@ export default function TopBarMenu({
         <span className="btn-label">{label}</span>
         <span className="menu-caret">▾</span>
       </button>
-      {open && <ResponsivePopover id={menuId} label={label} anchorRef={anchorRef} onClose={() => setOpenId(null)}>{children}</ResponsivePopover>}
+      {open && <ResponsivePopover id={menuId} label={label} anchorRef={anchorRef} onClose={() => setOpenId(null)} desktopMaxWidth={desktopMaxWidth}>{children}</ResponsivePopover>}
     </div>
   );
 }

@@ -4,9 +4,10 @@ import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { LANGUAGES, useLanguage } from '../i18n';
 
 /** Small anchored surfaces share collision handling; dialogs and form selects keep their own UI. */
-export default function ResponsivePopover({ anchorRef, onClose, id, label, children }: {
+export default function ResponsivePopover({ anchorRef, onClose, id, label, children, desktopMaxWidth = 480 }: {
   anchorRef: RefObject<HTMLButtonElement | null>; onClose: () => void;
   id: string; label: string; children: ReactNode;
+  desktopMaxWidth?: number;
 }) {
   const surfaceRef = useRef<HTMLDivElement>(null);
   const safeRef = useRef<HTMLDivElement>(null);
@@ -29,7 +30,7 @@ export default function ResponsivePopover({ anchorRef, onClose, id, label, child
       const bottom = (viewport?.offsetTop ?? 0) + (viewport?.height ?? window.innerHeight) - parseFloat(padding.paddingBottom);
       const bounds = anchor.getBoundingClientRect();
       const width = Math.max(1, right - left);
-      surface.style.maxWidth = `${Math.min(layout === 'expanded' ? 480 : 360, width)}px`;
+      surface.style.maxWidth = `${Math.min(layout === 'expanded' ? desktopMaxWidth : 360, width)}px`;
       surface.style.minWidth = `${Math.min(layout === 'expanded' ? 240 : 168, width)}px`;
       surface.style.maxHeight = `${Math.max(1, bottom - top)}px`;
       let size = surface.getBoundingClientRect();
@@ -69,7 +70,7 @@ export default function ResponsivePopover({ anchorRef, onClose, id, label, child
       viewport?.removeEventListener('resize', schedule); viewport?.removeEventListener('scroll', schedule);
       document.removeEventListener('pointerdown', outside, true); document.removeEventListener('keydown', escape);
     };
-  }, [anchorRef, layout, dir]);
+  }, [anchorRef, layout, dir, desktopMaxWidth]);
 
   return createPortal(<>
     <div ref={safeRef} className="popover-safe-margins" aria-hidden="true" />

@@ -94,6 +94,10 @@ export default function CompareTopBar({
           of comparison context that must never require opening the sidebar. */}
       <div className="top-bar-group identity">
         <BrandHomeLink title={t('topBar.goHome')} />
+        <button className="btn-ghost small back-to-overview" onClick={close} title={currentProject ? t('topBar.backToOverview') : t('compare.topBar.exitHint')}>
+          <Icon name={currentProject ? 'chevron-previous' : 'exit'} size={13} />
+          <span className="btn-label">{currentProject ? t('topBar.projectOverviewShort') : t('compare.topBar.exit')}</span>
+        </button>
         {currentProject && (
           <>
             <button className="btn-ghost small breadcrumb-project" onClick={() => void close()} title={t('topBar.backToOverview')}>
@@ -142,6 +146,7 @@ export default function CompareTopBar({
 
       {/* Group 2 — the document: where we are in it, how we look at it, and its history. */}
       <div className="top-bar-group grow">
+        <span className="top-bar-sep" />
         {/* Previous comes first in reading order, so it sits on the right under RTL and the left under LTR. */}
         <div className="page-nav">
           <button disabled={currentPageKey <= 1} onClick={() => setCurrentPageKey(currentPageKey - 1)} title={t('topBar.previousPage')}>
@@ -202,6 +207,7 @@ export default function CompareTopBar({
           variant="ghost"
           title={t('compare.topBar.viewHint')}
           highlighted={!annotationsVisible || !measurementsVisible}
+          desktopMaxWidth={420}
         >
           <button className="menu-item" onClick={toggleAnnotationsVisible}>
             <span className="menu-check">{annotationsVisible && <Icon name="check" size={13} />}</span>
@@ -284,10 +290,6 @@ export default function CompareTopBar({
           </p>
         </TopBarMenu>
 
-        <button className="btn-ghost small" onClick={close} title={currentProject ? t('topBar.backToOverview') : t('compare.topBar.exitHint')}>
-          <Icon name="exit" />
-          <span className="btn-label">{currentProject ? t('topBar.projectOverviewShort') : t('compare.topBar.exit')}</span>
-        </button>
         <LanguageSwitch />
       </div>
     </div>
