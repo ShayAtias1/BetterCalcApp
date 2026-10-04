@@ -390,6 +390,7 @@ interface AppState {
   duplicateStirrupPlacement: (id: string, placementId: string) => void;
   startStirrupPlacement: (id: string, kind: 'line' | 'area') => void;
   finishStirrupLine: (start: Point, end: Point) => void;
+  editStirrupShape: (id: string, shape: import('../types/structural').StirrupShape) => void;
   editStirrupPlacement: (id: string, placement: StirrupPlacement, debounced?: boolean) => void;
   deleteStirrupPlacement: (id: string, placementId: string) => void;
   selectStirrupPlacement: (id: string, placementId: string) => void;
@@ -1165,6 +1166,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedStirrupPlacementId: placement.id, stirrupDrawing: null, drawingPoints: [], toolMode: 'select' });
     scheduleSave(get, set);
   },
+  editStirrupShape: (id, shape) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    if (!project || !rebarOf(project).some((item) => item.id === id && item.kind === 'stirrup')) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, id, { shape }), updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
   editStirrupPlacement: (id, placement, debounced = false) => {
     if (!canAuthorTakeoff()) return;
     const { project } = get();
@@ -1247,7 +1256,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   setBarsIndividualMode: (id) => {
-    if (!canAuthorTakeoff() || isTouchInput()) return;
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     const item = project && rebarOf(project).find((i) => i.id === id);
     if (!project || !item || item.kind !== 'bars' || item.barsZone || item.drawnBars !== undefined) return;
@@ -1256,13 +1265,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   startDrawingBar: (id) => {
-    if (!canAuthorTakeoff() || isTouchInput()) return;
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     const item = project && rebarOf(project).find((i) => i.id === id);
     if (!item || item.kind !== 'bars' || item.barsZone) return;
     get().setBarsIndividualMode(id);
     get().setCurrentPage(item.pageNumber);
     ensureOverlayVisible('rebar', get, set);
+    useFieldWorkflowStore.getState().setGeometryAction('browse');
+    useFieldWorkflowStore.getState().setDraft(isTouchInput());
     set({ selectedRebarId: id, selectedDrawnBarId: null, selectedStirrupPlacementId: null, drawTarget: 'rebar', barsDrawing: 'line', toolMode: 'draw', drawingPoints: [] });
   },
   finishDrawnBar: (start, end) => {
@@ -1277,6 +1288,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   removeDrawnBarsLayout: (id) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     const item = project && rebarOf(project).find((i) => i.id === id);
     if (!project || !item || item.kind !== 'bars' || item.drawnBars === undefined) return;

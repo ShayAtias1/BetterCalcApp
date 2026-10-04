@@ -1,3 +1,4 @@
+import { useTouchMeshLayout } from '../hooks/useTouchMeshLayout';
 import { useTouchTakeoff } from '../hooks/useTouchTakeoff';
 import { useFieldWorkflowStore } from '../store/fieldWorkflowStore';
 import FieldTools from './FieldTools';
@@ -409,7 +410,7 @@ export default function PdfViewer() {
         return null;
       }
       if (item?.pageNumber !== currentPage) return null;
-      if (item?.kind === 'mesh' && !(meshLayoutView.enabled && meshLayoutView.editing && !touchInput))
+      if (item?.kind === 'mesh' && !(meshLayoutView.enabled && meshLayoutView.editing))
         return { kind: 'mesh' as const, id: item.id, points: item.points, color: REBAR_COLOR };
       if (item?.kind === 'bars' && item.barsZone && item.drawnBars === undefined)
         return { kind: 'bars' as const, id: item.id, points: item.barsZone.points, color: REBAR_COLOR };
@@ -1033,8 +1034,11 @@ export default function PdfViewer() {
 
   const stirrupItem = project && rebarOf(project).find((item) => item.id === selectedRebarId && item.kind === 'stirrup');
   const stirrupLine = stirrupItem?.kind === 'stirrup' ? stirrupItem.placements.find((p): p is StirrupLinePlacement => p.kind === 'line' && p.id === selectedStirrupPlacementId && p.pageNumber === currentPage) : undefined;
+  const individual = project && rebarOf(project).find((item) => item.id === selectedRebarId && item.kind === 'bars');
+  const selectedTouchBar = individual?.kind === 'bars' ? individual.drawnBars?.find((bar) => bar.id === selectedDrawnBarId && bar.pageNumber === currentPage) : undefined;
+  const meshTouch = useTouchMeshLayout(transform);
   const touch = useTouchTakeoff({
-    transform, area: selectedArea, line: stirrupLine && stirrupItem ? { itemId: stirrupItem.id, placement: stirrupLine } : null,
+    transform, area: selectedArea, bar: selectedTouchBar && individual ? { itemId: individual.id, bar: selectedTouchBar } : null, line: stirrupLine && stirrupItem ? { itemId: stirrupItem.id, placement: stirrupLine } : null,
     contextKey: `${project?.id}:${currentPage}:${toolMode}:${drawTarget}:${selectedRoomId}:${selectedConcreteId}:${selectedRebarId}:${selectedStirrupPlacementId}:${selectedMarkupId}`,
     onAreaPreview: setStructuralPreview, onLinePreview: setBarPreview, onTextDraft: setTextDraft,
     finishMeasurement: finishOpenMeasurement, finishMarkup: finishOpenMarkup,
@@ -1043,7 +1047,10 @@ export default function PdfViewer() {
   const desktopStart = useRef<Pick<ReturnType<typeof useAppStore.getState>, 'project' | 'history' | 'future' | 'dirty'> | null>(null);
   const navigation = usePlanNavigation({
     transform, reviewOnly, contextKey: `${project?.id}:${currentPage}:${toolMode}:${drawTarget}:${selectedRoomId}:${selectedConcreteId}:${selectedRebarId}:${selectedStirrupPlacementId}:${selectedMarkupId}`,
-    editing: touch.editing, managedMouse: fieldDraft || geometryAction !== 'browse',
+    editing: { begin: (x, y, target, pointerType) => meshTouch.active ? meshTouch.editing.begin(x, y, target, pointerType) : touch.editing.begin(x, y, target, pointerType),
+      move: (x, y) => { meshTouch.editing.move(x, y); touch.editing.move(x, y); },
+      end: (x, y) => { meshTouch.editing.end(x, y); touch.editing.end(x, y); },
+      cancel: () => { meshTouch.editing.cancel(); touch.editing.cancel(); } }, managedMouse: fieldDraft || geometryAction !== 'browse',
     onDesktopStart: () => {
       const { project, history, future, dirty } = useAppStore.getState();
       desktopStart.current = { project, history, future, dirty };
@@ -1060,7 +1067,7 @@ export default function PdfViewer() {
       setStructuralPreview(null); setBarPreview(null); setRegionDraft(null);
     },
     onTap: (x, y, target) => {
-      if (touch.tap(x, y)) return;
+      if (meshTouch.tap(x, y) || touch.tap(x, y)) return;
       const markupId = target instanceof Element ? target.closest('[data-markup-id]')?.getAttribute('data-markup-id') : null;
       if (overlayVisible.markups && markupId) { setSelectedMarkupId(markupId); return; }
       setSelectedMarkupId(null);

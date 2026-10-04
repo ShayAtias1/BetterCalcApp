@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { canAuthorTakeoff } from '../lib/workspaceCapabilities';
 import type { RebarLevel } from '../types/structural';
 import type { MeshLayoutPreview } from '../lib/meshLayoutPreview';
 import type { MeshPlacementOverride, MeshPlacementOverrides } from '../lib/meshLayoutEditing';
@@ -36,6 +37,7 @@ export const useMeshLayoutPreviewStore = create<MeshLayoutPreviewState>((set) =>
     setEnabled: (p, m, enabled) => update(p, m, (v) => ({ ...v, enabled, editing: enabled && v.editing, selectedPlacementId: null })),
     setLevel: (p, m, level) => update(p, m, (v) => ({ ...v, level, selectedPlacementId: null })),
     setEditing: (p, m, editing, preview, visible) => update(p, m, (v) => {
+      if (editing && !canAuthorTakeoff()) return { ...v, editing: false, selectedPlacementId: null, overrides: {} };
       if (!editing) return { ...v, editing: false, selectedPlacementId: null };
       if (!v.enabled || !visible || preview?.status !== 'ready') return v;
       return { ...v, editing: true, selectedPlacementId: null, sourceKey: preview.sourceKey,

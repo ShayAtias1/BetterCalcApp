@@ -13,9 +13,14 @@ import { moveCustomShapePoint, snapNewShapeEndpoint } from '../lib/stirrupShapeE
 import type { ShapeDrawingMode } from '../lib/stirrupShapeEditing';
 
 export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
-  const { touchInput } = useWorkspaceLayout();
+  const { touchInput, reviewOnly } = useWorkspaceLayout();
   const t = useT();
   const update = useAppStore((s) => s.updateRebarItem);
+  const [touchEditing, setTouchEditing] = useState(false);
+  const contacts = useRef(new Set<number>());
+  const blocked = useRef(false);
+  const suppressClick = useRef(0);
+  const svgRef = useRef<SVGSVGElement>(null);
   const [selectedSegment, selectSegment] = useState<number | null>(null);
   const [selectedPoint, selectPoint] = useState<number | null>(null);
   const [preview, setPreview] = useState<StirrupShape | null>(null);
@@ -42,7 +47,11 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
     segments: prepared.segments.map((segment) => ({ ...segment,
       normalizedStart: normalize(segment.start), normalizedEnd: normalize(segment.end) })),
   } : prepared;
-  const set = (next: StirrupShape) => update(item.id, { shape: next });
+  const set = (next: StirrupShape) => {
+    if (reviewOnly) return;
+    if (touchInput) useAppStore.getState().editStirrupShape(item.id, next);
+    else update(item.id, { shape: next });
+  };
   const custom = shape.template === 'custom';
   const chooseSegment = (index: number) => { selectSegment(index); selectPoint(null); };
   const semanticFields = shape.template === 'u'
@@ -73,7 +82,7 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
     return point.matrixTransform(matrix.inverse());
   };
   const startDrag = (event: PointerEvent<SVGCircleElement>, index: number) => {
-    if (event.pointerType !== 'mouse' || !custom || extension || event.button !== 0) return;
+    if (reviewOnly || (event.pointerType !== 'mouse' && !touchEditing) || blocked.current || !custom || extension || event.button !== 0) return;
     event.preventDefault(); event.stopPropagation();
     selectPoint(index); selectSegment(null);
     const origin = pointerPosition(event);
@@ -87,7 +96,7 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
   };
   const moveDrag = (event: PointerEvent<SVGSVGElement>) => {
     const active = drag.current;
-    if (!active || active.pointerId !== event.pointerId) return;
+    if (!active || active.pointerId !== event.pointerId || blocked.current) return;
     const position = pointerPosition(event);
     if (!position) return;
     const original = active.shape.points[active.index];
@@ -120,6 +129,7 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
     if (end) setExtension({ ...extension, end });
   };
   const placeSegment = (event: MouseEvent<SVGSVGElement>) => {
+    if (Date.now() < suppressClick.current || blocked.current) { event.preventDefault(); event.stopPropagation(); return; }
     if (!extension) return;
     event.preventDefault(); event.stopPropagation();
     const end = extensionEndpoint(event);
@@ -142,12 +152,32 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
       selectSegment(null); selectPoint(null);
       set(template === 'custom' ? { ...item.shape, template } : stirrupTemplate(template, model.widthM || 0.3, model.heightM || 0.5));
     }}>
-      {(['rectangle', 'u', 'l', 'custom'] as const).map((template) => <option key={template} value={template} disabled={touchInput && template === 'custom'}>{t(`rebar.stirrup.templates.${template}`)}</option>)}
+      {(['rectangle', 'u', 'l', 'custom'] as const).map((template) => <option key={template} value={template} disabled={reviewOnly}>{t(`rebar.stirrup.templates.${template}`)}</option>)}
     </select>
-    <svg viewBox="0 0 110 110" width="100%" height="220" direction="ltr" aria-label={t('rebar.stirrup.shape')}
+    {touchInput && custom && !reviewOnly && <button className="btn-ghost" aria-pressed={touchEditing}
+      onClick={() => { setTouchEditing(!touchEditing); drag.current = null; setPreview(null); setExtension(null); }}>{t(touchEditing ? 'adaptive.browse' : 'field.editShape')}</button>}
+    <svg ref={svgRef} viewBox="0 0 110 110" width="100%" height="220" direction="ltr" aria-label={t('rebar.stirrup.shape')}
       style={{ touchAction: custom ? 'none' : 'auto', cursor: extension ? 'crosshair' : undefined }}
+      onPointerDownCapture={(event) => {
+        if (event.pointerType === 'mouse') return;
+        contacts.current.add(event.pointerId);
+        if (contacts.current.size > 1) {
+          const old = drag.current; drag.current = null; setPreview(null); setExtension(null);
+          blocked.current = true; suppressClick.current = Date.now() + 800;
+          if (old && event.currentTarget.hasPointerCapture(old.pointerId)) event.currentTarget.releasePointerCapture(old.pointerId);
+          event.preventDefault(); event.stopPropagation();
+        }
+      }}
+      onPointerUpCapture={(event) => {
+        contacts.current.delete(event.pointerId);
+        if (blocked.current) {
+          event.preventDefault(); event.stopPropagation(); suppressClick.current = Date.now() + 800;
+          if (!contacts.current.size) blocked.current = false;
+        }
+      }}
+      onLostPointerCapture={(event) => finishDrag(event, true)}
       onPointerMove={movePointer} onClickCapture={placeSegment}
-      onPointerUp={(event) => finishDrag(event)} onPointerCancel={(event) => finishDrag(event, true)}>
+      onPointerUp={(event) => finishDrag(event)} onPointerCancel={(event) => { finishDrag(event, true); contacts.current.delete(event.pointerId); setExtension(null); if (!contacts.current.size) blocked.current = false; suppressClick.current = Date.now() + 800; }}>
       {model.segments.map((segment) => {
         const selected = selectedSegment === segment.index;
         const color = selected ? '#c2410c' : selectedSegment !== null ? '#a8a29e' : '#c2410c';
@@ -162,7 +192,7 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
           onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); chooseSegment(segment.index); } }}>
           <title>{dimensionName(segment.index)}</title>
           <line x1={segment.normalizedStart.x} y1={segment.normalizedStart.y}
-            x2={segment.normalizedEnd.x} y2={segment.normalizedEnd.y} stroke="transparent" strokeWidth="8" />
+            x2={segment.normalizedEnd.x} y2={segment.normalizedEnd.y} stroke="transparent" strokeWidth={touchInput ? 24 : 8} />
           <line x1={segment.normalizedStart.x} y1={segment.normalizedStart.y}
             x2={segment.normalizedEnd.x} y2={segment.normalizedEnd.y} stroke={color} strokeWidth={selected ? 2.5 : 1.5} />
           <text x={labelX} y={labelY} fontSize="5" fill={color}
@@ -176,13 +206,20 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
           x2={normalize(extension.end).x} y2={normalize(extension.end).y} stroke="#c2410c" strokeWidth="2" strokeDasharray="3 2" />
         <circle cx={normalize(extension.end).x} cy={normalize(extension.end).y} r="2.5" fill="#fff7ed" stroke="#c2410c" />
       </g>}
-      {custom && model.points.map((point, index) => <circle key={index} cx={point.x} cy={point.y}
+      {custom && model.points.map((point, index) => <g key={index}>
+        {touchInput && <circle cx={point.x} cy={point.y} r={12} fill="transparent"
+          onPointerDown={(event) => startDrag(event, index)} onClick={(event) => { event.stopPropagation(); selectPoint(index); selectSegment(null); }} />}
+        <circle cx={point.x} cy={point.y}
         r={!shape.closed && (index === 0 || index === shape.points.length - 1) ? 3.5 : 2.5}
         fill={selectedPoint === index ? '#c2410c' : '#fff'} stroke="#c2410c" role="button" tabIndex={0}
         aria-label={t(!shape.closed && (index === 0 || index === shape.points.length - 1) ? 'rebar.stirrup.endpoint' : 'rebar.stirrup.controlPoint')} aria-pressed={selectedPoint === index}
         style={{ cursor: 'grab' }} onPointerDown={(event) => startDrag(event, index)}
         onClick={(event) => { event.stopPropagation(); selectPoint(index); selectSegment(null); }}
-        onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectPoint(index); selectSegment(null); } }} />)}
+        onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectPoint(index); selectSegment(null); } }} /></g>)}
+      {touchInput && drag.current && preview && <g pointerEvents="none" stroke="#c2410c" fill="none">
+        <circle cx={model.points[drag.current.index].x} cy={model.points[drag.current.index].y - 18} r={5} />
+        <path d={`M${model.points[drag.current.index].x - 4},${model.points[drag.current.index].y}h8 M${model.points[drag.current.index].x},${model.points[drag.current.index].y - 4}v8`} />
+      </g>}
     </svg>
     {!custom ? <div className="form-grid">
       {semanticFields.map((field) => <div className="form-row" key={field.key}

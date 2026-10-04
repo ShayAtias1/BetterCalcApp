@@ -24,8 +24,8 @@ const MESSAGE_KEY = {
 
 export function MeshLayoutControl({ planId, mesh, calibration }: { planId: string; mesh: RebarMesh; calibration: Calibration | null }) {
   const t = useT();
-  const { touchInput, reviewOnly } = useWorkspaceLayout();
-  const allowEditing = !touchInput && !reviewOnly;
+  const { reviewOnly } = useWorkspaceLayout();
+  const allowEditing = !reviewOnly;
   const messageId = useId();
   const view = useMeshLayoutView(planId, mesh.id);
   const visible = useAppStore((s) => s.overlayVisible.rebar);
@@ -47,6 +47,9 @@ export function MeshLayoutControl({ planId, mesh, calibration }: { planId: strin
   useEffect(() => {
     if (view.selectedPlacementId && selectedIndex < 0 && level) actions.setLevel(planId, mesh.id, level);
   }, [view.selectedPlacementId, selectedIndex, level, planId, mesh.id, actions]);
+  useEffect(() => {
+    if (editing === false && view.editing && preview?.status === 'ready' && visible && allowEditing) actions.setEditing(planId, mesh.id, true, preview, visible);
+  }, [editing, view.editing, preview, visible, allowEditing, planId, mesh.id, actions]);
   const message = preview && preview.status !== 'ready' ? t(MESSAGE_KEY[preview.status]) : null;
   return (
     <div className="rebar-layout-control">

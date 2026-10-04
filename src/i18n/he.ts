@@ -15,12 +15,13 @@ export const he = {
   },
 
   field: {
+    editStart: 'עריכת התחלה', editEnd: 'עריכת סוף', editShape: 'עריכת צורה',
     tools: 'כלים', rectangle: 'מלבן', polygon: 'מצולע', move: 'הזזה',
     editGeometry: 'עריכת גאומטריה / שינוי גודל', finish: 'סיום', backPoint: 'חזרה נקודה אחת',
     keep: 'שמירה', enterDistance: 'הזנת מרחק', editNote: 'עריכת הערה',
     adjustPoints: '{count} נקודות · גרירת נקודה לתיקון',
     distanceNeedsScale: 'מדידת מרחק דורשת גיליון מכויל.',
-    coreOnly: 'עריכה מתקדמת במגע תתווסף בחבילה 3.',
+    coreOnly: 'בחרו פעולה מפורשת כדי לערוך גאומטריה.',
   },
 
   phoneReview: {

@@ -559,15 +559,15 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
       <Results calc={calc} showLength />
       <div className="concrete-kinds" role="group" aria-label={t('rebar.spatial.mode')}>
         <button className={`btn-ghost small ${bars.drawnBars === undefined ? 'active' : ''}`} aria-pressed={bars.drawnBars === undefined} disabled={bars.drawnBars !== undefined} onClick={() => startZone(bars.id)}>{t('rebar.spatial.area')}</button>
-        <button className={`btn-ghost small ${bars.drawnBars !== undefined ? 'active' : ''}`} disabled={!!zone || touchInput} onClick={() => individualMode(bars.id)}>{t('rebar.spatial.individual')}</button>
+        <button className={`btn-ghost small ${bars.drawnBars !== undefined ? 'active' : ''}`} disabled={!!zone} onClick={() => individualMode(bars.id)}>{t('rebar.spatial.individual')}</button>
       </div>
-      {bars.drawnBars !== undefined ? <ReviewFields readOnly={touchInput}>
+      {bars.drawnBars !== undefined ? <ReviewFields readOnly={false}>
         <div className="concrete-kinds">
           <button className={`btn-ghost small ${barsDrawing === 'line' && toolMode === 'draw' ? 'active' : ''}`}
             onClick={() => barsDrawing === 'line' && toolMode === 'draw' ? setToolMode('select') : startLine(bars.id)}>
             {t(barsDrawing === 'line' && toolMode === 'draw' ? 'rebar.spatial.finishDrawing' : 'rebar.spatial.drawBar')}
           </button>
-          {bars.drawnBars.length > 0 && <button className="btn-ghost small" onClick={() => { selectBar(null); setToolMode('select'); }}>{t('rebar.spatial.moveGroup')}</button>}
+          {!touchInput && bars.drawnBars.length > 0 && <button className="btn-ghost small" onClick={() => { selectBar(null); setToolMode('select'); }}>{t('rebar.spatial.moveGroup')}</button>}
           <button className="btn-ghost small danger" onClick={() => { if (confirm(t('rebar.spatial.removeLayoutConfirm'))) removeLayout(bars.id); }}>{t('rebar.spatial.removeLayout')}</button>
         </div>
         {!selectedBar && bars.drawnBars.length > 0 && <p className="muted">{t('rebar.spatial.groupHint')}</p>}
@@ -635,7 +635,6 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
 }
 
 function StirrupDetail({ item }: { item: RebarStirrup }) {
-  const { touchInput } = useWorkspaceLayout();
   const t = useT();
   const plan = useAppStore((s) => s.project);
   const update = useAppStore((s) => s.updateRebarItem);
@@ -648,7 +647,7 @@ function StirrupDetail({ item }: { item: RebarStirrup }) {
       <div className="form-row"><label>{t('rebar.diameter')}</label><DiameterSelect value={item.diameterMm} onChange={(mm) => update(item.id, { diameterMm: mm })} /></div>
       <div className="form-row"><label>{t('concrete.waste')}</label><NumberField value={item.wastePercent} step="1" onChange={(v) => update(item.id, { wastePercent: v ?? 0 })} /></div>
     </div>
-    <ReviewFields readOnly={touchInput && item.shape.template === 'custom'}><StirrupShapeBuilder item={item} /></ReviewFields>
+    <StirrupShapeBuilder item={item} />
     <StirrupPlacements item={item} />
     <p>{t('rebar.stirrup.quantity')}: {resolved.totalCount ?? '-'}</p>
     <Results calc={resolved} showLength />
