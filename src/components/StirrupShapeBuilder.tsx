@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import type { PointerEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { MouseEvent, PointerEvent } from 'react';
 import type { Point } from '../types';
 import type { RebarStirrup, StirrupShape, StirrupTemplate } from '../types/structural';
 import { formatNumber, useT } from '../i18n';
@@ -8,6 +8,8 @@ import { useAppStore } from '../store/appStore';
 import { cmToMeters, metersToCm } from '../lib/structuralUnits';
 import { round } from '../lib/geometry';
 import NumberField from './NumberField';
+import { moveCustomShapePoint, snapNewShapeEndpoint } from '../lib/stirrupShapeEditing';
+import type { ShapeDrawingMode } from '../lib/stirrupShapeEditing';
 
 export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
   const t = useT();
@@ -15,17 +17,25 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
   const [selectedSegment, selectSegment] = useState<number | null>(null);
   const [selectedPoint, selectPoint] = useState<number | null>(null);
   const [preview, setPreview] = useState<StirrupShape | null>(null);
+  const [drawingMode, setDrawingMode] = useState<ShapeDrawingMode>('orthogonal');
+  const [extension, setExtension] = useState<{
+    index: number; shape: StirrupShape; end: Point | null;
+    scale: number; minX: number; minY: number;
+  } | null>(null);
+  // Undo, another shape edit, or a template change abandons an uncommitted leg.
+  useEffect(() => { setExtension(null); }, [item.shape]);
   const drag = useRef<{
     index: number; pointerId: number; origin: Point; shape: StirrupShape;
     next: StirrupShape; scale: number; minX: number; minY: number;
   } | null>(null);
   const shape = preview ?? item.shape;
   const prepared = prepareStirrupShape(shape);
-  // Keep the preview frame fixed during a drag so the handle follows the pointer.
-  const normalize = (point: Point) => drag.current
-    ? { x: 15 + (point.x - drag.current.minX) * drag.current.scale, y: 15 + (point.y - drag.current.minY) * drag.current.scale }
+  // Keep the preview frame fixed while moving or extending the shape.
+  const frame = drag.current ?? extension;
+  const normalize = (point: Point) => frame
+    ? { x: 15 + (point.x - frame.minX) * frame.scale, y: 15 + (point.y - frame.minY) * frame.scale }
     : point;
-  const model = drag.current ? { ...prepared,
+  const model = frame ? { ...prepared,
     points: shape.points.map(normalize),
     segments: prepared.segments.map((segment) => ({ ...segment,
       normalizedStart: normalize(segment.start), normalizedEnd: normalize(segment.end) })),
@@ -52,7 +62,7 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
         { x: base, y: left }, { x: base, y: left - right }] });
     } else set(stirrupTemplate(shape.template, lengths[1], lengths[0]));
   };
-  const pointerPosition = (event: PointerEvent<SVGElement>): Point | null => {
+  const pointerPosition = (event: PointerEvent<SVGElement> | MouseEvent<SVGElement>): Point | null => {
     const svg = event.currentTarget instanceof SVGSVGElement ? event.currentTarget : event.currentTarget.ownerSVGElement;
     const matrix = svg?.getScreenCTM();
     if (!svg || !matrix) return null;
@@ -61,7 +71,7 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
     return point.matrixTransform(matrix.inverse());
   };
   const startDrag = (event: PointerEvent<SVGCircleElement>, index: number) => {
-    if (!custom || event.button !== 0) return;
+    if (!custom || extension || event.button !== 0) return;
     event.preventDefault(); event.stopPropagation();
     selectPoint(index); selectSegment(null);
     const origin = pointerPosition(event);
@@ -78,9 +88,11 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
     if (!active || active.pointerId !== event.pointerId) return;
     const position = pointerPosition(event);
     if (!position) return;
-    active.next = { ...active.shape, points: active.shape.points.map((point, index) => index === active.index
-      ? { x: point.x + (position.x - active.origin.x) / active.scale,
-        y: point.y + (position.y - active.origin.y) / active.scale } : { ...point }) };
+    const original = active.shape.points[active.index];
+    active.next = moveCustomShapePoint(active.shape, active.index, {
+      x: original.x + (position.x - active.origin.x) / active.scale,
+      y: original.y + (position.y - active.origin.y) / active.scale,
+    }, drawingMode);
     setPreview(active.next);
   };
   const finishDrag = (event: PointerEvent<SVGSVGElement>, cancel = false) => {
@@ -92,8 +104,36 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
     if (!cancel && prepareStirrupShape(active.next).valid && active.next.points.some((point, index) =>
       point.x !== active.shape.points[index].x || point.y !== active.shape.points[index].y)) set(active.next);
   };
+  const extensionEndpoint = (event: PointerEvent<SVGElement> | MouseEvent<SVGElement>) => {
+    if (!extension || extension.shape !== item.shape || item.shape.closed) return null;
+    const position = pointerPosition(event);
+    if (!position) return null;
+    const target = { x: extension.minX + (position.x - 15) / extension.scale,
+      y: extension.minY + (position.y - 15) / extension.scale };
+    return snapNewShapeEndpoint(extension.shape.points[extension.index], target, drawingMode);
+  };
+  const movePointer = (event: PointerEvent<SVGSVGElement>) => {
+    if (!extension) return moveDrag(event);
+    const end = extensionEndpoint(event);
+    if (end) setExtension({ ...extension, end });
+  };
+  const placeSegment = (event: MouseEvent<SVGSVGElement>) => {
+    if (!extension) return;
+    event.preventDefault(); event.stopPropagation();
+    const end = extensionEndpoint(event);
+    if (!end) { setExtension(null); return; }
+    const points = extension.shape.points.map((point) => ({ ...point }));
+    if (extension.index === 0) points.unshift(end);
+    else points.push(end);
+    const next = { ...extension.shape, points };
+    if (!prepareStirrupShape(next).valid) return;
+    set(next); selectPoint(extension.index === 0 ? 0 : points.length - 1);
+    selectSegment(null); setExtension(null);
+  };
+  const selectedEndpoint = custom && !item.shape.closed && selectedPoint !== null
+    && (selectedPoint === 0 || selectedPoint === item.shape.points.length - 1);
   const activeSegment = selectedSegment === null ? undefined : model.segments[selectedSegment];
-  return <section className="rebar-level">
+  return <section className="rebar-level" onKeyDown={(event) => { if (event.key === 'Escape') setExtension(null); }}>
     <span className="section-label">{t('rebar.stirrup.shape')}</span>
     <select value={item.shape.template} onChange={(e) => {
       const template = e.target.value as StirrupTemplate;
@@ -103,7 +143,8 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
       {(['rectangle', 'u', 'l', 'custom'] as const).map((template) => <option key={template} value={template}>{t(`rebar.stirrup.templates.${template}`)}</option>)}
     </select>
     <svg viewBox="0 0 110 110" width="100%" height="220" direction="ltr" aria-label={t('rebar.stirrup.shape')}
-      style={{ touchAction: custom ? 'none' : 'auto' }} onPointerMove={moveDrag}
+      style={{ touchAction: custom ? 'none' : 'auto', cursor: extension ? 'crosshair' : undefined }}
+      onPointerMove={movePointer} onClickCapture={placeSegment}
       onPointerUp={(event) => finishDrag(event)} onPointerCancel={(event) => finishDrag(event, true)}>
       {model.segments.map((segment) => {
         const selected = selectedSegment === segment.index;
@@ -128,9 +169,15 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
           </text>
         </g>;
       })}
-      {custom && model.points.map((point, index) => <circle key={index} cx={point.x} cy={point.y} r="2.5"
+      {extension?.end && <g pointerEvents="none">
+        <line x1={normalize(extension.shape.points[extension.index]).x} y1={normalize(extension.shape.points[extension.index]).y}
+          x2={normalize(extension.end).x} y2={normalize(extension.end).y} stroke="#c2410c" strokeWidth="2" strokeDasharray="3 2" />
+        <circle cx={normalize(extension.end).x} cy={normalize(extension.end).y} r="2.5" fill="#fff7ed" stroke="#c2410c" />
+      </g>}
+      {custom && model.points.map((point, index) => <circle key={index} cx={point.x} cy={point.y}
+        r={!shape.closed && (index === 0 || index === shape.points.length - 1) ? 3.5 : 2.5}
         fill={selectedPoint === index ? '#c2410c' : '#fff'} stroke="#c2410c" role="button" tabIndex={0}
-        aria-label={t('rebar.stirrup.controlPoint')} aria-pressed={selectedPoint === index}
+        aria-label={t(!shape.closed && (index === 0 || index === shape.points.length - 1) ? 'rebar.stirrup.endpoint' : 'rebar.stirrup.controlPoint')} aria-pressed={selectedPoint === index}
         style={{ cursor: 'grab' }} onPointerDown={(event) => startDrag(event, index)}
         onClick={(event) => { event.stopPropagation(); selectPoint(index); selectSegment(null); }}
         onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectPoint(index); selectSegment(null); } }} />)}
@@ -143,27 +190,47 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
           onChange={(value) => editDimension(field.segment, value)} />
       </div>)}
     </div> : <>
+      <div className="form-row">
+        <label>{t('rebar.stirrup.drawingMode')}</label>
+        <div className="inline-actions">
+          {(['orthogonal', 'free'] as const).map((mode) => <button key={mode} className="btn-ghost small"
+            aria-pressed={drawingMode === mode} style={drawingMode === mode ? { background: '#fff7ed', color: '#c2410c' } : undefined}
+            onClick={() => {
+              setDrawingMode(mode);
+              if (extension?.end) setExtension({ ...extension,
+                end: snapNewShapeEndpoint(extension.shape.points[extension.index], extension.end, mode) });
+            }}>{t(`rebar.stirrup.${mode}`)}</button>)}
+        </div>
+      </div>
+      {extension && <p className="muted">{t('rebar.stirrup.placeEndpoint')}</p>}
       {activeSegment && <div className="form-row">
         <label>{t('rebar.stirrup.segmentLength')} ({t('units.cm')})</label>
         <NumberField key={activeSegment.index} value={metersToCm(activeSegment.lengthM) ?? undefined}
           onChange={(value) => { if (value && Number.isFinite(value)) set(resizeStirrupSegment(item.shape, activeSegment.index, cmToMeters(value)!)); }} />
       </div>}
       <div className="inline-actions">
-        <button className="btn-ghost small" onClick={() => {
-          const segment = model.segments[selectedSegment ?? model.segments.length - 1];
+        {activeSegment && !extension && <button className="btn-ghost small" onClick={() => {
+          const segment = activeSegment;
           if (!segment) return;
           const points = item.shape.points.map((point) => ({ ...point }));
           points.splice(segment.index + 1, 0, { x: (segment.start.x + segment.end.x) / 2, y: (segment.start.y + segment.end.y) / 2 });
           set({ ...item.shape, points }); selectPoint(segment.index + 1); selectSegment(null);
-        }}>{t('rebar.stirrup.addPoint')}</button>
-        {selectedPoint !== null && selectedPoint < item.shape.points.length && <button className="btn-ghost small danger"
+        }}>{t('rebar.stirrup.splitSegment')}</button>}
+        {selectedEndpoint && !extension && <button className="btn-ghost small" onClick={() => {
+          setExtension({ index: selectedPoint!, shape: item.shape, end: null,
+            scale: 70 / Math.max(prepared.widthM, prepared.heightM, 0.01),
+            minX: Math.min(...item.shape.points.map((point) => point.x)),
+            minY: Math.min(...item.shape.points.map((point) => point.y)) });
+        }}>{t('rebar.stirrup.addSegment')}</button>}
+        {extension && <button className="btn-ghost small" onClick={() => setExtension(null)}>{t('rebar.stirrup.cancelSegment')}</button>}
+        {!extension && selectedPoint !== null && selectedPoint < item.shape.points.length && <button className="btn-ghost small danger"
           disabled={item.shape.points.length <= (item.shape.closed ? 3 : 2)} onClick={() => {
             set({ ...item.shape, points: item.shape.points.filter((_, index) => index !== selectedPoint).map((point) => ({ ...point })) });
             selectPoint(null); selectSegment(null);
           }}>{t('rebar.stirrup.removePoint')}</button>}
       </div>
       <label className="wi-check"><input type="checkbox" checked={item.shape.closed} onChange={(e) => {
-        set({ ...item.shape, closed: e.target.checked }); selectSegment(null);
+        setExtension(null); set({ ...item.shape, closed: e.target.checked }); selectSegment(null);
       }} />{t('rebar.stirrup.closed')}</label>
     </>}
     <p>{t('rebar.stirrup.geometricLength')}: {model.geometricLengthM === null ? '-' : formatNumber(round(model.geometricLengthM, 3))} {t('units.m')}</p>
