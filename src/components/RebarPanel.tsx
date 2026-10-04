@@ -19,6 +19,7 @@ import Icon from './Icon';
 import StirrupShapeBuilder from './StirrupShapeBuilder';
 import StirrupPlacements from './StirrupPlacements';
 import { resolveStirrupItem } from '../lib/stirrup';
+import { prepareStirrupShape } from '../lib/stirrupShape';
 import { drawnBarLength } from '../lib/straightBarsGeometry';
 
 type T = ReturnType<typeof useT>;
@@ -156,6 +157,7 @@ export default function RebarPanel() {
             return (
               <li key={item.id} onClick={() => select(item)}>
                 <span className="color-dot" style={{ background: REBAR_COLOR }} />
+                {item.kind === 'stirrup' && <StirrupShapeThumbnail item={item} />}
                 <span className="room-list-name" dir="auto">
                   {markLabel(item, t)} · <span dir="ltr">{itemSummary(item, t, item.kind === 'bars' ? resolveStraightBars(item, project.pages[item.pageNumber]?.calibration ?? null, project.pages) : undefined)}</span>
                 </span>
@@ -168,6 +170,30 @@ export default function RebarPanel() {
       </div>
     </div>
   );
+}
+
+/** Fit the shared saved-shape vectors into a centred, proportional list thumbnail. */
+function StirrupShapeThumbnail({ item }: { item: RebarStirrup }) {
+  const t = useT();
+  const model = prepareStirrupShape(item.shape);
+  const xs = model.points.map((point) => point.x);
+  const ys = model.points.map((point) => point.y);
+  const minX = xs.length ? Math.min(...xs) : 0;
+  const maxX = xs.length ? Math.max(...xs) : 0;
+  const minY = ys.length ? Math.min(...ys) : 0;
+  const maxY = ys.length ? Math.max(...ys) : 0;
+  const side = Math.max(maxX - minX, maxY - minY, 1) + 16;
+  const left = (minX + maxX - side) / 2;
+  const top = (minY + maxY - side) / 2;
+  return <svg width="36" height="36" viewBox={`${left} ${top} ${side} ${side}`}
+    preserveAspectRatio="xMidYMid meet" direction="ltr" role="img"
+    aria-label={`${markLabel(item, t)} · ${t('rebar.stirrup.shape')}`}
+    style={{ flexShrink: 0, display: 'block' }}>
+    {model.segments.map((segment) => <line key={segment.index}
+      x1={segment.normalizedStart.x} y1={segment.normalizedStart.y}
+      x2={segment.normalizedEnd.x} y2={segment.normalizedEnd.y}
+      stroke={REBAR_COLOR} strokeWidth="3" strokeLinecap="round" />)}
+  </svg>;
 }
 
 // ---------- shared pieces ----------
