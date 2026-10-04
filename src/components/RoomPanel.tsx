@@ -1,3 +1,4 @@
+import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import ReviewFields from './ReviewFields';
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
@@ -35,6 +36,7 @@ const OPENING_TYPES: OpeningType[] = ['door', 'window', 'custom'];
 const SHOW_AUTO_DETECT = false;
 
 export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) {
+  const { touchInput } = useWorkspaceLayout();
   const t = useT();
   const project = useAppStore((s) => s.project);
   const selectedRoomId = useAppStore((s) => s.selectedRoomId);
@@ -75,7 +77,7 @@ export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) 
     lastOpened.current = manuallyCreatedRoomId;
   }, [manuallyCreatedRoomId]);
 
-  useEffect(() => { if (readOnly && selectedRoomId) setDetailOpen(true); }, [readOnly, selectedRoomId]);
+  useEffect(() => { if ((readOnly || touchInput) && selectedRoomId) setDetailOpen(true); }, [readOnly, touchInput, selectedRoomId]);
 
   if (!project) return null;
   const apartmentNumbers = apartmentNumbersInProject(project);

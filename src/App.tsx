@@ -31,7 +31,7 @@ function Workspace() {
   const [tab, setTab] = useState<SidebarTab>('rooms');
   const planId = useAppStore((s) => s.project?.id);
 
-  const { layout, reviewOnly } = useWorkspaceLayout();
+  const { layout, reviewOnly, touchInput } = useWorkspaceLayout();
   const [destination, setDestination] = useState<'plan' | 'items' | 'quantities'>('plan');
   const drawTarget = useAppStore((s) => s.drawTarget);
   const activeTab = tab === 'measure' || tab === 'markup' ? tab : drawTarget === 'room' ? 'rooms' : drawTarget;
@@ -57,7 +57,7 @@ function Workspace() {
           it shortens the row instead of covering the plan, and the canvas gets the space back when
           it closes. Nothing here changes the canvas transform. */}
       <div className="workspace-body">
-        {!reviewOnly && <Toolbar />}
+        {!reviewOnly && !touchInput && <Toolbar />}
         <div className="viewer-area">
           <PdfViewer />
           {!reviewOnly && <CalibrationDialog />}

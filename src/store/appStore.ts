@@ -1,3 +1,5 @@
+import { canAuthorTakeoff, canUseToolMode, canUseMarkupTool, canUseMeasureTool, isTouchInput, isPhoneWorkspace } from '../lib/workspaceCapabilities';
+import { useFieldWorkflowStore } from './fieldWorkflowStore';
 import { concreteOf, rebarOf } from '../lib/structuralPlan';
 import { hasManualMark, nextAutoNumber } from '../lib/structuralMarks';
 import { withRenewedLayerIds } from '../lib/rebarMesh';
@@ -1031,6 +1033,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   setNumPages: (n) => set({ numPages: n }),
   setToolMode: (m) => {
+    if (!canUseToolMode(m) || (m === 'measure' && !canUseMeasureTool(get().measureTool)) || (m === 'markup' && !canUseMarkupTool(get().markupTool))) return;
+    useFieldWorkflowStore.getState().setGeometryAction('browse');
+    useFieldWorkflowStore.getState().setCalibrationDialog(false);
+    useFieldWorkflowStore.getState().setDraft(isTouchInput() && m !== 'select' && m !== 'pan');
     set({
       toolMode: m,
       barsDrawing: null, stirrupDrawing: null,
@@ -1044,11 +1050,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSelectedRoomId: (id) => set({ selectedRoomId: id }),
 
   addCalibrationPoint: (p) => {
+    if (!canAuthorTakeoff()) return;
     const pts = [...get().calibrationPoints, p];
     set({ calibrationPoints: pts.slice(-2) });
   },
   clearCalibrationPoints: () => set({ calibrationPoints: [] }),
   applyCalibration: (realDistanceMeters) => {
+    if (!canAuthorTakeoff()) return;
     const { project, calibrationPoints, currentPage } = get();
     if (!project || calibrationPoints.length !== 2 || realDistanceMeters <= 0) return;
     const [a, b] = calibrationPoints;
@@ -1070,7 +1078,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
 
-  addDrawingPoint: (p) => set({ drawingPoints: [...get().drawingPoints, p] }),
+  addDrawingPoint: (p) => { if (canAuthorTakeoff()) set({ drawingPoints: [...get().drawingPoints, p] }); },
   clearDrawingPoints: () => set({ drawingPoints: [] }),
   // Changing the target drops a shape in progress: it was started for the previous target.
   setDrawTarget: (target) => {
@@ -1131,6 +1139,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   startStirrupPlacement: (id, kind) => {
+    useFieldWorkflowStore.getState().setDraft(isTouchInput());
+    useFieldWorkflowStore.getState().setGeometryAction('browse');
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     const item = project && rebarOf(project).find((i) => i.id === id);
     if (!item || item.kind !== 'stirrup') return;
@@ -1139,6 +1150,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       drawTarget: 'rebar', barsDrawing: null, stirrupDrawing: kind, toolMode: kind === 'line' ? 'draw' : 'draw-rect', drawingPoints: [] });
   },
   finishStirrupLine: (start, end) => {
+    if (!canAuthorTakeoff()) return;
     const { project, selectedRebarId, currentPage, stirrupDrawing } = get();
     const item = project && rebarOf(project).find((i) => i.id === selectedRebarId);
     if (!project || !item || item.kind !== 'stirrup' || stirrupDrawing !== 'line' || Math.hypot(end.x - start.x, end.y - start.y) < 1e-9) return;
@@ -1149,6 +1161,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   editStirrupPlacement: (id, placement, debounced = false) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     const item = project && rebarOf(project).find((i) => i.id === id);
     if (!project || !item || item.kind !== 'stirrup') return;
@@ -1183,6 +1196,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   setSelectedDrawnBarId: (id) => set({ selectedDrawnBarId: id }),
   editDrawnBar: (itemId, bar) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     const item = project && rebarOf(project).find((i) => i.id === itemId);
     if (!project || !item || item.kind !== 'bars' || !item.drawnBars?.some((b) => b.id === bar.id)) return;
@@ -1224,6 +1238,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   setBarsIndividualMode: (id) => {
+    if (!canAuthorTakeoff() || isTouchInput()) return;
     const { project } = get();
     const item = project && rebarOf(project).find((i) => i.id === id);
     if (!project || !item || item.kind !== 'bars' || item.barsZone || item.drawnBars !== undefined) return;
@@ -1232,6 +1247,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   startDrawingBar: (id) => {
+    if (!canAuthorTakeoff() || isTouchInput()) return;
     const { project } = get();
     const item = project && rebarOf(project).find((i) => i.id === id);
     if (!item || item.kind !== 'bars' || item.barsZone) return;
@@ -1276,6 +1292,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   startBarsZone: (id) => {
+    useFieldWorkflowStore.getState().setDraft(isTouchInput());
+    useFieldWorkflowStore.getState().setGeometryAction('browse');
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     const item = project && rebarOf(project).find((i) => i.id === id);
     if (!item || item.kind !== 'bars' || item.drawnBars !== undefined) return;
@@ -1293,6 +1312,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   editAreaGeometry: (kind, id, points, placementId) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project || points.length < 3 || !points.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y)) || polygonAreaPx(points) <= 1e-9) return;
     if (kind === 'stirrup') {
@@ -1321,6 +1341,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   moveStructuralZone: (kind, id, offset) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project || (!offset.x && !offset.y) || !Number.isFinite(offset.x) || !Number.isFinite(offset.y)) return;
     const source = kind === 'concrete'
@@ -1375,6 +1396,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   setSelectedRebarId: (id) => set({ selectedRebarId: id, selectedDrawnBarId: null, selectedStirrupPlacementId: null, barsDrawing: null, stirrupDrawing: null, drawingPoints: [] }),
   editMeshLayout: (id, level, edit) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     const mesh = project && rebarOf(project).find((i) => i.id === id && i.kind === 'mesh');
     if (!project || !mesh || mesh.kind !== 'mesh') return;
@@ -1474,6 +1496,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   finishDrawing: () => {
+    if (!canAuthorTakeoff()) return;
     if (get().barsDrawing === 'line' || get().stirrupDrawing === 'line') return;
     if (get().drawTarget !== 'room') return commitStructuralZone(get, set, get().drawingPoints);
     const { project, drawingPoints, currentPage, activeApartmentNumber } = get();
@@ -1489,6 +1512,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   finishRectangle: (p1, p2) => {
+    if (!canAuthorTakeoff()) return;
     if (get().drawTarget !== 'room') {
       return commitStructuralZone(get, set, [p1, { x: p2.x, y: p1.y }, p2, { x: p1.x, y: p2.y }]);
     }
@@ -1503,7 +1527,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
 
-  setMeasureTool: (t) => set({ toolMode: t ? 'measure' : 'select', measureTool: t, measurePoints: [] }),
+  setMeasureTool: (t) => {
+    if (!canUseMeasureTool(t)) return;
+    useFieldWorkflowStore.getState().setDraft((isTouchInput() || isPhoneWorkspace()) && !!t);
+    useFieldWorkflowStore.getState().setGeometryAction('browse');
+    set({ toolMode: t ? 'measure' : 'select', measureTool: t, measurePoints: [] });
+    if (t) ensureOverlayVisible('measurements', get, set);
+  },
   setAreaShape: (s) => set({ areaShape: s, measurePoints: [] }),
   setAreaCalcMode: (m) => set({ areaCalcMode: m, measurePoints: [] }),
   setPendingAreaKind: (k) => set({ pendingAreaKind: k }),
@@ -1526,6 +1556,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   addMeasurePoint: (p) => set({ measurePoints: [...get().measurePoints, p] }),
   clearMeasurePoints: () => set({ measurePoints: [] }),
   finishMeasurement: (m) => {
+    if (isPhoneWorkspace() && (m.tool !== 'distance' || !get().project?.pages[m.pageNumber]?.calibration)) return;
     const { project } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
@@ -1551,6 +1582,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setMarkupTool: (t) => {
+    if (!canUseMarkupTool(t)) return;
+    useFieldWorkflowStore.getState().setDraft((isTouchInput() || isPhoneWorkspace()) && !!t);
+    useFieldWorkflowStore.getState().setGeometryAction('browse');
     set({ toolMode: t ? 'markup' : 'select', markupTool: t, markupPoints: [] });
     if (t) ensureOverlayVisible('markups', get, set);
   },
@@ -1560,6 +1594,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   addMarkupPoint: (p) => set({ markupPoints: [...get().markupPoints, p] }),
   clearMarkupPoints: () => set({ markupPoints: [] }),
   finishMarkup: (m) => {
+    if (!canUseMarkupTool(m.tool)) return;
     const { project } = get();
     if (!project) return;
     historyTracker.push(get, set, project);

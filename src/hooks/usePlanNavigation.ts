@@ -4,28 +4,37 @@ import { MAX_ZOOM, MIN_ZOOM } from './useCanvasTransform';
 import { PLAN_NAVIGATION_CANCEL, TOUCH_TAP_MAX_MS, TOUCH_TAP_SLOP_PX } from '../lib/interactionTargets';
 import type { Point } from '../types';
 
+export interface PlanPointerEdit {
+  begin: (x: number, y: number, target: EventTarget, pointerType: string) => boolean;
+  move: (x: number, y: number) => void;
+  end: (x: number, y: number) => void;
+  cancel: () => void;
+}
+
 type Contact = { x: number; y: number; startX: number; startY: number; started: number; target: EventTarget; moved: boolean };
 type Gesture =
   | { owner: 'navigation'; kind: 'pan'; start: Point; view: CanvasView }
   | { owner: 'navigation'; kind: 'pinch'; distance: number; anchor: Point; view: CanvasView }
+  | { owner: 'edit'; pointerId: number }
   | { owner: 'child' | 'desktop'; pointerId: number }
   | { owner: 'idle' };
 
-/** Touch/pen always browse in Package 1. Desktop authoring keeps its existing handlers.
+/** Touch/pen browse unless an explicit, capability-checked edit claims the contact. Desktop authoring keeps its existing handlers.
  * Capture owns navigation before any SVG child can mutate geometry. No document mutation here.
  */
-export function usePlanNavigation({ transform, reviewOnly, contextKey, onTap, onDesktopStart, onDesktopCancel }: {
+export function usePlanNavigation({ transform, reviewOnly, contextKey, onTap, onDesktopStart, onDesktopCancel, editing, managedMouse = false }: {
   transform: CanvasTransform; reviewOnly: boolean; contextKey: string;
   onTap: (x: number, y: number, target: EventTarget) => void;
   onDesktopStart?: () => void; onDesktopCancel?: () => void;
+  editing?: PlanPointerEdit; managedMouse?: boolean;
 }) {
   const contacts = useRef(new Map<number, Contact>());
   const gesture = useRef<Gesture>({ owner: 'idle' });
   const blocked = useRef(false);
   const interruptedDesktop = useRef(false);
   const suppressMouseUntil = useRef(0);
-  const latest = useRef({ transform, reviewOnly, onTap, onDesktopStart, onDesktopCancel });
-  latest.current = { transform, reviewOnly, onTap, onDesktopStart, onDesktopCancel };
+  const latest = useRef({ transform, reviewOnly, onTap, onDesktopStart, onDesktopCancel, editing });
+  latest.current = { transform, reviewOnly, onTap, onDesktopStart, onDesktopCancel, editing };
   const isControl = (target: EventTarget) => target instanceof Element && !!target.closest('[data-plan-control], .modal-backdrop');
   const consume = (e: PointerEvent) => { e.preventDefault(); e.stopPropagation(); suppressMouseUntil.current = Date.now() + 800; };
   const release = (id: number) => {
@@ -39,6 +48,7 @@ export function usePlanNavigation({ transform, reviewOnly, contextKey, onTap, on
     gesture.current = { owner: 'idle' };
     blocked.current = false;
     latest.current.transform.endPanDrag();
+    if (old.owner === 'edit') latest.current.editing?.cancel();
     if (old.owner === 'desktop' || old.owner === 'child') { interruptedDesktop.current = true; latest.current.onDesktopCancel?.(); }
     latest.current.transform.containerRef.current?.dispatchEvent(new CustomEvent(PLAN_NAVIGATION_CANCEL, { bubbles: true }));
     const host = latest.current.transform.containerRef.current;
@@ -77,7 +87,7 @@ export function usePlanNavigation({ transform, reviewOnly, contextKey, onTap, on
   };
   const onPointerDownCapture = (e: PointerEvent<HTMLDivElement>) => {
     if (isControl(e.target)) return;
-    const browse = e.pointerType !== 'mouse' || latest.current.reviewOnly || contacts.current.size > 0;
+    const browse = e.pointerType !== 'mouse' || latest.current.reviewOnly || managedMouse || contacts.current.size > 0;
     if (!browse) {
       suppressMouseUntil.current = 0;
       interruptedDesktop.current = false;
@@ -95,11 +105,14 @@ export function usePlanNavigation({ transform, reviewOnly, contextKey, onTap, on
     contacts.current.set(e.pointerId, { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY, started: Date.now(), target: e.target, moved: false });
     e.currentTarget.setPointerCapture(e.pointerId);
     if (contacts.current.size > 1) {
+      if (gesture.current.owner === 'edit') latest.current.editing?.cancel();
       blocked.current = true;
       pinch();
     } else {
       blocked.current = false;
-      gesture.current = { owner: 'navigation', kind: 'pan', start: { x: e.clientX, y: e.clientY }, view: latest.current.transform.getView() };
+      gesture.current = latest.current.editing?.begin(e.clientX, e.clientY, e.target, e.pointerType)
+        ? { owner: 'edit', pointerId: e.pointerId }
+        : { owner: 'navigation', kind: 'pan', start: { x: e.clientX, y: e.clientY }, view: latest.current.transform.getView() };
     }
   };
   const onPointerMoveCapture = (e: PointerEvent<HTMLDivElement>) => {
@@ -109,6 +122,7 @@ export function usePlanNavigation({ transform, reviewOnly, contextKey, onTap, on
     contact.x = e.clientX; contact.y = e.clientY;
     contact.moved ||= Math.hypot(contact.x - contact.startX, contact.y - contact.startY) > TOUCH_TAP_SLOP_PX;
     const active = gesture.current;
+    if (active.owner === 'edit' && active.pointerId === e.pointerId) { latest.current.editing?.move(e.clientX, e.clientY); return; }
     if (active.owner !== 'navigation') return;
     const engine = latest.current.transform;
     if (active.kind === 'pinch' && contacts.current.size >= 2) {
@@ -131,12 +145,14 @@ export function usePlanNavigation({ transform, reviewOnly, contextKey, onTap, on
     }
     consume(e);
     const moved = contact.moved || Math.hypot(e.clientX - contact.startX, e.clientY - contact.startY) > TOUCH_TAP_SLOP_PX;
-    const tap = !blocked.current && !moved && Date.now() - contact.started <= TOUCH_TAP_MAX_MS;
+    const activeEdit = gesture.current.owner === 'edit' && gesture.current.pointerId === e.pointerId;
+    const tap = !activeEdit && !blocked.current && !moved && Date.now() - contact.started <= TOUCH_TAP_MAX_MS;
     contacts.current.delete(e.pointerId);
     // A remaining finger never turns into an edit or a tap; all contacts must lift first.
     if (contacts.current.size < 2) gesture.current = { owner: 'idle' };
     else pinch();
     release(e.pointerId);
+    if (activeEdit && !blocked.current) latest.current.editing?.end(e.clientX, e.clientY);
     if (tap) latest.current.onTap(e.clientX, e.clientY, contact.target);
     if (!contacts.current.size) blocked.current = false;
   };

@@ -21,6 +21,15 @@ export const en: Dictionary = {
     language: 'Language',
   },
 
+  field: {
+    tools: 'Tools', rectangle: 'Rectangle', polygon: 'Polygon', move: 'Move',
+    editGeometry: 'Edit geometry / Resize', finish: 'Finish', backPoint: 'Back one point',
+    keep: 'Keep', enterDistance: 'Enter distance', editNote: 'Edit note',
+    adjustPoints: '{count} points · drag a point to adjust',
+    distanceNeedsScale: 'Distance requires a calibrated sheet.',
+    coreOnly: 'Advanced touch editing comes in Package 3.',
+  },
+
   adaptive: {
     close: 'Close',
     plan: 'Plan', items: 'Items', quantities: 'Quantities', domain: 'Domain',

@@ -1,3 +1,4 @@
+import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { PLAN_NAVIGATION_CANCEL } from '../lib/interactionTargets';
 import { useId, useMemo, useRef, useEffect, type PointerEvent } from 'react';
 import type { Calibration, Plan, Point } from '../types';
@@ -23,20 +24,11 @@ const MESSAGE_KEY = {
 
 export function MeshLayoutControl({ planId, mesh, calibration }: { planId: string; mesh: RebarMesh; calibration: Calibration | null }) {
   const t = useT();
+  const { touchInput, reviewOnly } = useWorkspaceLayout();
+  const allowEditing = !touchInput && !reviewOnly;
   const messageId = useId();
   const view = useMeshLayoutView(planId, mesh.id);
   const visible = useAppStore((s) => s.overlayVisible.rebar);
-  useEffect(() => {
-    const cancel = (event: Event) => {
-      const active = drag.current;
-      if (!active || !(event.target instanceof Element) || !event.target.contains(active.element)) return;
-      drag.current = null;
-      if (mesh && level) useMeshLayoutPreviewStore.getState().resetLevel(plan.id, mesh.id, level);
-      if (active.element.hasPointerCapture(active.pointerId)) active.element.releasePointerCapture(active.pointerId);
-    };
-    window.addEventListener(PLAN_NAVIGATION_CANCEL, cancel);
-    return () => window.removeEventListener(PLAN_NAVIGATION_CANCEL, cancel);
-  }, [plan.id, mesh, level]);
   const actions = useMeshLayoutPreviewStore.getState();
   const setEnabled = useMeshLayoutPreviewStore((s) => s.setEnabled);
   const setLevel = useMeshLayoutPreviewStore((s) => s.setLevel);
@@ -71,7 +63,7 @@ export function MeshLayoutControl({ planId, mesh, calibration }: { planId: strin
           ))}
         </div>
       )}
-      {view.enabled && visible && preview?.status === 'ready' && level && (
+      {allowEditing && view.enabled && visible && preview?.status === 'ready' && level && (
         <>
           <button className="btn-ghost small" aria-pressed={editing} onClick={() => {
             if (!editing) useAppStore.getState().setToolMode('select');
@@ -131,13 +123,14 @@ export function MeshSheetPreviewLayer({ preview, level, zoom, visible, interacti
 
 /** Only the selected Mesh on the visible page is previewed. View/Rebar remains the master switch. */
 export function MeshLayoutOverlay({ plan, pageNumber, selectedId, zoom, visible, screenToNative, interactionAllowed = true }: { plan: Plan; pageNumber: number; selectedId: string | null; zoom: number; visible: boolean; screenToNative?: (x: number, y: number) => Point; interactionAllowed?: boolean }) {
+  const { touchInput } = useWorkspaceLayout();
   const mesh = rebarOf(plan).find((item): item is RebarMesh => item.id === selectedId && item.kind === 'mesh' && item.pageNumber === pageNumber);
   const view = useMeshLayoutView(plan.id, mesh?.id ?? '');
   const calibration = mesh ? plan.pages[mesh.pageNumber]?.calibration ?? null : null;
   const automatic = useMemo(() => visible && mesh && view.enabled ? prepareMeshLayoutPreview(mesh, calibration) : null, [visible, mesh, calibration, view.enabled]);
   const preview = useMemo(() => automatic?.status === 'ready' && automatic.sourceKey === view.sourceKey ? renderMeshLayoutPreview(automatic.automatic, view.overrides, automatic.placementsByLevel) : automatic, [automatic, view.sourceKey, view.overrides]);
   const level = automatic?.status === 'ready' ? meshLayoutViewLevel(automatic.levels, view.level) : null;
-  const editable = meshLayoutCanInteract(view, automatic, visible) && interactionAllowed && !!screenToNative;
+  const editable = meshLayoutCanInteract(view, automatic, visible) && interactionAllowed && !touchInput && !!screenToNative;
   const drag = useRef<{ pointerId: number; placement: MeshSheetPlacement; rotation: MeshPlacementOverride['rotation']; start: Point; element: SVGPolygonElement } | null>(null);
   useEffect(() => () => {
     if (drag.current) {
@@ -145,6 +138,17 @@ export function MeshLayoutOverlay({ plan, pageNumber, selectedId, zoom, visible,
       if (mesh && level) useMeshLayoutPreviewStore.getState().resetLevel(plan.id, mesh.id, level);
     }
   }, [editable, level, mesh, plan.id, automatic]);
+  useEffect(() => {
+    const cancel = (event: Event) => {
+      const active = drag.current;
+      if (!active || !(event.target instanceof Element) || !event.target.contains(active.element)) return;
+      drag.current = null;
+      if (mesh && level) useMeshLayoutPreviewStore.getState().resetLevel(plan.id, mesh.id, level);
+      if (active.element.hasPointerCapture(active.pointerId)) active.element.releasePointerCapture(active.pointerId);
+    };
+    window.addEventListener(PLAN_NAVIGATION_CANCEL, cancel);
+    return () => window.removeEventListener(PLAN_NAVIGATION_CANCEL, cancel);
+  }, [plan.id, mesh, level]);
   const actions = useMeshLayoutPreviewStore.getState();
   const interaction = editable && mesh && level && automatic?.status === 'ready' && screenToNative ? {
     selectedId: view.selectedPlacementId,

@@ -14,6 +14,15 @@ export const he = {
     language: 'שפה',
   },
 
+  field: {
+    tools: 'כלים', rectangle: 'מלבן', polygon: 'מצולע', move: 'הזזה',
+    editGeometry: 'עריכת גאומטריה / שינוי גודל', finish: 'סיום', backPoint: 'חזרה נקודה אחת',
+    keep: 'שמירה', enterDistance: 'הזנת מרחק', editNote: 'עריכת הערה',
+    adjustPoints: '{count} נקודות · גרירת נקודה לתיקון',
+    distanceNeedsScale: 'מדידת מרחק דורשת גיליון מכויל.',
+    coreOnly: 'עריכה מתקדמת במגע תתווסף בחבילה 3.',
+  },
+
   adaptive: {
     close: 'סגור',
     plan: 'תוכנית', items: 'פריטים', quantities: 'כמויות', domain: 'תחום',

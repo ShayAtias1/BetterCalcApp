@@ -1,27 +1,40 @@
+import { setWorkspaceWidth, setWorkspacePointer } from '../lib/workspaceCapabilities';
+import { useFieldWorkflowStore } from '../store/fieldWorkflowStore';
+import { useAppStore } from '../store/appStore';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 export type WorkspaceLayout = 'expanded' | 'compact' | 'narrow';
 const band = (width: number): WorkspaceLayout => width >= 1200 ? 'expanded' : width >= 768 ? 'compact' : 'narrow';
-const WorkspaceContext = createContext({ layout: 'expanded' as WorkspaceLayout, reviewOnly: false });
+const WorkspaceContext = createContext({ layout: 'expanded' as WorkspaceLayout, reviewOnly: false, touchInput: false });
 
 /** Width is measured on the app host, independently of the input device. No saved document state. */
 export function WorkspaceLayoutProvider({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState(() => band(window.innerWidth));
-  const [coarse, setCoarse] = useState(() => window.matchMedia('(pointer: coarse)').matches);
+  const pointerType = useFieldWorkflowStore((s) => s.pointerType);
+  const touchInput = pointerType !== 'mouse';
   useEffect(() => {
     const host = ref.current;
     if (!host) return;
-    const observer = new ResizeObserver(([entry]) => setLayout(band(entry.contentRect.width)));
+    const observer = new ResizeObserver(([entry]) => {
+      setWorkspaceWidth(entry.contentRect.width);
+      const next = band(entry.contentRect.width);
+      if (next === 'narrow' && !['select', 'pan', 'measure', 'markup'].includes(useAppStore.getState().toolMode)) useAppStore.getState().setToolMode('select');
+      setLayout(next);
+    });
     observer.observe(host);
     const input = window.matchMedia('(pointer: coarse)');
-    const change = () => setCoarse(input.matches);
+    const change = () => {
+      const type = input.matches ? 'touch' : 'mouse';
+      setWorkspacePointer(type); useFieldWorkflowStore.getState().setPointer(type);
+    };
     input.addEventListener('change', change);
     return () => { observer.disconnect(); input.removeEventListener('change', change); };
   }, []);
-  const reviewOnly = layout === 'narrow' || coarse;
-  return <WorkspaceContext.Provider value={{ layout, reviewOnly }}>
-    <div ref={ref} className="adaptive-workspace-root" data-layout={layout} data-review-only={reviewOnly}>{children}</div>
+  const reviewOnly = layout === 'narrow';
+  return <WorkspaceContext.Provider value={{ layout, reviewOnly, touchInput }}>
+    <div ref={ref} className="adaptive-workspace-root" data-layout={layout} data-review-only={reviewOnly} data-touch-input={touchInput}
+      onPointerDownCapture={(e) => { setWorkspacePointer(e.pointerType); useFieldWorkflowStore.getState().setPointer(e.pointerType); }}>{children}</div>
   </WorkspaceContext.Provider>;
 }
 

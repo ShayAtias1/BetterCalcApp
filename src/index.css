@@ -3252,3 +3252,18 @@ html[dir='rtl'] .qty-table .col-room {
 @media (any-pointer: coarse) {
   .adaptive-header :is(button, select), .adaptive-domain-picker select, .reset-view-btn { min-height: 44px; }
 }
+
+/* Field controls are independent of viewport layout and never change the stored coordinate space. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.field-tools { position: absolute; top: 8px; inset-inline-start: 8px; z-index: 21; max-width: calc(100% - 16px); background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow); padding: 4px; }
+.field-tool-row, .field-draft-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.field-tool-picker { min-width: 100px; flex: 1; }
+.field-tool-picker select { width: 100%; max-width: 240px; }
+.field-tools :is(button, select) { min-height: 44px; }
+.field-tools .icon-btn { min-width: 44px; }
+.field-hint { margin: 4px 8px; font: var(--t-meta); }
+.field-draft-actions { border-top: 1px solid var(--border); padding-top: 4px; margin-top: 4px; }
+[data-touch-input='true'] .draw-hint { display: none; }
+[data-touch-input='true'] :is(.sidebar-content button, .sidebar-content select, .sidebar-content input:not([type='checkbox'])) { min-height: 44px; }
+[data-touch-input='true'] .sidebar-content .icon-btn { min-width: 44px; }
+[data-layout='narrow'] .field-tools { inset-inline: 8px; }

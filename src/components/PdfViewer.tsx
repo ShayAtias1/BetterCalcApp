@@ -1,3 +1,7 @@
+import { useTouchTakeoff } from '../hooks/useTouchTakeoff';
+import { useFieldWorkflowStore } from '../store/fieldWorkflowStore';
+import FieldTools from './FieldTools';
+import type { StirrupLinePlacement } from '../types/structural';
 import { usePlanNavigation } from '../hooks/usePlanNavigation';
 import { nativeHitRadius } from '../lib/interactionTargets';
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
@@ -166,7 +170,9 @@ function MarkupShape({ markup, strokeW, draggable }: { markup: Markup; strokeW: 
 }
 
 export default function PdfViewer() {
-  const { reviewOnly } = useWorkspaceLayout();
+  const { reviewOnly, touchInput, layout } = useWorkspaceLayout();
+  const fieldDraft = useFieldWorkflowStore((s) => s.draft);
+  const geometryAction = useFieldWorkflowStore((s) => s.geometryAction);
   const t = useT();
   const language = useLanguage();
   const project = useAppStore((s) => s.project);
@@ -374,7 +380,7 @@ export default function PdfViewer() {
         return null;
       }
       if (item?.pageNumber !== currentPage) return null;
-      if (item?.kind === 'mesh' && !(meshLayoutView.enabled && meshLayoutView.editing))
+      if (item?.kind === 'mesh' && !(meshLayoutView.enabled && meshLayoutView.editing && !touchInput))
         return { kind: 'mesh' as const, id: item.id, points: item.points, color: REBAR_COLOR };
       if (item?.kind === 'bars' && item.barsZone && item.drawnBars === undefined)
         return { kind: 'bars' as const, id: item.id, points: item.barsZone.points, color: REBAR_COLOR };
@@ -479,7 +485,7 @@ export default function PdfViewer() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (reviewOnly) return;
+      if (reviewOnly || fieldDraft) return;
       // Anything typed into a field (including the text-note dialog and the contenteditable case)
       // must never reach the shortcuts below that delete or undo.
       const target = e.target as HTMLElement | null;
@@ -565,6 +571,7 @@ export default function PdfViewer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     reviewOnly,
+    fieldDraft,
     clearDrawingPoints,
     drawingPoints.length,
     finishDrawing,
@@ -591,20 +598,20 @@ export default function PdfViewer() {
 
   // Auto-finish distance measurement once 2 points are placed.
   useEffect(() => {
-    if (measureTool === 'distance' && measurePoints.length === 2) {
+    if (!fieldDraft && measureTool === 'distance' && measurePoints.length === 2) {
       finishOpenMeasurement();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [measurePoints, measureTool]);
+  }, [measurePoints, measureTool, fieldDraft]);
 
   // Auto-finish 2-point markup tools once both points are placed. Dimensions are excluded — they
   // stay open so more stops can be continued along the same line (AutoCAD DIMCONTINUE style).
   useEffect(() => {
-    if (markupTool && markupTool !== 'cloud' && markupTool !== 'text' && markupTool !== 'dimension' && markupPoints.length === 2) {
+    if (!fieldDraft && markupTool && markupTool !== 'cloud' && markupTool !== 'text' && markupTool !== 'dimension' && markupPoints.length === 2) {
       finishOpenMarkup();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [markupPoints, markupTool]);
+  }, [markupPoints, markupTool, fieldDraft]);
 
   const handleMouseDown = (e: MouseEvent) => {
     if (reviewOnly) return;
@@ -995,9 +1002,19 @@ export default function PdfViewer() {
     if (toolMode === 'select') selectAt(native);
   };
 
+  const stirrupItem = project && rebarOf(project).find((item) => item.id === selectedRebarId && item.kind === 'stirrup');
+  const stirrupLine = stirrupItem?.kind === 'stirrup' ? stirrupItem.placements.find((p): p is StirrupLinePlacement => p.kind === 'line' && p.id === selectedStirrupPlacementId && p.pageNumber === currentPage) : undefined;
+  const touch = useTouchTakeoff({
+    transform, area: selectedArea, line: stirrupLine && stirrupItem ? { itemId: stirrupItem.id, placement: stirrupLine } : null,
+    contextKey: `${project?.id}:${currentPage}:${toolMode}:${drawTarget}:${selectedRoomId}:${selectedConcreteId}:${selectedRebarId}:${selectedStirrupPlacementId}:${selectedMarkupId}`,
+    onAreaPreview: setStructuralPreview, onLinePreview: setBarPreview, onTextDraft: setTextDraft,
+    finishMeasurement: finishOpenMeasurement, finishMarkup: finishOpenMarkup,
+  });
+
   const desktopStart = useRef<Pick<ReturnType<typeof useAppStore.getState>, 'project' | 'history' | 'future' | 'dirty'> | null>(null);
   const navigation = usePlanNavigation({
-    transform, reviewOnly, contextKey: `${project?.id}:${currentPage}`,
+    transform, reviewOnly, contextKey: `${project?.id}:${currentPage}:${toolMode}:${drawTarget}:${selectedRoomId}:${selectedConcreteId}:${selectedRebarId}:${selectedStirrupPlacementId}:${selectedMarkupId}`,
+    editing: touch.editing, managedMouse: fieldDraft || geometryAction !== 'browse',
     onDesktopStart: () => {
       const { project, history, future, dirty } = useAppStore.getState();
       desktopStart.current = { project, history, future, dirty };
@@ -1014,6 +1031,7 @@ export default function PdfViewer() {
       setStructuralPreview(null); setBarPreview(null); setRegionDraft(null);
     },
     onTap: (x, y, target) => {
+      if (touch.tap(x, y)) return;
       const markupId = target instanceof Element ? target.closest('[data-markup-id]')?.getAttribute('data-markup-id') : null;
       if (overlayVisible.markups && markupId) { setSelectedMarkupId(markupId); return; }
       setSelectedMarkupId(null);
@@ -1039,6 +1057,7 @@ export default function PdfViewer() {
       onDoubleClick={handleDoubleClick}
       onClick={handleClick}
     >
+      {!reviewOnly && (touchInput || fieldDraft || layout === 'compact' || geometryAction !== 'browse') && <FieldTools controls={touch} />}
       {loadError && <div className="viewer-error">{loadError}</div>}
       <div
         className="pdf-content"
@@ -1145,7 +1164,7 @@ export default function PdfViewer() {
             {selectedArea && selectedArea.points.length >= 3 && <g>
               <polygon points={selectedArea.points.map((point) => `${point.x},${point.y}`).join(' ')} fill="transparent"
                 pointerEvents="all" style={{ cursor: structuralDrag.current ? 'grabbing' : 'grab' }} />
-              <AreaGeometryHandles points={selectedArea.points} color={selectedArea.color} zoom={zoom} />
+              <AreaGeometryHandles points={selectedArea.points} color={selectedArea.color} zoom={zoom} touch={touchInput} />
             </g>}
             {/* In-progress polygon drawing */}
             {toolMode === 'draw' && drawingPoints.length > 0 && (
@@ -1182,6 +1201,14 @@ export default function PdfViewer() {
                 <circle cx={drawingPoints[0].x} cy={drawingPoints[0].y} r={vertexR} fill="#ef4444" />
               </g>
             )}
+
+            {touch.rectangleDraft && <polygon points={touch.rectangleDraft.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#0ea5e9" strokeWidth={strokeW} strokeDasharray={`${4 / zoom} ${4 / zoom}`} />}
+            {touch.precision && <g pointerEvents="none" transform={`translate(${touch.precision.x} ${touch.precision.y})`} stroke="#0ea5e9" strokeWidth={1.5 / zoom}>
+              <path d={`M ${-8 / zoom} 0 H ${8 / zoom} M 0 ${-8 / zoom} V ${8 / zoom}`} />
+              <line x1={0} y1={-8 / zoom} x2={0} y2={-32 / zoom} strokeDasharray={`${2 / zoom} ${2 / zoom}`} />
+              <circle cx={0} cy={-40 / zoom} r={8 / zoom} fill="#fff" />
+              <path d={`M ${-5 / zoom} ${-40 / zoom} H ${5 / zoom} M 0 ${-45 / zoom} V ${-35 / zoom}`} />
+            </g>}
 
             {/* Calibration line */}
             {calibrationPoints.length > 0 && (
@@ -1433,6 +1460,7 @@ export default function PdfViewer() {
               });
             }
             setTextDraft(null);
+            if (fieldDraft) { useAppStore.getState().setToolMode('select'); useFieldWorkflowStore.getState().setDraft(false); }
           }}
         />
       )}

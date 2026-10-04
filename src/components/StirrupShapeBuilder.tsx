@@ -1,3 +1,4 @@
+import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent, PointerEvent } from 'react';
 import type { Point } from '../types';
@@ -12,6 +13,7 @@ import { moveCustomShapePoint, snapNewShapeEndpoint } from '../lib/stirrupShapeE
 import type { ShapeDrawingMode } from '../lib/stirrupShapeEditing';
 
 export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
+  const { touchInput } = useWorkspaceLayout();
   const t = useT();
   const update = useAppStore((s) => s.updateRebarItem);
   const [selectedSegment, selectSegment] = useState<number | null>(null);
@@ -71,7 +73,7 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
     return point.matrixTransform(matrix.inverse());
   };
   const startDrag = (event: PointerEvent<SVGCircleElement>, index: number) => {
-    if (!custom || extension || event.button !== 0) return;
+    if (event.pointerType !== 'mouse' || !custom || extension || event.button !== 0) return;
     event.preventDefault(); event.stopPropagation();
     selectPoint(index); selectSegment(null);
     const origin = pointerPosition(event);
@@ -140,7 +142,7 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
       selectSegment(null); selectPoint(null);
       set(template === 'custom' ? { ...item.shape, template } : stirrupTemplate(template, model.widthM || 0.3, model.heightM || 0.5));
     }}>
-      {(['rectangle', 'u', 'l', 'custom'] as const).map((template) => <option key={template} value={template}>{t(`rebar.stirrup.templates.${template}`)}</option>)}
+      {(['rectangle', 'u', 'l', 'custom'] as const).map((template) => <option key={template} value={template} disabled={touchInput && template === 'custom'}>{t(`rebar.stirrup.templates.${template}`)}</option>)}
     </select>
     <svg viewBox="0 0 110 110" width="100%" height="220" direction="ltr" aria-label={t('rebar.stirrup.shape')}
       style={{ touchAction: custom ? 'none' : 'auto', cursor: extension ? 'crosshair' : undefined }}
