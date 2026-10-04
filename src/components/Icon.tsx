@@ -31,6 +31,7 @@ export type IconName =
   | 'map'
   | 'layers'
   | 'settings'
+  | 'globe'
   | 'copy'
   | 'trash'
   | 'plus'
@@ -92,6 +93,7 @@ const PATHS: Record<IconName, string> = {
   link: 'M10 13.5a3.5 3.5 0 005 0l3-3a3.54 3.54 0 00-5-5l-1 1M14 10.5a3.5 3.5 0 00-5 0l-3 3a3.54 3.54 0 005 5l1-1',
   layers: 'M12 2.8l9 4.7-9 4.7-9-4.7zM3 12.5l9 4.7 9-4.7M3 17l9 4.7 9-4.7',
   settings: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 4.5v5M8 14.5v5',
+  globe: 'M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3a18 18 0 010 18 18 18 0 010-18z',
   copy: 'M8.5 8.5h11v11h-11zM5.5 15.5h-1v-11h11v1',
   trash: 'M4.5 6.5h15M9.5 6.5V4h5v2.5M6.5 6.5l1 13h9l1-13M10 10v6M14 10v6',
   plus: 'M12 5v14M5 12h14',

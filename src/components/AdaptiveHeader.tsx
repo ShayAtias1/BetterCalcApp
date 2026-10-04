@@ -17,7 +17,7 @@ export default function AdaptiveHeader({ title, sheet, sheetCount, onSheet, onBa
       <BrandHomeLink title={t('topBar.goHome')} responsive />
       <div className="adaptive-plan-title" dir="auto" title={title}>{title}</div>
       <button className="icon-btn" onClick={onBack} aria-label={t('topBar.backToOverview')}><Icon name="back" /></button>
-      <TopBarMenu id="settings" openId={menu} setOpenId={setMenu} label={t('adaptive.more')} variant="ghost">
+      <TopBarMenu id="settings" openId={menu} setOpenId={setMenu} icon="globe" label={t('app.language')} title={t('app.language')} variant="ghost">
         <div className="adaptive-menu-status">
           <span className={`save-state save-state-${saveState}`} role="status">{t(`topBar.save.${saveState}`)}</span>
           <span className={calibrated ? 'muted' : 'cal-missing'}>{t(calibrated ? 'pageStatus.calibrated' : 'pageStatus.notCalibrated')}</span>
