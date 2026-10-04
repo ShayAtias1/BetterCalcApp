@@ -149,7 +149,7 @@ function rebarBlocks(rebar: NonNullable<StructuralReport['rebar']>, x: ExportCon
             // Only a counted mesh needs its sheet size to be read.
             d.sheets && d.sheets.count !== null ? sheetConfigText(d.sheets.settings, x) : DASH,
             fmt(d.netWeightKg, d.estimated),
-            fmt(d.orderWeightKg, d.estimated),
+            fmt(d.orderWeightKg),
             levelStatus(d, x),
           ],
         })),
@@ -163,7 +163,7 @@ function rebarBlocks(rebar: NonNullable<StructuralReport['rebar']>, x: ExportCon
             '',
             '',
             summary.basis === null ? DASH : fmt(summary.weightKg, summary.basis === 'estimated'),
-            summary.basis === null ? DASH : fmt(summary.orderWeightKg, summary.basis === 'estimated'),
+            summary.basis === null ? DASH : fmt(summary.orderWeightKg),
             [summary.basis ? basisText(summary.basis, x) : '', summary.missingItemCount > 0 ? t('exports.structural.missingShort', { count: summary.missingItemCount }) : ''].filter(Boolean).join(' · '),
           ],
           bg: C_GRAND,
@@ -235,12 +235,12 @@ function projectRebarBlocks(plans: Plan[], x: ExportContext): PdfBlock[] {
         : [t('exports.structural.headers.diameter'), t('rebar.barCount'), `${t('rebar.barLength')} (${m})`, `${t('rebar.totalLength')} (${m})`]),
       t('exports.structural.headers.netWeight', { unit: kg }), t('exports.projectPdf.orderUnit', { unit: kg }), t('exports.structural.headers.status'),
     ];
-    const calculated = items.filter(({ row }) => row.netWeightKg !== null && row.orderWeightKg !== null);
+    const calculated = items.filter(({ row }) => row.netWeightKg !== null);
     const estimatedCount = calculated.filter(({ row }) => row.estimated).length;
     const basis = calculated.length === 0 ? null : estimatedCount === 0 ? 'exact' : estimatedCount === calculated.length ? 'estimated' : 'mixed';
     // Missing levels of one mesh still represent one missing item; IDs are scoped to their plan.
     const missing = new Set(items.filter(({ row }) => row.status !== 'ok').map(({ planId, row }) => JSON.stringify([planId, row.itemId]))).size;
-    const sum = (value: (row: RebarLevelRow) => number | null) => calculated.length === 0 ? null : calculated.reduce((total, { row }) => total + (value(row) ?? 0), 0);
+    const sum = (value: (row: RebarLevelRow) => number | null, requireAll = false) => calculated.length === 0 || (requireAll && items.some(({ row }) => value(row) === null)) || calculated.some(({ row }) => value(row) === null) ? null : calculated.reduce((total, { row }) => total + value(row)!, 0);
     blocks.push(
       { type: 'section', title: `${t('exports.structural.rebar')} - ${t(mesh ? 'rebar.mesh' : 'rebar.bars')}` },
       {
@@ -251,11 +251,11 @@ function projectRebarBlocks(plans: Plan[], x: ExportContext): PdfBlock[] {
             planName, `${d.pageNumber}`, t(mesh ? 'rebar.mesh' : 'rebar.bars'), markLabel(d, t),
             ...(mesh ? [levelText(d.level, x) || DASH, levelSpecification(d, x), levelQuantity(d, x), d.sheets?.count != null ? sheetConfigText(d.sheets.settings, x) : DASH]
               : [fmt(d.parts[0].diameterMm), fmt(d.parts[0].barCount), fmt(d.parts[0].barLengthM), fmt(d.parts[0].netLengthM)]),
-            fmt(d.netWeightKg, d.estimated), fmt(d.orderWeightKg, d.estimated), levelStatus(d, x),
+            fmt(d.netWeightKg, d.estimated), fmt(d.orderWeightKg), levelStatus(d, x),
           ] })),
           {
             cells: ['', '', t('rebar.summary.total'), '', '', '', '', mesh ? '' : fmt(sum((d) => d.parts[0].netLengthM)),
-              fmt(sum((d) => d.netWeightKg), basis === 'estimated'), fmt(sum((d) => d.orderWeightKg), basis === 'estimated'),
+              fmt(sum((d) => d.netWeightKg), basis === 'estimated'), fmt(sum((d) => d.orderWeightKg, mesh)),
               [basis ? basisText(basis, x) : '', missing > 0 ? t('exports.structural.missingShort', { count: missing }) : ''].filter(Boolean).join(' · ') || DASH],
             bg: C_GRAND, bold: true,
           },

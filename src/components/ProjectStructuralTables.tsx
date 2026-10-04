@@ -11,7 +11,7 @@ import { exportContext } from '../lib/exportLanguage';
 
 const DASH = '-';
 /** An estimate carries "≈" so it can never be read as an exact figure; a figure that cannot be known is a dash. */
-const num = (v: number, basis: RebarBasis | null) => (basis === null ? DASH : `${basis === 'estimated' ? '≈ ' : ''}${formatNumber(round(v, 2))}`);
+const num = (v: number | null, basis: RebarBasis | null) => (basis === null || v === null ? DASH : `${basis === 'estimated' ? '≈ ' : ''}${formatNumber(round(v, 2))}`);
 
 export function ProjectConcreteTable({ concrete }: { concrete: ProjectConcrete }) {
   const t = useT();
@@ -108,7 +108,7 @@ export function ProjectRebarTable({ rebar, plans }: { rebar: ProjectRebar; plans
                   </>}
                 </td>
                 <td className="num group-edge" dir="ltr">{weight(d.netWeightKg, d.estimated)}</td>
-                <td className="num order" dir="ltr">{weight(d.orderWeightKg, d.estimated)}</td>
+                <td className="num order" dir="ltr">{weight(d.orderWeightKg, false)}</td>
                 <td className="group-edge"><span className={d.status !== 'ok' ? 'cal-missing' : `qty-status ${d.estimated ? 'estimate' : ''}`}>{levelStatus(d, x)}</span></td>
               </tr>
             ))}
@@ -117,7 +117,7 @@ export function ProjectRebarTable({ rebar, plans }: { rebar: ProjectRebar; plans
             <tr>
               <td className="qty-id" colSpan={7}>{t('rebar.summary.total')}</td>
               <td className="num group-edge" dir="ltr">{num(rebar.weightKg, rebar.basis)}</td>
-              <td className="num order" dir="ltr">{num(rebar.orderWeightKg, rebar.basis)}</td>
+              <td className="num order" dir="ltr">{num(rebar.orderWeightKg, rebar.basis === null ? null : 'exact')}</td>
               <td className="group-edge">
                 {status(rebar.basis)}
                 {rebar.missingItemCount > 0 && <span className="qty-sub cal-missing">{t('exports.structural.missingShort', { count: rebar.missingItemCount })}</span>}

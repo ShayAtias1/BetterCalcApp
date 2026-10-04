@@ -3,7 +3,7 @@ import { useAppStore } from '../store/appStore';
 import type { Calibration } from '../types';
 import type { BarSpec, MeshReinforcement, RebarBars, RebarItem, RebarLayerDirection, RebarLevel, RebarMesh } from '../types/structural';
 import { REBAR_DIAMETERS_MM, calculateRebar, type RebarCalc } from '../lib/rebar';
-import { resolveMeshProcurement, type MeshSheetsResult } from '../lib/meshSheets';
+import { resolveMeshProcurement, type MeshProcurementResult } from '../lib/meshSheets';
 import { levelChoice, meshLevels, specNotation, withDirection, withMode, withoutDirection, withoutExtra, withSpec } from '../lib/rebarMesh';
 import type { MeshLevelChoice } from '../lib/structuralMutations';
 import { cmToMeters, metersToCm } from '../lib/structuralUnits';
@@ -172,7 +172,7 @@ function DiameterSelect({ value, onChange }: { value: number; onChange: (mm: num
   );
 }
 
-function Results({ calc, showLength }: { calc: RebarCalc; showLength: boolean }) {
+function Results({ calc, showLength, purchaseWeight }: { calc: RebarCalc; showLength: boolean; purchaseWeight?: number | null }) {
   const t = useT();
   const ok = calc.status === 'ok';
   const na = t('concrete.notCalculable');
@@ -188,8 +188,8 @@ function Results({ calc, showLength }: { calc: RebarCalc; showLength: boolean })
           <span className={`metric-value ${ok ? '' : 'cal-missing'}`}>{ok ? `${calc.estimated ? '≈ ' : ''}${kg(calc.weightKg!, t)}` : na}</span>
         </div>
         <div>
-          <span className="metric-label">{t('rebar.order')}</span>
-          <span className={`metric-value ${ok ? '' : 'cal-missing'}`}>{ok ? `${calc.estimated ? '≈ ' : ''}${kg(calc.orderWeightKg!, t)}` : na}</span>
+          <span className="metric-label">{t(showLength ? 'rebar.order' : 'rebar.purchaseWeight')}</span>
+          <span className={`metric-value ${(showLength ? ok : purchaseWeight !== null && purchaseWeight !== undefined) ? '' : 'cal-missing'}`}>{showLength ? (ok ? kg(calc.orderWeightKg!, t) : na) : purchaseWeight == null ? '-' : kg(purchaseWeight, t)}</span>
         </div>
       </div>
       {ok && showLength && (
@@ -328,7 +328,7 @@ function LevelSection({
 // ---------- mesh sheets (procurement) ----------
 
 /** Sheet size and overlap, and how many physical sheets the zone needs — secondary to the reinforcement above it. */
-function MeshSheets({ mesh, result }: { mesh: RebarMesh; result: MeshSheetsResult }) {
+function MeshSheets({ mesh, result }: { mesh: RebarMesh; result: MeshProcurementResult }) {
   const t = useT();
   const updateItem = useAppStore((s) => s.updateRebarItem);
   const { settings } = result;
@@ -341,7 +341,7 @@ function MeshSheets({ mesh, result }: { mesh: RebarMesh; result: MeshSheetsResul
         {result.levels.length > 1 ? (
           <>
             {result.levels.map((l) => (
-              <p className="rebar-sheets-line" key={l.level}>{`${t(l.level === 'bottom' ? 'rebar.levelBottom' : 'rebar.levelTop')}: ${t('quantitiesPanel.sheetsQty', { count: l.sheets })}`}</p>
+              <p className="rebar-sheets-line" key={l.level}>{`${t(l.level === 'bottom' ? 'rebar.levelBottom' : 'rebar.levelTop')}: ${t('quantitiesPanel.sheetsQty', { count: l.sheets! })}`}</p>
             ))}
             <div className="rebar-sheets-count">{`${t('rebar.sheets.total')}: ${t('quantitiesPanel.sheetsQty', { count: result.totalSheets! })}`}</div>
           </>
@@ -414,7 +414,7 @@ function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calib
     <div className="room-detail">
       {message && <div className="warning-box">{message}</div>}
       <MeshSheets mesh={mesh} result={sheets} />
-      <Results calc={calc} showLength={false} />
+      <Results calc={calc} showLength={false} purchaseWeight={sheets.procurementWeightKg} />
       {plan && <MeshLayoutControl planId={plan.id} mesh={mesh} calibration={calibration} />}
 
       <div className="form-grid">

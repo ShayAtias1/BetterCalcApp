@@ -1,3 +1,5 @@
+import { resolveMeshProcurement } from '../../src/lib/meshSheets.ts';
+import { calculateRebar } from '../../src/lib/rebar.ts';
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
@@ -76,7 +78,7 @@ for (const language of ['en', 'he'] as const) {
     assert.ok(printed.includes(`${t('rebar.levelTop')}: ${t('quantitiesPanel.sheetsQty', { count: 4 })}`));
     assert.ok(printed.includes(`${t('rebar.sheets.total')}: ${t('quantitiesPanel.sheetsQty', { count: 8 })}`));
     assert.ok(printed.includes(t('quantitiesPanel.cols.netWeight')));
-    assert.ok(printed.includes(t('rebar.order')));
+    assert.ok(printed.includes(t('rebar.purchaseWeight')));
     useAppStore.getState().setSelectedRebarId('bars');
     const barHtml = render(createElement(RebarPanel));
     assert.ok(text(barHtml).includes(t('rebar.totalLength')));
@@ -130,7 +132,7 @@ for (const language of ['en', 'he'] as const) {
     assert.ok(rows[3].includes(t('exports.structural.basis.estimate')) && rows[3].includes('≈'));
     assert.ok(rows[4].includes(t('exports.structural.status.invalidInput')));
     const footer = text(html.match(/<tfoot>(.*?)<\/tfoot>/s)![1]);
-    assert.ok(footer.includes(formatNumber(summary.weightKg)) && footer.includes(formatNumber(summary.orderWeightKg)));
+    assert.ok(footer.includes(formatNumber(summary.weightKg)) && footer.includes(summary.orderWeightKg === null ? '-' : formatNumber(summary.orderWeightKg)));
     assert.ok(footer.includes(t('exports.structural.basis.includesEstimate')));
     assert.ok(footer.includes(t('exports.structural.missingShort', { count: 1 })));
     assert.ok(!footer.includes(t('rebar.totalLength')) && !footer.includes(t('exports.structural.sheetsQty', { count: 8 })));
@@ -360,6 +362,36 @@ for (const language of ['en', 'he'] as const) {
     useAppStore.getState().editMeshLayout(mesh.id, 'bottom', { type: 'remove', id: added.id });
     actions.setLevel(p.id, mesh.id, 'bottom');
     assert.equal(useMeshLayoutPreviewStore.getState().views[JSON.stringify([p.id, mesh.id])].selectedPlacementId, null);
+    useAppStore.getState().setProject(null);
+  });
+}
+
+for (const language of ['en', 'he'] as const) {
+  test(`Mesh form updates Purchase weight after add/remove while Net weight stays unchanged [${language}]`, () => {
+    useLanguageStore.getState().setLanguage(language);
+    const t = translatorFor(language), p = plan(), cal = p.pages[1].calibration;
+    useAppStore.getState().setProject(p);
+    useAppStore.getState().setSelectedRebarId(mesh.id);
+    const net = calculateRebar(mesh, cal).weightKg!;
+    const kg = (v: number) => `${formatNumber(Math.round(v * 10) / 10)} ${t('units.kg')}`;
+    const form = () => text(render(createElement(RebarPanel)));
+    const before = resolveMeshProcurement(mesh, cal).procurementWeightKg!;
+    assert.ok(form().includes(kg(net)) && form().includes(kg(before)));
+    assert.ok(form().includes(t('rebar.purchaseWeight')));
+    useAppStore.getState().editMeshLayout(mesh.id, 'bottom', { type: 'add' });
+    const saved = useAppStore.getState().project!.rebarItems![0] as RebarMesh;
+    const after = resolveMeshProcurement(saved, cal).procurementWeightKg!;
+    assert.ok(after > before);
+    assert.ok(form().includes(kg(after)) && form().includes(kg(net)));
+    const id = saved.manualLayouts!.bottom!.sheets.at(-1)!.id;
+    useAppStore.getState().editMeshLayout(mesh.id, 'bottom', { type: 'remove', id });
+    assert.ok(form().includes(kg(before)) && form().includes(kg(net)));
+    const irregular = { ...p, rebarItems: [{ ...mesh, points: mesh.points.slice(0, 3) }] };
+    useAppStore.getState().setProject(irregular);
+    useAppStore.getState().setSelectedRebarId(mesh.id);
+    const html = render(createElement(RebarPanel));
+    assert.ok(text(html).includes('≈'));
+    assert.match(html, /class="metric-value cal-missing">-<\/span>/);
     useAppStore.getState().setProject(null);
   });
 }

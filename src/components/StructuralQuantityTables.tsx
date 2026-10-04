@@ -166,7 +166,7 @@ export function RebarQuantityTable({ plan }: { plan: Plan }) {
                   <td className="qty-spec">{specification(d)}</td>
                   <td className="num">{quantity(d)}</td>
                   <td className="num group-edge">{weight(d.netWeightKg, d.estimated)}</td>
-                  <td className="num order">{weight(d.orderWeightKg, d.estimated)}</td>
+                  <td className="num order">{weight(d.orderWeightKg, false)}</td>
                   <td className="group-edge">{statusCell(d)}</td>
                 </tr>
               );
@@ -180,7 +180,7 @@ export function RebarQuantityTable({ plan }: { plan: Plan }) {
                 {summary.missingItemCount > 0 && <span className="qty-sub cal-missing">{t('rebar.summary.missing', { count: summary.missingItemCount })}</span>}
               </td>
               <td className="num group-edge">{total === null ? DASH : weight(summary.weightKg, total === 'estimated')}</td>
-              <td className="num order">{total === null ? DASH : weight(summary.orderWeightKg, total === 'estimated')}</td>
+              <td className="num order">{total === null ? DASH : weight(summary.orderWeightKg, false)}</td>
               <td className="group-edge">
                 {total === null ? null : <span className={`qty-status ${total === 'exact' ? '' : 'estimate'}`}>{t(BASIS_KEY[total])}</span>}
               </td>

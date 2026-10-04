@@ -909,6 +909,7 @@ export const he = {
     removeLegacyExtra: 'הסרה',
     copyBottomToTop: 'העתק מתחתון לעליון',
     copyBottomToTopHint: 'מתחיל את העליון מאותם ערכים - כל מפלס נשאר ניתן לעריכה בנפרד',
+    purchaseWeight: 'משקל לרכישה',
     layout: {
       add: 'הוסף רשת',
       remove: 'מחק רשת',

@@ -1,3 +1,4 @@
+import { resolveMeshProcurement } from '../../src/lib/meshSheets.ts';
 // Rebar summary: grouped by page and diameter from the engine's own output; mesh layers and manual
 // bars add into the same diameter; estimates are flagged, never hidden; items that cannot be
 // calculated are counted as missing and never as zero. Scale: page 1 and 2 are 1 px = 1 cm; page 3
@@ -25,7 +26,7 @@ const planWith = (items?: RebarItem[]): Plan => {
   else delete p.rebarItems;
   return p;
 };
-const near = (a: number, b: number, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} vs ${b}`);
+const near = (a: number | null, b: number, eps = 1e-9) => assert.ok(typeof a === 'number' && Math.abs(a - b) < eps, `${a} vs ${b}`);
 const W12 = rebarWeightPerMeterKg(12)!;
 const W16 = rebarWeightPerMeterKg(16)!;
 const W10 = rebarWeightPerMeterKg(10)!;
@@ -73,22 +74,24 @@ test('the same diameter across several meshes, layers and manual bars adds into 
   assert.equal(s.itemCount, 4);
 });
 
-test('manual bars and mesh are indistinguishable once in a diameter: only the engine output matters', () => {
+test('net engineering quantities agree by diameter while Mesh procurement uses full sheets', () => {
   const viaMesh = buildRebarSummary(planWith([mesh([layer({ diameterMm: 16, spacingM: 0.2 })], { points: [], sizeOverride: { lengthM: 6, widthM: 2 } })])); // 11 bars × 6 m = 66
   const viaBars = buildRebarSummary(planWith([bars({ diameterMm: 16, count: 11, lengthM: 6 })]));
-  const values = (s: ReturnType<typeof buildRebarSummary>) => s.pages[0].rows.map((r) => ({ ...r, lineCount: 0 }));
+  const values = (s: ReturnType<typeof buildRebarSummary>) => s.pages[0].rows.map((r) => ({ ...r, lineCount: 0, orderWeightKg: 0 }));
   assert.deepEqual(values(viaMesh), values(viaBars));
 });
 
-test('waste applies per item to the order values; net values stay net', () => {
-  const s = buildRebarSummary(planWith([
-    mesh([layer({ diameterMm: 12 })], { wastePercent: 5 }), // 410 m
+test('waste still applies to Bars and internal order length; Mesh purchase weight uses full sheets', () => {
+  const item = mesh([layer({ diameterMm: 12 })], { wastePercent: 5 });
+  const p = planWith([
+    item, // 410 m
     bars({ diameterMm: 12, count: 10, lengthM: 6, wastePercent: 10 }), // 60 m
-  ]));
+  ]);
+  const s = buildRebarSummary(p);
   const r = s.pages[0].rows[0];
   near(r.lengthM, 470);
   near(r.orderLengthM, 410 * 1.05 + 60 * 1.1); // 430.5 + 66
-  near(r.orderWeightKg, (410 * 1.05 + 60 * 1.1) * W12, 0.005);
+  near(r.orderWeightKg, resolveMeshProcurement(item, p.pages[item.pageNumber]?.calibration ?? null).procurementWeightKg! + 60 * 1.1 * W12, 0.005);
   near(s.orderLengthM, 496.5);
 });
 

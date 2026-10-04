@@ -38,7 +38,7 @@ export function MeshLayoutControl({ planId, mesh, calibration }: { planId: strin
   const selected = applyPlacementOverrides(placements, level ? overrides[level] ?? {} : {})[selectedIndex];
   const procurement = resolveMeshProcurement(mesh, calibration);
   const levelProcurement = procurement.levels.find((entry) => entry.level === level);
-  const manual = levelProcurement?.source === 'manual';
+  const manual = levelProcurement?.source === 'manual' && levelProcurement.sheets !== null;
   const editLayout = useAppStore((s) => s.editMeshLayout);
   useEffect(() => {
     if (view.selectedPlacementId && selectedIndex < 0 && level) actions.setLevel(planId, mesh.id, level);
@@ -77,7 +77,7 @@ export function MeshLayoutControl({ planId, mesh, calibration }: { planId: strin
         </>
       )}
       {manual && <>
-        <p role="status">{t('rebar.layout.manual')} · {t('rebar.layout.sheetCount', { count: levelProcurement!.sheets })}</p>
+        <p role="status">{t('rebar.layout.manual')} · {t('rebar.layout.sheetCount', { count: levelProcurement!.sheets! })}</p>
         <p className="muted">{t('rebar.layout.coverageNotice')}</p>
       </>}
       <p className="muted">{t('rebar.layout.settingsNotice')}</p>

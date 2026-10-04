@@ -1,7 +1,7 @@
 /**
  * Mesh-sheet procurement: how many physical reinforcement sheets a mesh zone needs. An ADDITIONAL
- * result next to the rebar quantities (lib/rebar) — it never changes bar counts, lengths, weights or
- * waste, and overlap is not waste. Pure; no store, no drawing.
+ * result next to engineering rebar quantities (lib/rebar). Engineering bar counts, lengths, net
+ * weights and waste stay untouched; physical purchase weight comes from full sheets. Pure; no store, no drawing.
  *
  * ── One dimension ──────────────────────────────────────────────────────────────────────────────
  * The first sheet covers a whole sheet dimension S; every further sheet adds S - overlap:
@@ -31,8 +31,8 @@
  */
 
 import type { Calibration } from '../types';
-import type { MeshSheetSettings, RebarLevel, RebarMesh } from '../types/structural';
-import { COUNT_EPSILON } from './rebar';
+import type { MeshSheetSettings, MeshReinforcement, RebarLevel, RebarMesh } from '../types/structural';
+import { COUNT_EPSILON, calculateRebar } from './rebar';
 import { meshLevels, normalizeMesh } from './rebarMesh';
 import { finitePositive, zoneGeometry } from './zoneGeometry';
 
@@ -176,7 +176,7 @@ export function calculateMeshSheets(raw: RebarMesh, calibration: Calibration | n
 }
 
 /** Single procurement resolver for forms, reports and exports. V2A remains automatic-only. */
-export function resolveMeshProcurement(raw: RebarMesh, calibration: Calibration | null): MeshSheetsResult {
+function resolveMeshSheetCounts(raw: RebarMesh, calibration: Calibration | null): MeshSheetsResult {
   const mesh = normalizeMesh(raw);
   const automatic = calculateMeshSheets(mesh, calibration);
   if (!mesh.manualLayouts || Object.keys(mesh.manualLayouts).length === 0 || automatic.settingsProblem || automatic.status === 'no-levels') return automatic;
@@ -201,4 +201,50 @@ export function resolveMeshProcurement(raw: RebarMesh, calibration: Calibration 
   return { ...automatic, status: complete ? 'ok' : automatic.status, levels,
     totalSheets: complete ? levels.reduce((sum, l) => sum + l.sheets, 0) : null,
     purchasedAreaM2: complete ? levels.reduce((sum, l) => sum + l.purchasedAreaM2, 0) : null };
+}
+
+
+/** A full physical sheet, using the same edge-bar count and kg/m calculation as engineering. */
+export function calculatePhysicalMeshSheetWeight(lengthM: number, widthM: number, reinforcement: MeshReinforcement, level: RebarLevel = 'bottom', meshId = 'physical-sheet') {
+  const calc = calculateRebar({ id: meshId, mark: '', kind: 'mesh', pageNumber: 1, points: [],
+    sizeOverride: { lengthM, widthM }, [level]: reinforcement }, null);
+  return { sheetWeightKg: calc.weightKg !== null && Number.isFinite(calc.weightKg) ? calc.weightKg : null,
+    layers: calc.layers };
+}
+export interface MeshLevelProcurement {
+  level: RebarLevel;
+  source: 'automatic' | 'manual';
+  sheets: number | null;
+  purchasedAreaM2: number | null;
+  settings: ResolvedSheetSettings;
+  sheetWeightKg: number | null;
+  procurementWeightKg: number | null;
+  /** Per-direction contributions for diameter summaries; identity matches the engineering layers. */
+  layerProcurementWeightsKg: Record<string, number | null>;
+  status: 'ok' | 'unavailable' | 'invalid-spec';
+}
+export interface MeshProcurementResult extends Omit<MeshSheetsResult, 'levels'> {
+  levels: MeshLevelProcurement[];
+  procurementWeightKg: number | null;
+}
+
+/** Counts and full-sheet purchase weights: the single source for forms, summaries and exports. */
+export function resolveMeshProcurement(raw: RebarMesh, calibration: Calibration | null): MeshProcurementResult {
+  const mesh = normalizeMesh(raw);
+  const quantities = resolveMeshSheetCounts(mesh, calibration);
+  const levels = meshLevels(mesh).map(({ level, reinforcement }): MeshLevelProcurement => {
+    const count = quantities.levels.find((l) => l.level === level);
+    const physical = calculatePhysicalMeshSheetWeight(quantities.settings.lengthM, quantities.settings.widthM, reinforcement, level, mesh.id);
+    const sheets = count?.sheets ?? null;
+    const weight = sheets === null || physical.sheetWeightKg === null ? null : physical.sheetWeightKg * sheets;
+    const procurementWeightKg = weight !== null && Number.isFinite(weight) ? weight : null;
+    return { level, source: mesh.manualLayouts?.[level] ? 'manual' : 'automatic', sheets,
+      purchasedAreaM2: count?.purchasedAreaM2 ?? null, settings: quantities.settings,
+      sheetWeightKg: quantities.settingsProblem ? null : physical.sheetWeightKg, procurementWeightKg,
+      layerProcurementWeightsKg: Object.fromEntries(physical.layers.map((l) => [l.layerId,
+        procurementWeightKg === null || l.weightKg === null ? null : l.weightKg * sheets!])),
+      status: sheets === null ? 'unavailable' : procurementWeightKg === null ? 'invalid-spec' : 'ok' };
+  });
+  return { ...quantities, levels, procurementWeightKg: levels.length && levels.every((l) => l.procurementWeightKg !== null)
+    ? levels.reduce((sum, l) => sum + l.procurementWeightKg!, 0) : null };
 }

@@ -183,7 +183,7 @@ function addConcreteSheet(
 
 interface RebarTotals {
   weightKg: number;
-  orderWeightKg: number;
+  orderWeightKg: number | null;
   basis: RebarBasis | null;
 }
 
@@ -245,7 +245,7 @@ function addRebarSheet(
     row.getCell(col(8)).numFmt = PCT_FMT;
     row.getCell(col(9)).numFmt = qty;
     row.getCell(col(10)).numFmt = PCT_FMT;
-    row.getCell(col(11)).numFmt = qty;
+    row.getCell(col(11)).numFmt = NUM_FMT;
     styleRow(row, i % 2 === 0 ? C_ZEBRA_A : C_ZEBRA_B);
   });
   const last = sheet.rowCount;
@@ -256,8 +256,8 @@ function addRebarSheet(
   total.getCell(col(2)).value = t('rebar.summary.total');
   for (const [c, result] of [[9, totals.weightKg], [11, totals.orderWeightKg]] as const) {
     const letter = colLetter(col(c));
-    total.getCell(col(c)).value = { formula: `ROUND(SUM(${letter}${first}:${letter}${last}),2)`, result };
-    total.getCell(col(c)).numFmt = totalFmt;
+    total.getCell(col(c)).value = result === null ? DASH : { formula: `ROUND(SUM(${letter}${first}:${letter}${last}),2)`, result };
+    total.getCell(col(c)).numFmt = c === 11 ? NUM_FMT : totalFmt;
   }
   total.getCell(col(12)).value = [totals.basis ? basisText(totals.basis, x) : '', missingItemCount > 0 ? t('exports.structural.missingShort', { count: missingItemCount }) : ''].filter(Boolean).join(' · ') || DASH;
   styleRow(total, C_GRAND, true);

@@ -5,7 +5,7 @@ import { PLAN_A } from './fixtures.ts';
 import type { Plan, Project } from '../../src/types/index.ts';
 import type { RebarMesh, RebarLevel } from '../../src/types/structural.ts';
 import { editManualMeshLayout, type ManualMeshEdit } from '../../src/lib/manualMeshLayout.ts';
-import { calculateMeshSheets, resolveMeshProcurement } from '../../src/lib/meshSheets.ts';
+import { calculateMeshSheets, resolveMeshProcurement, type MeshProcurementResult } from '../../src/lib/meshSheets.ts';
 import { calculateMeshSheetPlacements } from '../../src/lib/meshSheetPlacement.ts';
 import { prepareMeshLayoutPreview } from '../../src/lib/meshLayoutPreview.ts';
 import { calculateRebar } from '../../src/lib/rebar.ts';
@@ -16,6 +16,12 @@ import { buildStructuralPdfLayout, buildProjectStructuralPdfLayout } from '../..
 import { buildQuantitiesWorkbook } from '../../src/lib/exportExcel.ts';
 import { buildProjectWorkbook } from '../../src/lib/exportProjectExcel.ts';
 import { exportContext } from '../../src/lib/exportLanguage.ts';
+
+// V2D count invariants still hold; the resolver now also carries purchase weights.
+const counts = ({ procurementWeightKg: _weight, levels, ...rest }: MeshProcurementResult) => ({ ...rest,
+  levels: levels.filter((l) => l.sheets !== null).map(({ level, sheets, purchasedAreaM2 }) => ({ level, sheets, purchasedAreaM2 })) });
+const withoutLayerIds = (result: MeshProcurementResult) => ({ ...result, levels: result.levels.map((l) => ({ ...l,
+  layerProcurementWeightsKg: Object.values(l.layerProcurementWeightsKg) })) });
 
 const CAL = { pixelDistance: 100, realDistanceMeters: 1, metersPerPixel: 0.01 };
 const original: RebarMesh = { id: 'mesh', kind: 'mesh', pageNumber: 1, mark: 'Mesh 01',
@@ -33,7 +39,7 @@ function firstId(level: RebarLevel) {
 
 test('old data and viewing remain automatic without writing any manual layout', () => {
   const before = structuredClone(original);
-  assert.deepEqual(resolveMeshProcurement(original, CAL), calculateMeshSheets(original, CAL));
+  assert.deepEqual(counts(resolveMeshProcurement(original, CAL)), calculateMeshSheets(original, CAL));
   prepareMeshLayoutPreview(original, CAL);
   assert.deepEqual(original, before);
   assert.equal(original.manualLayouts, undefined);
@@ -68,7 +74,7 @@ for (const level of ['bottom', 'top'] as const) {
     assert.equal(resolveMeshProcurement(removed, CAL).totalSheets, 8);
     const reset = edit(removed, level, { type: 'reset' });
     assert.equal(reset.manualLayouts, undefined);
-    assert.deepEqual(resolveMeshProcurement(reset, CAL), calculateMeshSheets(original, CAL));
+    assert.deepEqual(counts(resolveMeshProcurement(reset, CAL)), calculateMeshSheets(original, CAL));
   });
 }
 
@@ -107,7 +113,7 @@ test('dimension changes clear both levels; overlap-only changes retain positions
   for (const sheets of [{ lengthM: 5 }, { widthM: 3 }, { lengthM: 0 }]) {
     const changed = updateRebarItem(p, mesh.id, { sheets }).rebarItems![0] as RebarMesh;
     assert.equal(changed.manualLayouts, undefined);
-    assert.deepEqual(resolveMeshProcurement(changed, CAL), calculateMeshSheets(changed, CAL));
+    assert.deepEqual(counts(resolveMeshProcurement(changed, CAL)), calculateMeshSheets(changed, CAL));
   }
   const overlap = updateRebarItem(p, mesh.id, { sheets: { overlapM: 0.2 } }).rebarItems![0] as RebarMesh;
   assert.deepEqual(overlap.manualLayouts, mesh.manualLayouts);
@@ -133,7 +139,7 @@ test('duplication deep-copies geometry and regenerates every persisted sheet ID'
     assert.deepEqual(b.sheets.map(({ x, y, rotation }) => ({ x, y, rotation })), a.sheets.map(({ x, y, rotation }) => ({ x, y, rotation })));
     assert.ok(b.sheets.every((s) => !oldIds.has(s.id)));
   }
-  assert.deepEqual(resolveMeshProcurement(cloned, CAL), resolveMeshProcurement(mesh, CAL));
+  assert.deepEqual(withoutLayerIds(resolveMeshProcurement(cloned, CAL)), withoutLayerIds(resolveMeshProcurement(mesh, CAL)));
   cloned.manualLayouts!.bottom!.sheets[0].x = 99;
   assert.notEqual(mesh.manualLayouts!.bottom!.sheets[0].x, 99);
 });
