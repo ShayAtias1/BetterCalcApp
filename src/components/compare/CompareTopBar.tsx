@@ -98,14 +98,6 @@ export default function CompareTopBar({
           <Icon name={currentProject ? 'chevron-previous' : 'exit'} size={13} />
           <span className="btn-label">{currentProject ? t('topBar.projectOverviewShort') : t('compare.topBar.exit')}</span>
         </button>
-        {currentProject && (
-          <>
-            <button className="btn-ghost small breadcrumb-project" onClick={() => void close()} title={t('topBar.backToOverview')}>
-              {currentProject.name || t('topBar.unnamedProject')}
-            </button>
-            <Icon name="chevron-next" size={13} />
-          </>
-        )}
         <input
           className="project-name-input"
           dir="auto"
