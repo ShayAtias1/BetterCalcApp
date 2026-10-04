@@ -10,7 +10,6 @@ import { cmToMeters, metersToCm } from '../lib/structuralUnits';
 import { zoneGeometry } from '../lib/zoneGeometry';
 import { round } from '../lib/geometry';
 import { CONCRETE_COLOR } from './ConcreteZones';
-import ConcreteSummary from './ConcreteSummary';
 import ExistingAreaPicker from './ExistingAreaPicker';
 import NumberField from './NumberField';
 import Icon from './Icon';
@@ -73,8 +72,6 @@ export default function ConcretePanel() {
           onUpdate={(patch) => updateElement(selected.id, patch)}
           onChangeKind={(kind) => changeKind(selected.id, kind)}
         />
-        {/* Kept under the form so an edit can be seen landing in the totals as it is typed. */}
-        <ConcreteSummary plan={project} />
       </div>
     );
   }
@@ -155,8 +152,6 @@ export default function ConcretePanel() {
           })}
         </ul>
       </div>
-
-      <ConcreteSummary plan={project} />
     </div>
   );
 }

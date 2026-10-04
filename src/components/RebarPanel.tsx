@@ -13,7 +13,6 @@ import { zoneGeometry } from '../lib/zoneGeometry';
 import { round } from '../lib/geometry';
 import { REBAR_COLOR } from './RebarZones';
 import ExistingAreaPicker from './ExistingAreaPicker';
-import RebarSummary from './RebarSummary';
 import NumberField from './NumberField';
 import Icon from './Icon';
 
@@ -89,8 +88,6 @@ export default function RebarPanel() {
         ) : (
           <BarsDetail key={selected.id} bars={selected} />
         )}
-        {/* Under the form, so an edit can be seen landing in the totals as it is typed. */}
-        <RebarSummary plan={project} />
       </div>
     );
   }
@@ -154,8 +151,6 @@ export default function RebarPanel() {
           })}
         </ul>
       </div>
-
-      <RebarSummary plan={project} />
     </div>
   );
 }
@@ -176,19 +171,19 @@ function DiameterSelect({ value, onChange }: { value: number; onChange: (mm: num
   );
 }
 
-function Results({ calc }: { calc: RebarCalc }) {
+function Results({ calc, showLength }: { calc: RebarCalc; showLength: boolean }) {
   const t = useT();
   const ok = calc.status === 'ok';
   const na = t('concrete.notCalculable');
   return (
     <>
       <div className="metrics-row concrete-results">
-        <div>
+        {showLength && <div>
           <span className="metric-label">{t('rebar.totalLength')}</span>
           <span className={`metric-value ${ok ? '' : 'cal-missing'}`}>{ok ? `${calc.estimated ? '≈ ' : ''}${metres(calc.totalLengthM!, t)}` : na}</span>
-        </div>
+        </div>}
         <div>
-          <span className="metric-label">{t('rebar.totalWeight')}</span>
+          <span className="metric-label">{t(showLength ? 'rebar.totalWeight' : 'quantitiesPanel.cols.netWeight')}</span>
           <span className={`metric-value ${ok ? '' : 'cal-missing'}`}>{ok ? `${calc.estimated ? '≈ ' : ''}${kg(calc.weightKg!, t)}` : na}</span>
         </div>
         <div>
@@ -196,13 +191,13 @@ function Results({ calc }: { calc: RebarCalc }) {
           <span className={`metric-value ${ok ? '' : 'cal-missing'}`}>{ok ? `${calc.estimated ? '≈ ' : ''}${kg(calc.orderWeightKg!, t)}` : na}</span>
         </div>
       </div>
-      {ok && (
+      {ok && showLength && (
         <p className="muted rebar-order-length">
           {t('rebar.orderLength', { length: `${calc.estimated ? '≈ ' : ''}${metres(calc.orderLengthM!, t)}` })}
           {calc.estimated && <span className="rebar-estimate">{t('rebar.estimate')}</span>}
         </p>
       )}
-      {ok && calc.estimated && <p className="muted">{t('rebar.estimateHint')}</p>}
+      {ok && calc.estimated && <p className="muted rebar-estimate">{t('rebar.estimate')} · {t('rebar.estimateHint')}</p>}
     </>
   );
 }
@@ -242,23 +237,15 @@ function SpecFields({ spec, onChange }: { spec: BarSpec; onChange: (patch: Parti
 function LevelSection({
   level,
   reinforcement,
-  calc,
   onChange,
   action,
 }: {
   level: RebarLevel;
   reinforcement: MeshReinforcement;
-  calc: RebarCalc;
   onChange: (next: MeshReinforcement) => void;
   action?: React.ReactNode;
 }) {
   const t = useT();
-  const mine = calc.layers.filter((l) => l.level === level);
-  const levelOk = calc.status === 'ok' && mine.length > 0;
-  const levelLength = levelOk ? mine.reduce((a, l) => a + l.totalLengthM!, 0) : null;
-  const levelWeight = levelOk ? mine.reduce((a, l) => a + l.weightKg!, 0) : null;
-  const estimated = mine.some((l) => l.estimated);
-
   const directionBlock = (direction: RebarLayerDirection, spec: BarSpec | undefined, canRemove: boolean) => {
     const label = t(direction === 'long' ? 'rebar.longSide' : 'rebar.shortSide');
     if (!spec || reinforcement.mode !== 'directional') {
@@ -333,12 +320,6 @@ function LevelSection({
           ))}
         </>
       )}
-
-      {levelLength !== null && (
-        <p className="muted rebar-level-total">
-          {t('rebar.levelResult', { length: `${estimated ? '≈ ' : ''}${metres(levelLength, t)}`, weight: `${estimated ? '≈ ' : ''}${kg(levelWeight!, t)}` })}
-        </p>
-      )}
     </section>
   );
 }
@@ -359,9 +340,9 @@ function MeshSheets({ mesh, result }: { mesh: RebarMesh; result: MeshSheetsResul
         {result.levels.length > 1 ? (
           <>
             {result.levels.map((l) => (
-              <p className="rebar-sheets-line" key={l.level}>{`${t(l.level === 'bottom' ? 'rebar.levelBottom' : 'rebar.levelTop')}: ${l.sheets}`}</p>
+              <p className="rebar-sheets-line" key={l.level}>{`${t(l.level === 'bottom' ? 'rebar.levelBottom' : 'rebar.levelTop')}: ${t('quantitiesPanel.sheetsQty', { count: l.sheets })}`}</p>
             ))}
-            <div className="rebar-sheets-count">{`${t('rebar.sheets.total')}: ${result.totalSheets}`}</div>
+            <div className="rebar-sheets-count">{`${t('rebar.sheets.total')}: ${t('quantitiesPanel.sheetsQty', { count: result.totalSheets! })}`}</div>
           </>
         ) : (
           <div className="rebar-sheets-count">{t('rebar.sheets.required', { count: result.totalSheets! })}</div>
@@ -431,7 +412,8 @@ function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calib
   return (
     <div className="room-detail">
       {message && <div className="warning-box">{message}</div>}
-      <Results calc={calc} />
+      <MeshSheets mesh={mesh} result={sheets} />
+      <Results calc={calc} showLength={false} />
 
       <div className="form-grid">
         <div className="form-row">
@@ -454,12 +436,11 @@ function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calib
         ))}
       </div>
 
-      {mesh.bottom && <LevelSection level="bottom" reinforcement={mesh.bottom} calc={calc} onChange={(next) => setReinforcement(mesh.id, 'bottom', next)} />}
+      {mesh.bottom && <LevelSection level="bottom" reinforcement={mesh.bottom} onChange={(next) => setReinforcement(mesh.id, 'bottom', next)} />}
       {mesh.top && (
         <LevelSection
           level="top"
           reinforcement={mesh.top}
-          calc={calc}
           onChange={(next) => setReinforcement(mesh.id, 'top', next)}
           action={
             mesh.bottom ? (
@@ -470,8 +451,6 @@ function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calib
           }
         />
       )}
-
-      <MeshSheets mesh={mesh} result={sheets} />
 
       <label className="wi-check concrete-manual-toggle">
         <input type="checkbox" checked={manual} onChange={(e) => toggleManual(e.target.checked)} />
@@ -508,7 +487,7 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
   return (
     <div className="room-detail">
       {calc.status !== 'ok' && <div className="warning-box">{t('rebar.barsInvalid')}</div>}
-      <Results calc={calc} />
+      <Results calc={calc} showLength />
       <div className="form-grid">
         <div className="form-row">
           <label>{t('concrete.mark')}</label>

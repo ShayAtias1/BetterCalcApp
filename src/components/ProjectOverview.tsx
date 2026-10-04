@@ -327,7 +327,7 @@ export default function ProjectOverview() {
 
               {domain === 'concrete' &&
                 (structural.concrete ? <ProjectConcreteTable concrete={structural.concrete} /> : <p className="muted project-summary-empty">{t('projectOverview.emptyConcrete')}</p>)}
-              {domain === 'rebar' && (structural.rebar ? <ProjectRebarTable rebar={structural.rebar} /> : <p className="muted project-summary-empty">{t('projectOverview.emptyRebar')}</p>)}
+              {domain === 'rebar' && (structural.rebar ? <ProjectRebarTable rebar={structural.rebar} plans={plans} /> : <p className="muted project-summary-empty">{t('projectOverview.emptyRebar')}</p>)}
 
               {domain === 'finishes' && (
               <>
