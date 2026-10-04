@@ -3243,3 +3243,12 @@ html[dir='rtl'] .qty-table .col-room {
 [data-layout='compact'] .icon-btn, [data-layout='narrow'] .icon-btn { min-width: 44px; }
 [data-layout='compact'] .room-list li, [data-layout='narrow'] .room-list li { min-height: 48px; }
 [data-layout='compact'] .sidebar-content, [data-layout='narrow'] .sidebar-content { overscroll-behavior: contain; }
+
+/* The canvas owns touch gestures; panels, dialogs and ordinary document scrolling do not. */
+.pdf-viewport { touch-action: none; overscroll-behavior: contain; }
+.pdf-viewport .pdf-content { user-select: none; -webkit-user-select: none; }
+.pdf-viewport [data-plan-control], .pdf-viewport .modal-backdrop { touch-action: auto; }
+[data-layout='narrow'] .reset-view-btn { bottom: 12px; }
+@media (any-pointer: coarse) {
+  .adaptive-header :is(button, select), .adaptive-domain-picker select, .reset-view-btn { min-height: 44px; }
+}

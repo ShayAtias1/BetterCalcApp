@@ -1,3 +1,4 @@
+import { PLAN_NAVIGATION_CANCEL } from '../lib/interactionTargets';
 import { useId, useMemo, useRef, useEffect, type PointerEvent } from 'react';
 import type { Calibration, Plan, Point } from '../types';
 import type { RebarLevel, RebarMesh } from '../types/structural';
@@ -25,6 +26,17 @@ export function MeshLayoutControl({ planId, mesh, calibration }: { planId: strin
   const messageId = useId();
   const view = useMeshLayoutView(planId, mesh.id);
   const visible = useAppStore((s) => s.overlayVisible.rebar);
+  useEffect(() => {
+    const cancel = (event: Event) => {
+      const active = drag.current;
+      if (!active || !(event.target instanceof Element) || !event.target.contains(active.element)) return;
+      drag.current = null;
+      if (mesh && level) useMeshLayoutPreviewStore.getState().resetLevel(plan.id, mesh.id, level);
+      if (active.element.hasPointerCapture(active.pointerId)) active.element.releasePointerCapture(active.pointerId);
+    };
+    window.addEventListener(PLAN_NAVIGATION_CANCEL, cancel);
+    return () => window.removeEventListener(PLAN_NAVIGATION_CANCEL, cancel);
+  }, [plan.id, mesh, level]);
   const actions = useMeshLayoutPreviewStore.getState();
   const setEnabled = useMeshLayoutPreviewStore((s) => s.setEnabled);
   const setLevel = useMeshLayoutPreviewStore((s) => s.setLevel);
@@ -106,7 +118,7 @@ export function MeshSheetPreviewLayer({ preview, level, zoom, visible, interacti
       onDoubleClick={interaction ? (e) => e.stopPropagation() : undefined}>
       {preview.sheetsByLevel[shownLevel]!.map((sheet) => (
         <g key={sheet.id} data-placement-id={sheet.id}>
-          <polygon points={sheet.points} fill={REBAR_COLOR} fillOpacity={interaction?.selectedId === sheet.id ? 0.14 : 0.055} stroke={REBAR_COLOR} strokeOpacity={interaction?.selectedId === sheet.id ? 1 : 0.6} strokeWidth={(interaction?.selectedId === sheet.id ? 2 : 1) / zoom}
+          <polygon data-plan-child-interaction="mesh-sheet" points={sheet.points} fill={REBAR_COLOR} fillOpacity={interaction?.selectedId === sheet.id ? 0.14 : 0.055} stroke={REBAR_COLOR} strokeOpacity={interaction?.selectedId === sheet.id ? 1 : 0.6} strokeWidth={(interaction?.selectedId === sheet.id ? 2 : 1) / zoom}
             style={interaction ? { cursor: 'move', touchAction: 'none' } : undefined}
             onPointerDown={interaction ? (e) => interaction.start(sheet.id, e) : undefined}
             onPointerMove={interaction?.move} onPointerUp={interaction?.end} onPointerCancel={interaction?.end} onLostPointerCapture={interaction?.end} />
@@ -126,7 +138,7 @@ export function MeshLayoutOverlay({ plan, pageNumber, selectedId, zoom, visible,
   const preview = useMemo(() => automatic?.status === 'ready' && automatic.sourceKey === view.sourceKey ? renderMeshLayoutPreview(automatic.automatic, view.overrides, automatic.placementsByLevel) : automatic, [automatic, view.sourceKey, view.overrides]);
   const level = automatic?.status === 'ready' ? meshLayoutViewLevel(automatic.levels, view.level) : null;
   const editable = meshLayoutCanInteract(view, automatic, visible) && interactionAllowed && !!screenToNative;
-  const drag = useRef<{ pointerId: number; placement: MeshSheetPlacement; rotation: MeshPlacementOverride['rotation']; start: Point } | null>(null);
+  const drag = useRef<{ pointerId: number; placement: MeshSheetPlacement; rotation: MeshPlacementOverride['rotation']; start: Point; element: SVGPolygonElement } | null>(null);
   useEffect(() => () => {
     if (drag.current) {
       drag.current = null;
@@ -137,12 +149,12 @@ export function MeshLayoutOverlay({ plan, pageNumber, selectedId, zoom, visible,
   const interaction = editable && mesh && level && automatic?.status === 'ready' && screenToNative ? {
     selectedId: view.selectedPlacementId,
     start: (id: string, e: PointerEvent<SVGPolygonElement>) => {
-      if (e.button !== 0) return;
+      if (e.pointerType !== 'mouse' || e.button !== 0) return;
       e.preventDefault(); e.stopPropagation();
       const placement = applyPlacementOverrides(automatic.placementsByLevel[level]!, view.overrides[level] ?? {}).find((p) => p.id === id)!;
       actions.select(plan.id, mesh.id, id);
       drag.current = { pointerId: e.pointerId, placement, rotation: view.overrides[level]?.[id]?.rotation ?? 0,
-        start: planToLocal(screenToNative(e.clientX, e.clientY), automatic.automatic.zoneFrame!, automatic.automatic.metersPerPixel!) };
+        start: planToLocal(screenToNative(e.clientX, e.clientY), automatic.automatic.zoneFrame!, automatic.automatic.metersPerPixel!), element: e.currentTarget };
       e.currentTarget.setPointerCapture(e.pointerId);
     },
     move: (e: PointerEvent<SVGPolygonElement>) => {

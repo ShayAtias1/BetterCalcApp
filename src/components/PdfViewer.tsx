@@ -1,3 +1,5 @@
+import { usePlanNavigation } from '../hooks/usePlanNavigation';
+import { nativeHitRadius } from '../lib/interactionTargets';
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { v4 as uuid } from 'uuid';
@@ -236,8 +238,8 @@ export default function PdfViewer() {
   const deleteMarkup = useAppStore((s) => s.deleteMarkup);
   const deleteRoom = useAppStore((s) => s.deleteRoom);
 
-  const { containerRef, zoom, pan, screenToNative, handleWheel, fitToContainer, beginPanDrag, updatePanDrag, endPanDrag } =
-    useCanvasTransform();
+  const transform = useCanvasTransform();
+  const { containerRef, zoom, pan, screenToNative, handleWheel, fitToContainer, beginPanDrag, updatePanDrag, endPanDrag } = transform;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
@@ -832,6 +834,48 @@ export default function PdfViewer() {
     }
   };
 
+  const selectAt = (native: Point, hitRadius = 6 / zoom) => {
+    if (!project) return;
+      // In the Concrete tab a click picks a concrete zone and never a room; everywhere else this
+      // is the original room hit-test, untouched.
+      if (drawTarget === 'concrete') {
+        // Hidden zones are not hit-tested: an invisible zone must not catch clicks.
+        const zone = !overlayVisible.concrete ? undefined : [...concreteOf(project)].reverse().find((z) => z.pageNumber === currentPage && polygonAreaPx(z.points) > 0 && pointInPolygon(native, z.points));
+        setSelectedConcreteId(zone ? zone.id : null);
+        return;
+      }
+      // Same for the Rebar tab: only mesh zones (manual bars have no shape) and only while visible.
+      if (drawTarget === 'rebar') {
+        if (overlayVisible.rebar) {
+          for (const item of [...rebarOf(project)].reverse()) {
+            if (item.kind === 'stirrup') {
+              const hit = [...item.placements].reverse().find((p) => p.pageNumber === currentPage && (p.kind === 'line' ? hitStraightBar(native, p, hitRadius) : pointInPolygon(native, p.points)));
+              if (hit) { selectStirrupPlacement(item.id, hit.id); return; }
+              continue;
+            }
+            if (item.kind !== 'bars' || !item.drawnBars) continue;
+            const bar = [...item.drawnBars].reverse().find((b) => b.pageNumber === currentPage && hitStraightBar(native, b, hitRadius));
+            if (bar) {
+              setSelectedRebarId(item.id);
+              setSelectedDrawnBarId(bar.id);
+              return;
+            }
+          }
+        }
+        const mesh = !overlayVisible.rebar
+          ? undefined
+          : [...rebarOf(project)].reverse().find((m) => {
+            const points = m.kind === 'mesh' ? m.points : m.kind === 'bars' ? m.barsZone?.points : undefined;
+            return m.pageNumber === currentPage && points && polygonAreaPx(points) > 0 && pointInPolygon(native, points);
+          });
+        setSelectedRebarId(mesh ? mesh.id : null);
+        return;
+      }
+      // A hidden Finishes overlay is not hit-tested either.
+      const hit = !overlayVisible.finishes ? undefined : [...project.rooms].reverse().find((r) => r.pageNumber === currentPage && polygonAreaPx(r.points) > 0 && pointInPolygon(native, r.points));
+      setSelectedRoomId(hit ? hit.id : null);
+  };
+
   const handleClick = (e: MouseEvent) => {
     if (reviewOnly) return;
     if (suppressStructuralClick.current) {
@@ -948,47 +992,34 @@ export default function PdfViewer() {
       return;
     }
 
-    if (toolMode === 'select' && project) {
-      // In the Concrete tab a click picks a concrete zone and never a room; everywhere else this
-      // is the original room hit-test, untouched.
-      if (drawTarget === 'concrete') {
-        // Hidden zones are not hit-tested: an invisible zone must not catch clicks.
-        const zone = !overlayVisible.concrete ? undefined : [...concreteOf(project)].reverse().find((z) => z.pageNumber === currentPage && polygonAreaPx(z.points) > 0 && pointInPolygon(native, z.points));
-        setSelectedConcreteId(zone ? zone.id : null);
-        return;
-      }
-      // Same for the Rebar tab: only mesh zones (manual bars have no shape) and only while visible.
-      if (drawTarget === 'rebar') {
-        if (overlayVisible.rebar) {
-          for (const item of [...rebarOf(project)].reverse()) {
-            if (item.kind === 'stirrup') {
-              const hit = [...item.placements].reverse().find((p) => p.pageNumber === currentPage && (p.kind === 'line' ? hitStraightBar(native, p, 6 / zoom) : pointInPolygon(native, p.points)));
-              if (hit) { selectStirrupPlacement(item.id, hit.id); return; }
-              continue;
-            }
-            if (item.kind !== 'bars' || !item.drawnBars) continue;
-            const bar = [...item.drawnBars].reverse().find((b) => b.pageNumber === currentPage && hitStraightBar(native, b, 6 / zoom));
-            if (bar) {
-              setSelectedRebarId(item.id);
-              setSelectedDrawnBarId(bar.id);
-              return;
-            }
-          }
-        }
-        const mesh = !overlayVisible.rebar
-          ? undefined
-          : [...rebarOf(project)].reverse().find((m) => {
-            const points = m.kind === 'mesh' ? m.points : m.kind === 'bars' ? m.barsZone?.points : undefined;
-            return m.pageNumber === currentPage && points && polygonAreaPx(points) > 0 && pointInPolygon(native, points);
-          });
-        setSelectedRebarId(mesh ? mesh.id : null);
-        return;
-      }
-      // A hidden Finishes overlay is not hit-tested either.
-      const hit = !overlayVisible.finishes ? undefined : [...project.rooms].reverse().find((r) => r.pageNumber === currentPage && polygonAreaPx(r.points) > 0 && pointInPolygon(native, r.points));
-      setSelectedRoomId(hit ? hit.id : null);
-    }
+    if (toolMode === 'select') selectAt(native);
   };
+
+  const desktopStart = useRef<Pick<ReturnType<typeof useAppStore.getState>, 'project' | 'history' | 'future' | 'dirty'> | null>(null);
+  const navigation = usePlanNavigation({
+    transform, reviewOnly, contextKey: `${project?.id}:${currentPage}`,
+    onDesktopStart: () => {
+      const { project, history, future, dirty } = useAppStore.getState();
+      desktopStart.current = { project, history, future, dirty };
+    },
+    onDesktopCancel: () => {
+      const before = desktopStart.current;
+      if (before && before.project?.id === useAppStore.getState().project?.id && (handleDrag.current || markupDrag.current)) {
+        useAppStore.setState(before);
+        void useAppStore.getState().persist();
+      }
+      desktopStart.current = null;
+      structuralDrag.current = null; barDrag.current = null; handleDrag.current = null; markupDrag.current = null;
+      isPanning.current = false; endPanDrag(); regionDragStart.current = null;
+      setStructuralPreview(null); setBarPreview(null); setRegionDraft(null);
+    },
+    onTap: (x, y, target) => {
+      const markupId = target instanceof Element ? target.closest('[data-markup-id]')?.getAttribute('data-markup-id') : null;
+      if (overlayVisible.markups && markupId) { setSelectedMarkupId(markupId); return; }
+      setSelectedMarkupId(null);
+      selectAt(screenToNative(x, y), nativeHitRadius(transform.getView().zoom, 'touch', 6));
+    },
+  });
 
   if (!project) return null;
 
@@ -999,6 +1030,7 @@ export default function PdfViewer() {
     <div
       ref={containerRef}
       className={`pdf-viewport tool-${toolMode}`}
+      {...navigation}
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
@@ -1379,7 +1411,7 @@ export default function PdfViewer() {
         )}
       </div>
 
-      {textDraft && (
+      {!reviewOnly && textDraft && (
         <TextNoteDialog
           initialText={textDraft.text}
           initialRotation={textDraft.rotationDeg}
@@ -1420,6 +1452,7 @@ export default function PdfViewer() {
 
       {pageSize.width > 0 && (
         <button
+          data-plan-control="fit"
           className="btn-secondary small reset-view-btn"
           onMouseDown={(e) => e.stopPropagation()}
           onMouseUp={(e) => e.stopPropagation()}

@@ -1,3 +1,4 @@
+import { usePlanNavigation } from '../../hooks/usePlanNavigation';
 import { useWorkspaceLayout } from '../../hooks/useWorkspaceLayout';
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { v4 as uuid } from 'uuid';
@@ -261,8 +262,8 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
   const { layout, reviewOnly: inputReviewOnly } = useWorkspaceLayout();
   const reviewOnly = inputReviewOnly || layout !== 'expanded';
 
-  const { containerRef, zoom, pan, screenToNative, handleWheel, fitToContainer, beginPanDrag, updatePanDrag, endPanDrag } =
-    useCanvasTransform();
+  const transform = useCanvasTransform();
+  const { containerRef, zoom, pan, screenToNative, handleWheel, fitToContainer, beginPanDrag, updatePanDrag, endPanDrag } = transform;
 
   const originalCanvasRef = useRef<HTMLCanvasElement>(null);
   const revisedCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -633,6 +634,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
   };
 
   const handleDividerMouseDown = (e: MouseEvent) => {
+    if (reviewOnly) return;
     e.stopPropagation();
     swipeDrag.current = true;
   };
@@ -921,6 +923,32 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
     ]
   );
 
+  const desktopStart = useRef<Pick<ReturnType<typeof useCompareStore.getState>, 'comparison' | 'history' | 'future' | 'dirty'> | null>(null);
+  const navigation = usePlanNavigation({
+    transform, reviewOnly, contextKey: `${comparison?.id}:${activeRevisionId}:${currentPageKey}`,
+    onDesktopStart: () => {
+      const { comparison, history, future, dirty } = useCompareStore.getState();
+      desktopStart.current = { comparison, history, future, dirty };
+    },
+    onDesktopCancel: () => {
+      const before = desktopStart.current;
+      if (before && before.comparison?.id === useCompareStore.getState().comparison?.id && (handleDrag.current || markupDrag.current || alignDrag.current)) {
+        useCompareStore.setState(before);
+        void useCompareStore.getState().persist();
+      }
+      desktopStart.current = null;
+      handleDrag.current = null; markupDrag.current = null; alignDrag.current = null; swipeDrag.current = false;
+      isPanning.current = false; endPanDrag(); regionDragStart.current = null; setRegionDraft(null);
+    },
+    onTap: (_x, _y, target) => {
+      const element = target instanceof Element ? target : null;
+      const markupId = element?.closest('[data-markup-id]')?.getAttribute('data-markup-id');
+      const measurementId = element?.closest('[data-measurement-id]')?.getAttribute('data-measurement-id');
+      setSelectedMarkupId(annotationsVisible && markupId ? markupId : null);
+      setSelectedMeasurementId(measurementsVisible && measurementId ? measurementId : null);
+    },
+  });
+
   if (!comparison) return null;
 
   const strokeW = 2 / zoom;
@@ -955,6 +983,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
     <div
       ref={containerRef}
       className={`pdf-viewport tool-${toolMode}`}
+      {...navigation}
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
@@ -1069,7 +1098,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
               // Change items are pickable on the plan with the select tool, the same way markups
               // are — the Changes panel and the drawing select each other.
               const pickProps =
-                toolMode === 'select' && m.areaKind
+                (toolMode === 'select' || reviewOnly) && m.areaKind
                   ? { 'data-measurement-id': m.id, style: { pointerEvents: 'auto' as const, cursor: 'pointer' as const } }
                   : {};
               let labelX = 0;
@@ -1206,7 +1235,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
             {/* Finished markups */}
             {annotationsVisible &&
               orderMarkups(pageMarkups).map((m) => (
-                <MarkupShape key={m.id} markup={m} strokeW={strokeW} draggable={toolMode === 'select'} />
+                <MarkupShape key={m.id} markup={m} strokeW={strokeW} draggable={toolMode === 'select' || reviewOnly} />
               ))}
 
             {/* Resize/reshape handles for the selected markup (select tool only) */}
@@ -1269,7 +1298,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
         )}
       </div>
 
-      {textDraft && (
+      {!reviewOnly && textDraft && (
         <TextNoteDialog
           initialText={textDraft.text}
           initialRotation={textDraft.rotationDeg}
@@ -1318,6 +1347,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
 
       {pageSize.width > 0 && (
         <button
+          data-plan-control="fit"
           className="btn-secondary small reset-view-btn"
           onMouseDown={(e) => e.stopPropagation()}
           onMouseUp={(e) => e.stopPropagation()}
