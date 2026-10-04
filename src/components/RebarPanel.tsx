@@ -76,8 +76,8 @@ export default function RebarPanel() {
             <span className="detail-subtitle">{t(selected.kind === 'mesh' ? 'rebar.meshZone' : 'rebar.manualBars')}</span>
           </span>
           {selected.kind === 'mesh' && (
-            <button className="btn-ghost small" title={t('rebar.duplicate')} onClick={() => duplicateMesh(selected.id)}>
-              {t('rebar.duplicate')}
+            <button className="icon-btn" title={t('rebar.duplicate')} aria-label={t('rebar.duplicate')} onClick={() => duplicateMesh(selected.id)}>
+              <Icon name="copy" />
             </button>
           )}
           <button

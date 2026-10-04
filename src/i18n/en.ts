@@ -822,6 +822,7 @@ export const en: Dictionary = {
     empty: 'No concrete zones marked yet. Choose an element type and trace its outline on the plan.',
     page: 'Page {page}',
     back: 'Back to concrete zones',
+    duplicate: 'Duplicate element',
     delete: 'Delete concrete zone',
     deleteConfirm: 'Delete "{mark}"?',
     mark: 'Mark',

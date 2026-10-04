@@ -32,6 +32,7 @@ export default function ConcretePanel() {
   const setSelectedId = useAppStore((s) => s.setSelectedConcreteId);
   const updateElement = useAppStore((s) => s.updateConcreteElement);
   const deleteElement = useAppStore((s) => s.deleteConcreteElement);
+  const duplicateElement = useAppStore((s) => s.duplicateConcreteElement);
   const changeKind = useAppStore((s) => s.changeConcreteElementKind);
   const copyRoomsToConcrete = useAppStore((s) => s.copyRoomsToConcrete);
 
@@ -54,6 +55,9 @@ export default function ConcretePanel() {
             <span className="detail-title" dir="auto">{markLabel(selected, t)}</span>
             <span className="detail-subtitle">{t(`concrete.kinds.${selected.kind}`)}</span>
           </span>
+          <button className="icon-btn" title={t('concrete.duplicate')} aria-label={t('concrete.duplicate')} onClick={() => duplicateElement(selected.id)}>
+            <Icon name="copy" />
+          </button>
           <button
             className="icon-btn danger"
             title={t('concrete.delete')}

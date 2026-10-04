@@ -1,4 +1,5 @@
-import { rebarOf } from '../lib/structuralPlan';
+import { concreteOf, rebarOf } from '../lib/structuralPlan';
+import { hasManualMark, nextAutoNumber } from '../lib/structuralMarks';
 import { withRenewedLayerIds } from '../lib/rebarMesh';
 import { editManualMeshLayout, renewManualMeshSheetIds, type ManualMeshEdit } from '../lib/manualMeshLayout';
 import { create } from 'zustand';
@@ -337,6 +338,7 @@ interface AppState {
   updateConcreteElement: (id: string, patch: Partial<Omit<ConcreteElement, 'id'>>) => void;
   /** Changes the kind of an existing zone (mark renumbered if still automatic). One undo step. */
   changeConcreteElementKind: (id: string, kind: ConcreteKind) => void;
+  duplicateConcreteElement: (id: string) => void;
   deleteConcreteElement: (id: string) => void;
   /**
    * Copies the outlines of existing rooms into new concrete zones of the chosen kind (the room itself
@@ -1019,6 +1021,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
     set({ project: { ...updateConcrete(project, id, patch), updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
+  duplicateConcreteElement: (id) => {
+    const { project } = get();
+    const source = project && concreteOf(project).find((element) => element.id === id);
+    if (!project || !source) return;
+    const copy = { ...structuredClone(source), id: uuid() };
+    if (!hasManualMark(copy)) copy.autoNumber = nextAutoNumber(concreteOf(project), copy.kind);
+    historyTracker.push(get, set, project);
+    set({ project: { ...addConcreteElement(project, copy), updatedAt: Date.now() }, selectedConcreteId: copy.id });
     scheduleSave(get, set);
   },
   changeConcreteElementKind: (id, kind) => {
