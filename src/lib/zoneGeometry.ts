@@ -77,3 +77,31 @@ export function zoneGeometry(points: Point[], metersPerPixel: number, override?:
   const sides = isRectangle(points) ? sidesOf(distancePx(points[0], points[1]) * mpp, distancePx(points[1], points[2]) * mpp) : null;
   return { areaM2, sides, fromOverride: false };
 }
+
+/**
+ * A rectangle's local frame in native plan pixels. Local X follows the long edge; local Y points
+ * into the rectangle along its short side. Axes are orthonormal; near-rectangles accepted by the
+ * existing angle tolerance are aligned to the long edge. Winding may reflect Y, so keep both axes
+ * instead of assuming a rotation alone is enough. This helper does not measure quantities.
+ */
+export interface RectangleLocalFrame {
+  originPx: Point;
+  xAxis: Point;
+  yAxis: Point;
+}
+
+export function rectangleLocalFrame(points: Point[]): RectangleLocalFrame | null {
+  if (!points.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)) || !isRectangle(points)) return null;
+  const first = distancePx(points[0], points[1]);
+  const second = distancePx(points[1], points[2]);
+  if (!Number.isFinite(first) || !Number.isFinite(second)) return null;
+  const firstIsLong = first >= second;
+  const origin = points[firstIsLong ? 0 : 1];
+  const end = points[firstIsLong ? 1 : 2];
+  const inward = points[firstIsLong ? 3 : 0];
+  const edgeLength = firstIsLong ? first : second;
+  const xAxis = { x: (end.x - origin.x) / edgeLength, y: (end.y - origin.y) / edgeLength };
+  const perpendicular = { x: -xAxis.y, y: xAxis.x };
+  const sign = (inward.x - origin.x) * perpendicular.x + (inward.y - origin.y) * perpendicular.y >= 0 ? 1 : -1;
+  return { originPx: { ...origin }, xAxis, yAxis: { x: perpendicular.x * sign, y: perpendicular.y * sign } };
+}
