@@ -69,7 +69,7 @@ export function MeshLayoutControl({ planId, mesh, calibration }: { planId: strin
             <button className="btn-ghost small" disabled={(levelProcurement?.sheets ?? 0) >= MAX_MESH_PREVIEW_SHEETS} onClick={() => editLayout(mesh.id, level, { type: 'add' })}>{t('rebar.layout.add')}</button>
             {selected && <>
               <p>{t('rebar.layout.selectedSheet', { number: selectedIndex + 1, count: levelProcurement?.sheets ?? 0 })}</p>
-              <button className="btn-ghost small" onClick={() => editLayout(mesh.id, level, { type: 'rotate', id: selected.id })}>{t('rebar.layout.rotate')}</button>
+              <div className="concrete-kinds" role="group" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               <button className="btn-ghost small" disabled={placements.length >= MAX_MESH_PREVIEW_SHEETS} onClick={() => {
                 const before = useAppStore.getState().project;
                 editLayout(mesh.id, level, { type: 'duplicate', id: selected.id });
@@ -79,7 +79,9 @@ export function MeshLayoutControl({ planId, mesh, calibration }: { planId: strin
                 const duplicate = item?.kind === 'mesh' ? item.manualLayouts?.[level]?.sheets.at(-1) : undefined;
                 if (duplicate) actions.select(planId, mesh.id, duplicate.id);
               }}>{t('rebar.layout.duplicate')}</button>
+              <button className="btn-ghost small" onClick={() => editLayout(mesh.id, level, { type: 'rotate', id: selected.id })}>{t('rebar.layout.rotate')}</button>
               <button className="btn-ghost small" onClick={() => { editLayout(mesh.id, level, { type: 'remove', id: selected.id }); actions.setLevel(planId, mesh.id, level); }}>{t('rebar.layout.remove')}</button>
+              </div>
             </>}
             <button className="btn-ghost small" disabled={!mesh.manualLayouts?.[level]} onClick={() => { actions.resetLevel(planId, mesh.id, level); editLayout(mesh.id, level, { type: 'reset' }); }}>{t('rebar.layout.reset')}</button>
           </>}
