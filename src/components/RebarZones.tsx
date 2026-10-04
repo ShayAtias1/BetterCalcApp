@@ -22,12 +22,14 @@ export default function RebarZones({
   strokeW,
   zoom,
   calibration,
+  selectedBarId,
 }: {
   items: RebarItem[];
   selectedId: string | null;
   strokeW: number;
   zoom: number;
   calibration: Calibration | null;
+  selectedBarId: string | null;
 }) {
   const t = useT();
   const language = useLanguage();
@@ -43,8 +45,16 @@ export default function RebarZones({
         return <g key={item.id}>
           {overlay.points.length >= 3 && <polygon points={overlay.points.map((p) => `${p.x},${p.y}`).join(' ')} fill={REBAR_COLOR} fillOpacity={selected ? 0.09 : 0.03}
             stroke={REBAR_COLOR} strokeWidth={strokeW} strokeDasharray={`${3 / zoom} ${3 / zoom}`} />}
-          {overlay.lines.map((line, index) => <line key={index} x1={line.start.x} y1={line.start.y} x2={line.end.x} y2={line.end.y}
-            stroke={REBAR_COLOR} strokeWidth={selected ? strokeW * 1.5 : strokeW} />)}
+          {overlay.lines.map((line, index) => {
+            const physical = item.drawnBars?.[index];
+            const active = selected && physical?.id === selectedBarId;
+            return <g key={physical?.id ?? index}>
+              <line x1={line.start.x} y1={line.start.y} x2={line.end.x} y2={line.end.y}
+                stroke={REBAR_COLOR} strokeWidth={active ? strokeW * 2 : selected ? strokeW * 1.5 : strokeW} />
+              {active && [line.start, line.end].map((p, end) => <circle key={end} cx={p.x} cy={p.y} r={4 / zoom}
+                fill="#fff" stroke={REBAR_COLOR} strokeWidth={strokeW} />)}
+            </g>;
+          })}
           {overlay.center && overlay.rows.map((row, index) => <text key={index} x={overlay.center!.x} y={overlay.center!.y + index * 12 / zoom}
             fontSize={10.5 / zoom} fill={REBAR_COLOR} textAnchor="middle" direction={labelDirection(row, language)}
             paintOrder="stroke" stroke="#fff" strokeWidth={3 / zoom} strokeLinejoin="round">{row}</text>)}

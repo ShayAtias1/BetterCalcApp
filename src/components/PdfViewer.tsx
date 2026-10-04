@@ -41,6 +41,8 @@ import RebarZones from './RebarZones';
 import { MeshLayoutOverlay } from './MeshLayoutPreview';
 import { concreteOf, rebarOf } from '../lib/structuralPlan';
 import { updateConcreteElement, updateRebarItem } from '../lib/structuralMutations';
+import type { DrawnStraightBar } from '../types/structural';
+import { hitStraightBar, translateBar } from '../lib/straightBarsGeometry';
 import { useMeshLayoutView } from '../store/meshLayoutPreviewStore';
 
 const VERTEX_HIT_RADIUS_SCREEN = 9;
@@ -166,6 +168,9 @@ export default function PdfViewer() {
   const drawTarget = useAppStore((s) => s.drawTarget);
   const barsDrawing = useAppStore((s) => s.barsDrawing);
   const finishDrawnBar = useAppStore((s) => s.finishDrawnBar);
+  const selectedDrawnBarId = useAppStore((s) => s.selectedDrawnBarId);
+  const setSelectedDrawnBarId = useAppStore((s) => s.setSelectedDrawnBarId);
+  const editDrawnBar = useAppStore((s) => s.editDrawnBar);
   const selectedConcreteId = useAppStore((s) => s.selectedConcreteId);
   const setSelectedConcreteId = useAppStore((s) => s.setSelectedConcreteId);
   const selectedRebarId = useAppStore((s) => s.selectedRebarId);
@@ -235,9 +240,18 @@ export default function PdfViewer() {
   const [structuralPreview, setStructuralPreview] = useState<{
     kind: 'concrete' | 'mesh' | 'bars'; id: string; points: Point[];
   } | null>(null);
+  const barDrag = useRef<{ itemId: string; bar: DrawnStraightBar; start: Point; endpoint: 'start' | 'end' | null; preview: DrawnStraightBar | null } | null>(null);
+  const [barPreview, setBarPreview] = useState<{ itemId: string; bar: DrawnStraightBar } | null>(null);
   const suppressStructuralClick = useRef(false);
   const structuralPlan = useMemo(() => {
-    if (!project || !structuralPreview) return project;
+    if (!project) return project;
+    if (barPreview) {
+      const item = rebarOf(project).find((i) => i.id === barPreview.itemId);
+      if (item?.kind === 'bars' && item.drawnBars) return updateRebarItem(project, item.id, {
+        drawnBars: item.drawnBars.map((bar) => bar.id === barPreview.bar.id ? barPreview.bar : bar),
+      });
+    }
+    if (!structuralPreview) return project;
     return structuralPreview.kind === 'concrete'
       ? updateConcreteElement(project, structuralPreview.id, { points: structuralPreview.points })
       : (() => {
@@ -246,13 +260,15 @@ export default function PdfViewer() {
           ? updateRebarItem(project, item.id, { barsZone: { ...item.barsZone, points: structuralPreview.points } })
           : updateRebarItem(project, structuralPreview.id, { points: structuralPreview.points });
       })();
-  }, [project, structuralPreview]);
+  }, [project, structuralPreview, barPreview]);
 
   // Changing selection, page or editing context cancels an uncommitted whole-zone drag.
   useEffect(() => {
     structuralDrag.current = null;
+    barDrag.current = null;
+    setBarPreview(null);
     setStructuralPreview(null);
-  }, [project, currentPage, toolMode, drawTarget, selectedConcreteId, selectedRebarId,
+  }, [project, currentPage, toolMode, drawTarget, selectedConcreteId, selectedRebarId, selectedDrawnBarId,
     overlayVisible.concrete, overlayVisible.rebar, meshLayoutView.editing]);
 
   const spaceHeld = useRef(false);
@@ -539,6 +555,17 @@ export default function PdfViewer() {
       const selected = drawTarget === 'concrete'
         ? overlayVisible.concrete && concreteOf(project).find((item) => item.id === selectedConcreteId)
         : overlayVisible.rebar && rebarOf(project).find((item) => item.id === selectedRebarId);
+      if (selected && selected.kind === 'bars' && selected.drawnBars && overlayVisible.rebar) {
+        const bar = selected.drawnBars.find((b) => b.id === selectedDrawnBarId && b.pageNumber === currentPage);
+        if (bar) {
+          const endpointIndex = nearestPointIndex([bar.start, bar.end], native, VERTEX_HIT_RADIUS_SCREEN / zoom);
+          if (endpointIndex >= 0 || hitStraightBar(native, bar, 6 / zoom)) {
+            barDrag.current = { itemId: selected.id, bar, start: native,
+              endpoint: endpointIndex === 0 ? 'start' : endpointIndex === 1 ? 'end' : null, preview: null };
+          }
+        }
+        return;
+      }
       const points = selected && ('points' in selected ? selected.points : selected.kind === 'bars' ? selected.barsZone?.points : undefined);
       if (selected && points && selected.pageNumber === currentPage && pointInPolygon(native, points)) {
         structuralDrag.current = {
@@ -589,6 +616,16 @@ export default function PdfViewer() {
 
   const handleMouseMove = (e: MouseEvent) => {
     if (isPanning.current && updatePanDrag(e.clientX, e.clientY)) {
+      return;
+    }
+    if (barDrag.current) {
+      const drag = barDrag.current;
+      const native = screenToNative(e.clientX, e.clientY);
+      const offset = { x: native.x - drag.start.x, y: native.y - drag.start.y };
+      if (!suppressStructuralClick.current && Math.hypot(offset.x, offset.y) * zoom < 3) return;
+      suppressStructuralClick.current = true;
+      drag.preview = drag.endpoint ? { ...drag.bar, [drag.endpoint]: native } : translateBar(drag.bar, offset);
+      setBarPreview({ itemId: drag.itemId, bar: drag.preview });
       return;
     }
     if (structuralDrag.current) {
@@ -655,6 +692,13 @@ export default function PdfViewer() {
   };
 
   const handleMouseUp = () => {
+    if (barDrag.current) {
+      const drag = barDrag.current;
+      barDrag.current = null;
+      setBarPreview(null);
+      if (drag.preview) editDrawnBar(drag.itemId, drag.preview);
+      return;
+    }
     if (structuralDrag.current) {
       const drag = structuralDrag.current;
       structuralDrag.current = null;
@@ -693,7 +737,7 @@ export default function PdfViewer() {
   };
 
   const handleDoubleClick = (e: MouseEvent) => {
-    if (toolMode !== 'select') return;
+    if (toolMode !== 'select' || drawTarget === 'rebar' || drawTarget === 'concrete') return;
     // Double-clicking a text note reopens it for editing.
     const bodyTarget = (e.target as Element).closest?.('[data-markup-id]');
     const noteId = bodyTarget?.getAttribute('data-markup-id');
@@ -833,6 +877,17 @@ export default function PdfViewer() {
       }
       // Same for the Rebar tab: only mesh zones (manual bars have no shape) and only while visible.
       if (drawTarget === 'rebar') {
+        if (overlayVisible.rebar) {
+          for (const item of [...rebarOf(project)].reverse()) {
+            if (item.kind !== 'bars' || !item.drawnBars) continue;
+            const bar = [...item.drawnBars].reverse().find((b) => b.pageNumber === currentPage && hitStraightBar(native, b, 6 / zoom));
+            if (bar) {
+              setSelectedRebarId(item.id);
+              setSelectedDrawnBarId(bar.id);
+              return;
+            }
+          }
+        }
         const mesh = !overlayVisible.rebar
           ? undefined
           : [...rebarOf(project)].reverse().find((m) => {
@@ -930,7 +985,7 @@ export default function PdfViewer() {
             )}
             <MeshLayoutOverlay plan={structuralPlan ?? project} pageNumber={currentPage} selectedId={selectedRebarId} zoom={zoom} visible={overlayVisible.rebar} screenToNative={screenToNative} interactionAllowed={toolMode === 'select'} />
             {overlayVisible.rebar && (
-              <RebarZones calibration={project.pages[currentPage]?.calibration ?? null} items={rebarOf(structuralPlan ?? project).filter((m) => m.pageNumber === currentPage)} selectedId={selectedRebarId} strokeW={strokeW} zoom={zoom} />
+              <RebarZones selectedBarId={selectedDrawnBarId} calibration={project.pages[currentPage]?.calibration ?? null} items={rebarOf(structuralPlan ?? project).filter((m) => m.pageNumber === currentPage)} selectedId={selectedRebarId} strokeW={strokeW} zoom={zoom} />
             )}
 
             {/* Detection suggestions: dashed, faint and unselectable, so they never read as rooms

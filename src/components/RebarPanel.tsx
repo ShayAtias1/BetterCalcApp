@@ -16,6 +16,7 @@ import ExistingAreaPicker from './ExistingAreaPicker';
 import { MeshLayoutControl } from './MeshLayoutPreview';
 import NumberField from './NumberField';
 import Icon from './Icon';
+import { drawnBarLength } from '../lib/straightBarsGeometry';
 
 type T = ReturnType<typeof useT>;
 
@@ -494,6 +495,12 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
   const removeZone = useAppStore((s) => s.removeBarsZone);
   const startLine = useAppStore((s) => s.startDrawingBar);
   const individualMode = useAppStore((s) => s.setBarsIndividualMode);
+  const selectedBarId = useAppStore((s) => s.selectedDrawnBarId);
+  const selectBar = useAppStore((s) => s.setSelectedDrawnBarId);
+  const resizeBar = useAppStore((s) => s.resizeDrawnBar);
+  const duplicateBar = useAppStore((s) => s.duplicateDrawnBar);
+  const deleteBar = useAppStore((s) => s.deleteDrawnBar);
+  const selectedBar = bars.drawnBars?.find((bar) => bar.id === selectedBarId);
   const calibration = plan?.pages[bars.pageNumber]?.calibration ?? null;
   const calc = resolveStraightBars(bars, calibration);
   const zone = bars.barsZone;
@@ -509,6 +516,21 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
       {bars.drawnBars !== undefined ? <>
         <button className="btn-ghost small" onClick={() => startLine(bars.id)}>{t('rebar.spatial.drawBar')}</button>
         <p className="muted">{t('rebar.spatial.count', { count: calc.count ?? '-' })}</p>
+        {selectedBar && <section className="rebar-direction">
+          <div className="rebar-direction-head">
+            <span>{t('rebar.spatial.selectedBar')}</span>
+            <button className="icon-btn" title={t('rebar.spatial.duplicateBar')} aria-label={t('rebar.spatial.duplicateBar')}
+              onClick={() => duplicateBar(bars.id, selectedBar.id)}><Icon name="copy" /></button>
+            <button className="icon-btn danger" title={t('rebar.spatial.deleteBar')} aria-label={t('rebar.spatial.deleteBar')}
+              onClick={() => deleteBar(bars.id, selectedBar.id)}><Icon name="trash" /></button>
+            <button className="btn-ghost small" onClick={() => selectBar(null)}>{t('rebar.spatial.doneEditing')}</button>
+          </div>
+          {calibration ? <div className="form-row">
+            <label>{t('rebar.barLength')} ({t('units.m')})</label>
+            <NumberField value={drawnBarLength(selectedBar, calibration.metersPerPixel) ?? undefined}
+              onChange={(v) => { if (v) resizeBar(bars.id, selectedBar.id, v); }} />
+          </div> : <p className="muted">{t('concrete.noScale')}</p>}
+        </section>}
       </> : <div className="concrete-kinds">
         <button className="btn-ghost small" onClick={() => startZone(bars.id)}>{t(zone ? 'rebar.spatial.changeZone' : 'rebar.spatial.markArea')}</button>
         {zone && <button className="btn-ghost small danger" onClick={() => removeZone(bars.id)}>{t('rebar.spatial.removeZone')}</button>}
