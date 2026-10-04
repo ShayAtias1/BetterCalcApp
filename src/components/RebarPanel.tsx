@@ -3,7 +3,7 @@ import { useAppStore } from '../store/appStore';
 import type { Calibration } from '../types';
 import type { BarSpec, MeshReinforcement, RebarBars, RebarItem, RebarLayerDirection, RebarLevel, RebarMesh } from '../types/structural';
 import { REBAR_DIAMETERS_MM, calculateRebar, type RebarCalc } from '../lib/rebar';
-import { calculateMeshSheets, type MeshSheetsResult } from '../lib/meshSheets';
+import { resolveMeshProcurement, type MeshSheetsResult } from '../lib/meshSheets';
 import { levelChoice, meshLevels, specNotation, withDirection, withMode, withoutDirection, withoutExtra, withSpec } from '../lib/rebarMesh';
 import type { MeshLevelChoice } from '../lib/structuralMutations';
 import { cmToMeters, metersToCm } from '../lib/structuralUnits';
@@ -393,7 +393,7 @@ function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calib
   const setReinforcement = useAppStore((s) => s.setRebarMeshReinforcement);
   const copyBottomToTop = useAppStore((s) => s.copyRebarBottomToTop);
   const calc = calculateRebar(mesh, calibration);
-  const sheets = calculateMeshSheets(mesh, calibration);
+  const sheets = resolveMeshProcurement(mesh, calibration);
   const message = statusMessage(calc, t);
   const manual = !!mesh.sizeOverride;
   const choice = levelChoice(mesh);

@@ -5,10 +5,11 @@ import { useT } from '../i18n';
 import { meshLevels } from '../lib/rebarMesh';
 import { rebarOf } from '../lib/structuralPlan';
 import { REBAR_COLOR } from '../lib/structuralOverlay';
-import { prepareMeshLayoutPreview, renderMeshLayoutPreview, meshLayoutViewLevel, meshPreviewLabelsVisible, type MeshLayoutPreview } from '../lib/meshLayoutPreview';
+import { MAX_MESH_PREVIEW_SHEETS, prepareMeshLayoutPreview, renderMeshLayoutPreview, meshLayoutViewLevel, meshPreviewLabelsVisible, type MeshLayoutPreview } from '../lib/meshLayoutPreview';
 import { useMeshLayoutPreviewStore, useMeshLayoutView, meshLayoutCanInteract } from '../store/meshLayoutPreviewStore';
 
-import { applyPlacementOverrides, planToLocal, movePlacement, rotatePlacement, type MeshPlacementOverride } from '../lib/meshLayoutEditing';
+import { applyPlacementOverrides, planToLocal, movePlacement, type MeshPlacementOverride } from '../lib/meshLayoutEditing';
+import { resolveMeshProcurement } from '../lib/meshSheets';
 import type { MeshSheetPlacement } from '../lib/meshSheetPlacement';
 import { useAppStore } from '../store/appStore';
 
@@ -32,9 +33,16 @@ export function MeshLayoutControl({ planId, mesh, calibration }: { planId: strin
   const level = meshLayoutViewLevel(levels, view.level);
   const editing = meshLayoutCanInteract(view, preview, visible);
   const overrides = preview?.status === 'ready' && view.sourceKey === preview.sourceKey ? view.overrides : {};
-  const automatic = preview?.status === 'ready' && level ? preview.automatic.placementsByLevel[level] ?? [] : [];
-  const selectedIndex = automatic.findIndex((p) => p.id === view.selectedPlacementId);
-  const selected = applyPlacementOverrides(automatic, level ? overrides[level] ?? {} : {})[selectedIndex];
+  const placements = preview?.status === 'ready' && level ? preview.placementsByLevel[level] ?? [] : [];
+  const selectedIndex = placements.findIndex((p) => p.id === view.selectedPlacementId);
+  const selected = applyPlacementOverrides(placements, level ? overrides[level] ?? {} : {})[selectedIndex];
+  const procurement = resolveMeshProcurement(mesh, calibration);
+  const levelProcurement = procurement.levels.find((entry) => entry.level === level);
+  const manual = levelProcurement?.source === 'manual';
+  const editLayout = useAppStore((s) => s.editMeshLayout);
+  useEffect(() => {
+    if (view.selectedPlacementId && selectedIndex < 0 && level) actions.setLevel(planId, mesh.id, level);
+  }, [view.selectedPlacementId, selectedIndex, level, planId, mesh.id, actions]);
   const message = preview && preview.status !== 'ready' ? t(MESSAGE_KEY[preview.status]) : null;
   return (
     <div className="rebar-layout-control">
@@ -58,16 +66,21 @@ export function MeshLayoutControl({ planId, mesh, calibration }: { planId: strin
             actions.setEditing(planId, mesh.id, !editing, preview, visible);
           }}>{t(editing ? 'rebar.layout.exitEdit' : 'rebar.layout.edit')}</button>
           {editing && <>
-            <p className="muted" role="status">{t('rebar.layout.quantityNotice')}</p>
-            <p className="muted">{t('rebar.layout.sessionNotice')}</p>
+            <button className="btn-ghost small" disabled={(levelProcurement?.sheets ?? 0) >= MAX_MESH_PREVIEW_SHEETS} onClick={() => editLayout(mesh.id, level, { type: 'add' })}>{t('rebar.layout.add')}</button>
             {selected && <>
-              <p>{t('rebar.layout.selectedSheet', { number: selectedIndex + 1, count: automatic.length })}</p>
-              <button className="btn-ghost small" onClick={() => actions.setOverride(planId, mesh.id, level, rotatePlacement(selected, overrides[level]?.[selected.id]?.rotation))}>{t('rebar.layout.rotate')}</button>
+              <p>{t('rebar.layout.selectedSheet', { number: selectedIndex + 1, count: levelProcurement?.sheets ?? 0 })}</p>
+              <button className="btn-ghost small" onClick={() => editLayout(mesh.id, level, { type: 'rotate', id: selected.id })}>{t('rebar.layout.rotate')}</button>
+              <button className="btn-ghost small" onClick={() => { editLayout(mesh.id, level, { type: 'remove', id: selected.id }); actions.setLevel(planId, mesh.id, level); }}>{t('rebar.layout.remove')}</button>
             </>}
-            <button className="btn-ghost small" disabled={!Object.keys(overrides[level] ?? {}).length} onClick={() => actions.resetLevel(planId, mesh.id, level)}>{t('rebar.layout.reset')}</button>
+            <button className="btn-ghost small" disabled={!mesh.manualLayouts?.[level]} onClick={() => { actions.resetLevel(planId, mesh.id, level); editLayout(mesh.id, level, { type: 'reset' }); }}>{t('rebar.layout.reset')}</button>
           </>}
         </>
       )}
+      {manual && <>
+        <p role="status">{t('rebar.layout.manual')} · {t('rebar.layout.sheetCount', { count: levelProcurement!.sheets })}</p>
+        <p className="muted">{t('rebar.layout.coverageNotice')}</p>
+      </>}
+      <p className="muted">{t('rebar.layout.settingsNotice')}</p>
       {message && <p className="muted" id={messageId} role="status">{message}</p>}
     </div>
   );
@@ -108,18 +121,23 @@ export function MeshLayoutOverlay({ plan, pageNumber, selectedId, zoom, visible,
   const view = useMeshLayoutView(plan.id, mesh?.id ?? '');
   const calibration = mesh ? plan.pages[mesh.pageNumber]?.calibration ?? null : null;
   const automatic = useMemo(() => visible && mesh && view.enabled ? prepareMeshLayoutPreview(mesh, calibration) : null, [visible, mesh, calibration, view.enabled]);
-  const preview = useMemo(() => automatic?.status === 'ready' && automatic.sourceKey === view.sourceKey ? renderMeshLayoutPreview(automatic.automatic, view.overrides) : automatic, [automatic, view.sourceKey, view.overrides]);
+  const preview = useMemo(() => automatic?.status === 'ready' && automatic.sourceKey === view.sourceKey ? renderMeshLayoutPreview(automatic.automatic, view.overrides, automatic.placementsByLevel) : automatic, [automatic, view.sourceKey, view.overrides]);
   const level = automatic?.status === 'ready' ? meshLayoutViewLevel(automatic.levels, view.level) : null;
   const editable = meshLayoutCanInteract(view, automatic, visible) && interactionAllowed && !!screenToNative;
   const drag = useRef<{ pointerId: number; placement: MeshSheetPlacement; rotation: MeshPlacementOverride['rotation']; start: Point } | null>(null);
-  useEffect(() => { drag.current = null; }, [editable, level, mesh?.id, plan.id, automatic]);
+  useEffect(() => () => {
+    if (drag.current) {
+      drag.current = null;
+      if (mesh && level) useMeshLayoutPreviewStore.getState().resetLevel(plan.id, mesh.id, level);
+    }
+  }, [editable, level, mesh, plan.id, automatic]);
   const actions = useMeshLayoutPreviewStore.getState();
   const interaction = editable && mesh && level && automatic?.status === 'ready' && screenToNative ? {
     selectedId: view.selectedPlacementId,
     start: (id: string, e: PointerEvent<SVGPolygonElement>) => {
       if (e.button !== 0) return;
       e.preventDefault(); e.stopPropagation();
-      const placement = applyPlacementOverrides(automatic.automatic.placementsByLevel[level]!, view.overrides[level] ?? {}).find((p) => p.id === id)!;
+      const placement = applyPlacementOverrides(automatic.placementsByLevel[level]!, view.overrides[level] ?? {}).find((p) => p.id === id)!;
       actions.select(plan.id, mesh.id, id);
       drag.current = { pointerId: e.pointerId, placement, rotation: view.overrides[level]?.[id]?.rotation ?? 0,
         start: planToLocal(screenToNative(e.clientX, e.clientY), automatic.automatic.zoneFrame!, automatic.automatic.metersPerPixel!) };
@@ -134,7 +152,12 @@ export function MeshLayoutOverlay({ plan, pageNumber, selectedId, zoom, visible,
     },
     end: (e: PointerEvent<SVGPolygonElement>) => {
       if (drag.current?.pointerId !== e.pointerId) return;
-      e.stopPropagation(); drag.current = null;
+      e.stopPropagation();
+      const active = drag.current;
+      const override = useMeshLayoutPreviewStore.getState().views[JSON.stringify([plan.id, mesh.id])]?.overrides[level]?.[active.placement.id];
+      drag.current = null;
+      if (override && e.type === 'pointerup') useAppStore.getState().editMeshLayout(mesh.id, level, { type: 'move', id: active.placement.id, x: override.x, y: override.y });
+      actions.resetLevel(plan.id, mesh.id, level);
       if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
     },
   } : undefined;

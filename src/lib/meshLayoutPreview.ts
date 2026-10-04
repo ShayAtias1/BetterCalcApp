@@ -1,9 +1,10 @@
 /** V2B presentation geometry only: map V2A's full physical sheets into native plan pixels. */
+import { manualMeshPlacements } from './manualMeshLayout';
 import type { Calibration, Point } from '../types';
 import type { RebarLevel, RebarMesh } from '../types/structural';
 import { applyPlacementOverrides, localToPlan, type MeshPlacementOverrides } from './meshLayoutEditing';
-import { calculateMeshSheetPlacements, type MeshSheetPlacementLayout } from './meshSheetPlacement';
-import { calculateMeshSheets } from './meshSheets';
+import { calculateMeshSheetPlacements, type MeshSheetPlacementLayout, type MeshSheetPlacement } from './meshSheetPlacement';
+import { calculateMeshSheets, resolveMeshProcurement } from './meshSheets';
 import { finitePositive, isRectangle, zoneGeometry } from './zoneGeometry';
 
 /** Per visible level, not a procurement limit. Never truncate the proposed grid. */
@@ -19,6 +20,7 @@ export interface MeshPreviewSheet {
 export interface MeshLayoutPreviewReady {
   status: 'ready';
   automatic: MeshSheetPlacementLayout;
+  placementsByLevel: Partial<Record<RebarLevel, MeshSheetPlacement[]>>;
   /** Compact geometry signature, so old overrides cannot attach to a changed proposed grid. */
   sourceKey: string;
   levels: RebarLevel[];
@@ -55,11 +57,20 @@ export function prepareMeshLayoutPreview(mesh: RebarMesh, calibration: Calibrati
   if (layout.status !== 'ok') return { status: 'unavailable' };
   const { zoneFrame: frame, metersPerPixel } = layout;
   if (!frame || metersPerPixel === null) return { status: 'no-plan-geometry' };
-  return renderMeshLayoutPreview(layout);
+  if (resolveMeshProcurement(mesh, calibration).status !== 'ok') return { status: 'unavailable' };
+  const placementsByLevel = { ...layout.placementsByLevel };
+  for (const level of Object.keys(placementsByLevel) as RebarLevel[]) {
+    const manual = mesh.manualLayouts?.[level];
+    if (manual) {
+      if (manual.sheets.length > MAX_MESH_PREVIEW_SHEETS) return { status: 'too-large' };
+      placementsByLevel[level] = manualMeshPlacements(manual, layout.placementsByLevel[level]![0]);
+    }
+  }
+  return renderMeshLayoutPreview(layout, {}, placementsByLevel);
 }
 
 /** Render the automatic source plus session overrides, without changing V2A. */
-export function renderMeshLayoutPreview(layout: MeshSheetPlacementLayout, overrides: Partial<Record<RebarLevel, MeshPlacementOverrides>> = {}): MeshLayoutPreview {
+export function renderMeshLayoutPreview(layout: MeshSheetPlacementLayout, overrides: Partial<Record<RebarLevel, MeshPlacementOverrides>> = {}, placementsByLevel = layout.placementsByLevel): MeshLayoutPreview {
   const frame = layout.zoneFrame;
   const metersPerPixel = layout.metersPerPixel;
   if (!frame || metersPerPixel === null) return { status: 'no-plan-geometry' };
@@ -67,7 +78,7 @@ export function renderMeshLayoutPreview(layout: MeshSheetPlacementLayout, overri
   const sheetsByLevel: MeshLayoutPreviewReady['sheetsByLevel'] = {};
   const levels = Object.keys(layout.placementsByLevel) as RebarLevel[];
   for (const level of levels) {
-    sheetsByLevel[level] = applyPlacementOverrides(layout.placementsByLevel[level]!, overrides[level] ?? {}).map((p, index) => {
+    sheetsByLevel[level] = applyPlacementOverrides(placementsByLevel[level]!, overrides[level] ?? {}).map((p, index) => {
       const corners = [mapPoint(p.x, p.y), mapPoint(p.x + p.width, p.y), mapPoint(p.x + p.width, p.y + p.height), mapPoint(p.x, p.y + p.height)];
       const inset = Math.min(p.width, p.height) * 0.18;
       // Keep identifiers away from the zone's central mark/specification label when possible.
@@ -88,5 +99,5 @@ export function renderMeshLayoutPreview(layout: MeshSheetPlacementLayout, overri
   }
   const sourceKey = JSON.stringify([frame, metersPerPixel, layout.zoneDimensions, layout.sheetDimensions,
     layout.overlapM, layout.orientation, layout.rows, layout.columns, levels.map((level) => layout.placementsByLevel[level]![0].id)]);
-  return { status: 'ready', automatic: layout, sourceKey, levels, sheetsByLevel, labelSpacingPx };
+  return { status: 'ready', automatic: layout, placementsByLevel, sourceKey, levels, sheetsByLevel, labelSpacingPx };
 }

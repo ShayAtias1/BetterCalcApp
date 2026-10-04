@@ -906,13 +906,18 @@ export const en: Dictionary = {
     copyBottomToTop: 'Copy Bottom to Top',
     copyBottomToTopHint: 'Starts Top from the same values - each level stays editable on its own',
     layout: {
+      add: 'Add sheet',
+      remove: 'Remove sheet',
+      manual: 'Manual layout',
+      sheetCount: '{count} sheets',
+      coverageNotice: 'Quantity is based on the manual layout. Zone coverage is not automatically verified.',
+      settingsNotice: 'Changing sheet length or width resets manual layouts. Changing overlap preserves them.',
+
       edit: 'Edit layout',
       exitEdit: 'Exit layout editing',
       rotate: 'Rotate 90°',
       reset: 'Reset to proposed layout',
       selectedSheet: 'Sheet {number} of {count}',
-      quantityNotice: 'Layout edits do not affect quantities yet',
-      sessionNotice: 'Layout edits are temporary and reset on reload.',
 
       show: 'Show mesh layout',
       viewLevel: 'Layout viewing level',

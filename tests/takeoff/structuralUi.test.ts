@@ -256,8 +256,9 @@ for (const language of ['en', 'he'] as const) {
     assert.ok(!text(control()).includes(t('rebar.layout.rotate')));
     actions.setEditing(p.id, mesh.id, true, preview, true);
     assert.ok(text(control()).includes(t('rebar.layout.exitEdit')));
-    assert.ok(text(control()).includes(t('rebar.layout.quantityNotice')));
-    assert.ok(text(control()).includes(t('rebar.layout.sessionNotice')));
+    assert.ok(text(control()).includes(t('rebar.layout.add')));
+    assert.ok(!text(control()).includes('Layout edits do not affect quantities yet'));
+    assert.ok(text(control()).includes(t('rebar.layout.settingsNotice')));
     assert.match(control(), /disabled=""[^>]*>[^<]*<\/button>/);
     assert.ok(overlay().includes('pointer-events="auto"'));
     assert.ok(overlay(true, false).includes('pointer-events="none"'));
@@ -267,7 +268,7 @@ for (const language of ['en', 'he'] as const) {
     assert.ok(overlay().includes('fill-opacity="0.14"'));
     actions.setOverride(p.id, mesh.id, 'bottom', { placementId: first.id, x: -4, y: 9, rotation: 90 });
     const moved = overlay();
-    assert.ok(!control().includes('disabled=""'));
+    assert.ok(control().includes('disabled=""'));
     assert.equal(overlay(false), '');
     useAppStore.getState().setOverlayVisible('rebar', false);
     assert.ok(!text(control()).includes(t('rebar.layout.edit')));
@@ -295,5 +296,70 @@ for (const language of ['en', 'he'] as const) {
     assert.deepEqual(useAppStore.getState().project, before);
     assert.equal(useAppStore.getState().history, history);
     assert.deepEqual(buildProjectStructural([p]), quantities);
+  });
+}
+
+test('saved layout actions use the existing plan undo/redo history, including dimensions reset', () => {
+  const p = plan();
+  useAppStore.getState().setProject(p);
+  const automatic = calculateMeshSheetPlacements(mesh, p.pages[1].calibration);
+  assert.equal(automatic.status, 'ok');
+  const id = automatic.placementsByLevel.bottom![0].id;
+  const state = () => useAppStore.getState();
+  const current = () => state().project!;
+  const actions = [
+    { type: 'move', id, x: -10, y: 5 },
+    { type: 'rotate', id }, { type: 'add' }, { type: 'remove', id }, { type: 'reset' },
+  ] as const;
+  for (const action of actions) {
+    const before = current();
+    state().editMeshLayout(mesh.id, 'bottom', action);
+    const after = current();
+    assert.notEqual(after, before);
+    state().undo();
+    assert.deepEqual(current(), before);
+    state().redo();
+    assert.deepEqual(current(), after);
+  }
+  state().editMeshLayout(mesh.id, 'top', { type: 'add' });
+  const before = current();
+  state().updateRebarItem(mesh.id, { sheets: { lengthM: 4 } });
+  const changed = current();
+  assert.equal((changed.rebarItems![0] as RebarMesh).manualLayouts, undefined);
+  state().undo(); assert.deepEqual(current(), before);
+  state().redo(); assert.deepEqual(current(), changed);
+  useAppStore.getState().setProject(null);
+});
+
+for (const language of ['en', 'he'] as const) {
+  test(`saved manual layout exposes resolved count, add/remove and coverage notice [${language}]`, () => {
+    useLanguageStore.getState().setLanguage(language);
+    const t = translatorFor(language);
+    const p = plan();
+    useAppStore.getState().setProject(p);
+    useAppStore.getState().setSelectedRebarId(mesh.id);
+    useAppStore.getState().setOverlayVisible('rebar', true);
+    useMeshLayoutPreviewStore.setState({ views: {} });
+    const actions = useMeshLayoutPreviewStore.getState();
+    actions.setEnabled(p.id, mesh.id, true);
+    const preview = prepareMeshLayoutPreview(mesh, p.pages[1].calibration);
+    actions.setEditing(p.id, mesh.id, true, preview, true);
+    useAppStore.getState().editMeshLayout(mesh.id, 'bottom', { type: 'add' });
+    const saved = useAppStore.getState().project!.rebarItems!.find((r) => r.id === mesh.id) as RebarMesh;
+    const control = () => render(createElement(MeshLayoutControl, { planId: p.id, mesh: saved, calibration: p.pages[1].calibration }));
+    const html = text(control());
+    assert.ok(html.includes(t('rebar.layout.manual')));
+    assert.ok(html.includes(t('rebar.layout.sheetCount', { count: 5 })));
+    assert.ok(html.includes(t('rebar.layout.coverageNotice')));
+    assert.ok(!html.includes('Layout edits do not affect quantities yet'));
+    assert.ok(!control().includes('disabled=""'));
+    const added = saved.manualLayouts!.bottom!.sheets.at(-1)!;
+    actions.select(p.id, mesh.id, added.id);
+    assert.ok(text(control()).includes(t('rebar.layout.remove')));
+    assert.ok(text(render(createElement(RebarPanel))).includes(t('quantitiesPanel.sheetsQty', { count: 5 })));
+    useAppStore.getState().editMeshLayout(mesh.id, 'bottom', { type: 'remove', id: added.id });
+    actions.setLevel(p.id, mesh.id, 'bottom');
+    assert.equal(useMeshLayoutPreviewStore.getState().views[JSON.stringify([p.id, mesh.id])].selectedPlacementId, null);
+    useAppStore.getState().setProject(null);
   });
 }

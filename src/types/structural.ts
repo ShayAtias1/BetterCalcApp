@@ -95,6 +95,19 @@ export interface MeshSheetSettings {
   overlapM?: number;
 }
 
+/** Local metres and absolute quarter-turn rotation; dimensions are snapshotted once per level. */
+export interface ManualMeshSheet {
+  id: string;
+  x: number;
+  y: number;
+  rotation: 0 | 90 | 180 | 270;
+}
+export interface ManualMeshLayout {
+  lengthM: number;
+  widthM: number;
+  sheets: ManualMeshSheet[];
+}
+
 /**
  * Area reinforcement: a marked zone plus its reinforcement levels. A level that is present is
  * enabled (Bottom, Top, or both); an absent one does not exist. Each level is specified on its own —
@@ -116,6 +129,8 @@ export interface RebarMesh extends MarkFields {
   sizeOverride?: SizeOverride;
   /** Physical sheet size and overlap for procurement (lib/meshSheets). Absent = defaults. */
   sheets?: MeshSheetSettings;
+  /** Absent level = automatic. An empty saved sheets array is a manual count of zero. */
+  manualLayouts?: Partial<Record<RebarLevel, ManualMeshLayout>>;
 }
 
 /** Bars entered by quantity — no shape on the plan: diameter, how many, how long each. */

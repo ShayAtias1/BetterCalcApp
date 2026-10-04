@@ -120,6 +120,8 @@ export function planSheetsForRectangle(longM: number, shortM: number, settings: 
 export type MeshSheetsStatus = 'ok' | 'no-scale' | 'missing-size' | 'no-levels' | 'invalid-settings' | 'not-rectangular';
 
 export interface MeshLevelSheets {
+  /** Absent on the original automatic result; manual resolution marks each available source. */
+  source?: 'automatic' | 'manual';
   level: RebarLevel;
   sheets: number;
   purchasedAreaM2: number;
@@ -171,4 +173,32 @@ export function calculateMeshSheets(raw: RebarMesh, calibration: Calibration | n
     purchasedAreaM2: perLevel * levels.length * sheetArea,
     basis: 'exact',
   };
+}
+
+/** Single procurement resolver for forms, reports and exports. V2A remains automatic-only. */
+export function resolveMeshProcurement(raw: RebarMesh, calibration: Calibration | null): MeshSheetsResult {
+  const mesh = normalizeMesh(raw);
+  const automatic = calculateMeshSheets(mesh, calibration);
+  if (!mesh.manualLayouts || Object.keys(mesh.manualLayouts).length === 0 || automatic.settingsProblem || automatic.status === 'no-levels') return automatic;
+  const enabled = meshLevels(mesh);
+  // Reject malformed/stale saved data rather than silently resize it or report a false quantity.
+  for (const { level } of enabled) {
+    const manual = mesh.manualLayouts[level];
+    if (manual && (manual.lengthM !== automatic.settings.lengthM || manual.widthM !== automatic.settings.widthM ||
+      !Array.isArray(manual.sheets) || manual.sheets.some((s) => !s || !s.id || !Number.isFinite(s.x) || !Number.isFinite(s.y) || ![0, 90, 180, 270].includes(s.rotation)) ||
+      new Set(manual.sheets.map((s) => s.id)).size !== manual.sheets.length || !Number.isFinite(manual.sheets.length * manual.lengthM * manual.widthM))) {
+      return { ...automatic, status: 'invalid-settings', settingsProblem: 'size', levels: [], totalSheets: null, purchasedAreaM2: null, basis: null };
+    }
+  }
+  const levels: MeshLevelSheets[] = enabled.flatMap<MeshLevelSheets>(({ level }) => {
+    const manual = mesh.manualLayouts?.[level];
+    if (manual) return [{ level, source: 'manual' as const, sheets: manual.sheets.length,
+      purchasedAreaM2: manual.sheets.length * manual.lengthM * manual.widthM }];
+    const entry = automatic.levels.find((l) => l.level === level);
+    return entry ? [{ ...entry, source: 'automatic' as const }] : [];
+  });
+  const complete = levels.length === enabled.length;
+  return { ...automatic, status: complete ? 'ok' : automatic.status, levels,
+    totalSheets: complete ? levels.reduce((sum, l) => sum + l.sheets, 0) : null,
+    purchasedAreaM2: complete ? levels.reduce((sum, l) => sum + l.purchasedAreaM2, 0) : null };
 }

@@ -1,5 +1,6 @@
 import { v4 as uuid } from 'uuid';
 import type { Plan } from '../types';
+import { renewManualMeshSheetIds } from './manualMeshLayout';
 import { withRenewedLayerIds } from './rebarMesh';
 
 /**
@@ -34,7 +35,7 @@ export function clonePlanForDuplicate(source: Plan, name: string): Plan {
       ? {
           rebarItems: copy.rebarItems.map((item) =>
             item.kind === 'mesh'
-              ? { ...withRenewedLayerIds(item), id: uuid() }
+              ? { ...renewManualMeshSheetIds(withRenewedLayerIds(item), uuid), id: uuid() }
               : { ...item, id: uuid() }
           ),
         }

@@ -16,7 +16,7 @@ import type { Plan } from '../types';
 import type { ConcreteKind, RebarLevel } from '../types/structural';
 import { calculateConcrete, type ConcreteStatus } from './concrete';
 import { calculateRebar, incompleteSpecCount, type RebarLayerCalc, type RebarStatus } from './rebar';
-import { calculateMeshSheets, type MeshSheetsResult, type ResolvedSheetSettings } from './meshSheets';
+import { resolveMeshProcurement, type MeshSheetsResult, type ResolvedSheetSettings } from './meshSheets';
 import { round } from './geometry';
 import { CONCRETE_KINDS } from './structuralMutations';
 import { concreteOf, rebarOf } from './structuralPlan';
@@ -442,7 +442,7 @@ export function buildRebarLevelRows(plan: Plan, pages?: ReadonlySet<number>): Re
     if (!mesh || level === null) return null;
     let result = sheetsOf.get(itemId);
     if (!result) {
-      result = calculateMeshSheets(mesh, plan.pages[mesh.pageNumber]?.calibration ?? null);
+      result = resolveMeshProcurement(mesh, plan.pages[mesh.pageNumber]?.calibration ?? null);
       sheetsOf.set(itemId, result);
     }
     return { count: result.levels.find((l) => l.level === level)?.sheets ?? null, settings: result.settings };

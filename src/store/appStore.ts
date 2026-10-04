@@ -1,3 +1,5 @@
+import { rebarOf } from '../lib/structuralPlan';
+import { editManualMeshLayout, type ManualMeshEdit } from '../lib/manualMeshLayout';
 import { create } from 'zustand';
 import { v4 as uuid } from 'uuid';
 import type { AreaCalcMode, AreaKind, AreaShape, Calibration, ExportRegion, Markup, MarkupTool, Measurement, MeasureTool, Opening, OpeningType, Point, Plan, Project, Room, ToolMode, WorkItem, WorkType } from '../types';
@@ -345,6 +347,8 @@ interface AppState {
   setSelectedRebarId: (id: string | null) => void;
   /** Debounced into one undo step per burst, like typing in a room's fields. */
   updateRebarItem: (id: string, patch: RebarPatch) => void;
+  /** One physical layout action, one undo step; drag commits on release. */
+  editMeshLayout: (id: string, level: RebarLevel, edit: ManualMeshEdit) => void;
   /** Adds a manual-bars row on the current page and selects it. */
   addRebarBars: () => void;
   deleteRebarItem: (id: string) => void;
@@ -1041,6 +1045,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     return created.length;
   },
   setSelectedRebarId: (id) => set({ selectedRebarId: id }),
+  editMeshLayout: (id, level, edit) => {
+    const { project } = get();
+    const mesh = project && rebarOf(project).find((i) => i.id === id && i.kind === 'mesh');
+    if (!project || !mesh || mesh.kind !== 'mesh') return;
+    const next = editManualMeshLayout(mesh, project.pages[mesh.pageNumber]?.calibration ?? null, level, edit, uuid);
+    if (next === mesh) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, id, { manualLayouts: next.manualLayouts }), updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
   updateRebarItem: (id, patch) => {
     const { project } = get();
     if (!project) return;
