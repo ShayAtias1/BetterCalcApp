@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import ReviewFields from './ReviewFields';
 import { formatNumber, useT } from '../i18n';
 import { useAppStore } from '../store/appStore';
 import type { Calibration } from '../types';
@@ -49,7 +51,8 @@ function itemSummary(item: RebarItem, t: T, resolved?: ReturnType<typeof resolve
   return parts.join(' · ');
 }
 
-export default function RebarPanel() {
+export default function RebarPanel({ readOnly = false }: { readOnly?: boolean }) {
+  const [filter, setFilter] = useState<'all' | 'mesh' | 'bars' | 'stirrup'>('all');
   const t = useT();
   const project = useAppStore((s) => s.project);
   const currentPage = useAppStore((s) => s.currentPage);
@@ -85,7 +88,7 @@ export default function RebarPanel() {
             <span className="detail-title" dir="auto">{markLabel(selected, t)}</span>
             <span className="detail-subtitle">{t(selected.kind === 'mesh' ? 'rebar.meshZone' : selected.kind === 'stirrup' ? 'rebar.stirrupName' : selected.kind === 'bars' && selected.barsZone ? 'rebar.bars' : selected.kind === 'bars' && selected.drawnBars !== undefined ? 'rebar.spatial.individual' : 'rebar.manualBars')}</span>
           </span>
-          <button className="icon-btn" title={t(selected.kind === 'mesh' ? 'rebar.duplicate' : selected.kind === 'stirrup' ? 'rebar.stirrup.duplicateItem' : 'rebar.spatial.duplicateItem')} aria-label={t(selected.kind === 'mesh' ? 'rebar.duplicate' : selected.kind === 'stirrup' ? 'rebar.stirrup.duplicateItem' : 'rebar.spatial.duplicateItem')} onClick={() => selected.kind === 'mesh' ? duplicateMesh(selected.id) : selected.kind === 'stirrup' ? duplicateStirrup(selected.id) : duplicateBars(selected.id)}>
+          {!readOnly && <><button className="icon-btn" title={t(selected.kind === 'mesh' ? 'rebar.duplicate' : selected.kind === 'stirrup' ? 'rebar.stirrup.duplicateItem' : 'rebar.spatial.duplicateItem')} aria-label={t(selected.kind === 'mesh' ? 'rebar.duplicate' : selected.kind === 'stirrup' ? 'rebar.stirrup.duplicateItem' : 'rebar.spatial.duplicateItem')} onClick={() => selected.kind === 'mesh' ? duplicateMesh(selected.id) : selected.kind === 'stirrup' ? duplicateStirrup(selected.id) : duplicateBars(selected.id)}>
             <Icon name="copy" />
           </button>
           <button
@@ -97,12 +100,12 @@ export default function RebarPanel() {
           >
             <Icon name="trash" />
           </button>
-        </div>
-        {selected.kind === 'mesh' ? (
+        </>}</div>
+        <ReviewFields readOnly={readOnly}>{selected.kind === 'mesh' ? (
           <MeshDetail key={selected.id} mesh={selected} calibration={project.pages[selected.pageNumber]?.calibration ?? null} />
         ) : selected.kind === 'stirrup' ? <StirrupDetail key={selected.id} item={selected} /> : (
           <BarsDetail key={selected.id} bars={selected} />
-        )}
+        )}</ReviewFields>
       </div>
     );
   }
@@ -115,6 +118,7 @@ export default function RebarPanel() {
 
   return (
     <div className="room-panel">
+      <div hidden={readOnly}>
       <div className="room-create-row">
         <button className={`btn-primary ${toolMode === 'draw' ? 'active' : ''}`} onClick={() => toggleTool('draw')} title={t('rebar.drawHint')}>
           {t('rebar.draw')}
@@ -143,6 +147,10 @@ export default function RebarPanel() {
         <button className="btn-ghost small" onClick={() => addStirrup()}><Icon name="plus" size={13} />{t('rebar.stirrup.addItem')}</button>
       </div>
 
+      </div>
+      {readOnly && <label className="adaptive-domain-picker">{t('workspace.tabs.rebar')}<select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
+        <option value="all">{t('adaptive.allRebar')}</option><option value="mesh">{t('adaptive.mesh')}</option><option value="bars">{t('adaptive.bars')}</option><option value="stirrup">{t('adaptive.stirrups')}</option>
+      </select></label>}
       <div className="room-list">
         <span className="section-label">{t('rebar.items', { count: items.length })}</span>
         {items.length === 0 && (
@@ -152,7 +160,7 @@ export default function RebarPanel() {
           </div>
         )}
         <ul>
-          {items.map((item) => {
+          {items.filter((item) => filter === 'all' || item.kind === filter).map((item) => {
             const calc = calculateRebar(item, project.pages[item.pageNumber]?.calibration ?? null, project.pages);
             return (
               <li key={item.id} onClick={() => select(item)}>

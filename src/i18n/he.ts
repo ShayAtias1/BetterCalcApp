@@ -14,6 +14,15 @@ export const he = {
     language: 'שפה',
   },
 
+  adaptive: {
+    close: 'סגור',
+    plan: 'תוכנית', items: 'פריטים', quantities: 'כמויות', domain: 'תחום',
+    sheet: 'גיליון', sheets: 'גיליונות', view: 'תצוגה', more: 'עוד',
+    browse: 'עיון', reviewOnly: 'מצב עיון · עריכה במגע תתווסף בהמשך',
+    mesh: 'רשתות', bars: 'מוטות', stirrups: 'חישוקים', allRebar: 'כל הזיון',
+    revision: 'גרסה',
+  },
+
   units: {
     m: "מ'",
     m2: 'מ"ר',

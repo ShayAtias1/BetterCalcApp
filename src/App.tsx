@@ -17,6 +17,9 @@ import ConcretePanel from './components/ConcretePanel';
 import RebarPanel from './components/RebarPanel';
 import CompareWorkspace from './components/compare/CompareWorkspace';
 import BrandLogo from './components/BrandLogo';
+import AdaptiveInspector from './components/AdaptiveInspector';
+import CompactPlanHeader from './components/CompactPlanHeader';
+import { WorkspaceLayoutProvider, useWorkspaceLayout } from './hooks/useWorkspaceLayout';
 import LanguageSwitch from './components/LanguageSwitch';
 import { useT } from './i18n';
 
@@ -28,60 +31,63 @@ function Workspace() {
   const [tab, setTab] = useState<SidebarTab>('rooms');
   const planId = useAppStore((s) => s.project?.id);
 
-  // The Concrete and Rebar tabs are what make a finished polygon or rectangle a concrete or rebar
-  // zone; every other tab keeps the original behavior (a room). Each tab clears the selections of
-  // the others, so only one kind of item is ever open. Re-asserted when the plan changes, because
-  // opening or closing a plan resets the store's target while this tab state survives.
-  useEffect(() => {
+  const { layout, reviewOnly } = useWorkspaceLayout();
+  const [destination, setDestination] = useState<'plan' | 'items' | 'quantities'>('plan');
+  const drawTarget = useAppStore((s) => s.drawTarget);
+  const activeTab = tab === 'measure' || tab === 'markup' ? tab : drawTarget === 'room' ? 'rooms' : drawTarget;
+  // Only an explicit context choice changes the authoring domain. Panel visibility is independent.
+  const chooseTab = (next: SidebarTab) => {
+    setTab(next);
     const store = useAppStore.getState();
-    store.setDrawTarget(tab === 'concrete' ? 'concrete' : tab === 'rebar' ? 'rebar' : 'room');
-    if (tab === 'concrete' || tab === 'rebar') store.setSelectedRoomId(null);
-    if (tab !== 'concrete') store.setSelectedConcreteId(null);
-    if (tab !== 'rebar') store.setSelectedRebarId(null);
-  }, [tab, planId]);
+    const target = next === 'concrete' ? 'concrete' : next === 'rebar' ? 'rebar' : 'room';
+    if (store.drawTarget !== target && store.toolMode !== 'select' && store.toolMode !== 'pan') store.setToolMode('select');
+    store.setDrawTarget(target);
+  };
+  useEffect(() => { setTab('rooms'); setDestination('plan'); }, [planId]);
 
   return (
     <div className="workspace">
-      <TopBar />
+      {layout === 'expanded' && !reviewOnly ? <TopBar /> : <CompactPlanHeader />}
+      {layout !== 'expanded' && <div className="compact-workspace-actions">
+        <span className="muted">{t('adaptive.browse')}</span>
+        <button className="btn-ghost" aria-expanded={destination === 'items'} onClick={() => setDestination(destination === 'items' ? 'plan' : 'items')}>{t('adaptive.items')}</button>
+        <button className="btn-ghost" aria-expanded={destination === 'quantities'} onClick={() => setDestination(destination === 'quantities' ? 'plan' : 'quantities')}>{t('adaptive.quantities')}</button>
+      </div>}
       {/* Canvas + sidebar on one row; the quantities panel is a sibling BELOW that row, so opening
           it shortens the row instead of covering the plan, and the canvas gets the space back when
           it closes. Nothing here changes the canvas transform. */}
       <div className="workspace-body">
-        <Toolbar />
+        {!reviewOnly && <Toolbar />}
         <div className="viewer-area">
           <PdfViewer />
-          <CalibrationDialog />
+          {!reviewOnly && <CalibrationDialog />}
         </div>
-        <div className="sidebar">
+        <AdaptiveInspector open={destination === 'items'} onClose={() => setDestination('plan')} title={t('adaptive.items')}>
           {/* Page + calibration state sits above the tabs, so it is present in every tab. */}
-          <PageStatusBar />
-          <div className="sidebar-tabs content-sized">
-            <button className={tab === 'rooms' ? 'active' : ''} onClick={() => setTab('rooms')}>
-              {t('workspace.tabs.rooms')}
-            </button>
-            <button className={tab === 'concrete' ? 'active' : ''} onClick={() => setTab('concrete')}>
-              {t('workspace.tabs.concrete')}
-            </button>
-            <button className={tab === 'rebar' ? 'active' : ''} onClick={() => setTab('rebar')}>
-              {t('workspace.tabs.rebar')}
-            </button>
-            <button className={tab === 'measure' ? 'active' : ''} onClick={() => setTab('measure')}>
-              {t('workspace.tabs.measure')}
-            </button>
-            <button className={tab === 'markup' ? 'active' : ''} onClick={() => setTab('markup')}>
-              {t('workspace.tabs.markup')}
-            </button>
-          </div>
+          <PageStatusBar readOnly={reviewOnly} />
+          {layout === 'expanded' ? <div className="sidebar-tabs content-sized">
+            {(['rooms', 'concrete', 'rebar', 'measure', 'markup'] as const).filter((next) => !reviewOnly || (next !== 'measure' && next !== 'markup')).map((next) =>
+              <button key={next} className={activeTab === next ? 'active' : ''} onClick={() => chooseTab(next)}>{t(`workspace.tabs.${next}`)}</button>)}
+          </div> : <label className="adaptive-domain-picker">{t('adaptive.domain')}
+            <select value={activeTab} onChange={(e) => chooseTab(e.target.value as SidebarTab)}>
+              {(['rooms', 'concrete', 'rebar', 'measure', 'markup'] as const).filter((next) => !reviewOnly || (next !== 'measure' && next !== 'markup')).map((next) =>
+                <option key={next} value={next}>{t(`workspace.tabs.${next}`)}</option>)}
+            </select>
+          </label>}
+          {reviewOnly && <p className="adaptive-review-note muted">{t('adaptive.reviewOnly')}</p>}
           <div className="sidebar-content">
-            {tab === 'rooms' && <RoomPanel />}
-            {tab === 'measure' && <MeasureToolbar />}
-            {tab === 'markup' && <MarkupToolbar />}
-            {tab === 'concrete' && <ConcretePanel />}
-            {tab === 'rebar' && <RebarPanel />}
+            {activeTab === 'rooms' && <RoomPanel readOnly={reviewOnly} />}
+            {!reviewOnly && activeTab === 'measure' && <MeasureToolbar />}
+            {!reviewOnly && activeTab === 'markup' && <MarkupToolbar />}
+            {activeTab === 'concrete' && <ConcretePanel readOnly={reviewOnly} />}
+            {activeTab === 'rebar' && <RebarPanel readOnly={reviewOnly} />}
           </div>
-        </div>
+        </AdaptiveInspector>
       </div>
-      <QuantitiesPanel />
+      <QuantitiesPanel mobileOpen={destination === 'quantities'} onMobileClose={() => setDestination('plan')} />
+      {layout === 'narrow' && <nav className="mobile-destinations" aria-label={t('adaptive.plan')}>
+        {(['plan', 'items', 'quantities'] as const).map((next) => <button key={next} aria-current={destination === next ? 'page' : undefined} onClick={() => setDestination(next)}>{t(`adaptive.${next}`)}</button>)}
+      </nav>
       <QuantityExportDialogs />
     </div>
   );
@@ -139,7 +145,7 @@ function useUnsavedChangesGuard() {
   }, [dirty]);
 }
 
-export default function App() {
+function AppContent() {
   // `project` is the open plan; `currentProject` the project folder around it.
   const plan = useAppStore((s) => s.project);
   const currentProject = useAppStore((s) => s.currentProject);
@@ -149,4 +155,8 @@ export default function App() {
   if (comparison) return <CompareWorkspace />;
   if (currentProject) return <ProjectOverview />;
   return <Home />;
+}
+
+export default function App() {
+  return <WorkspaceLayoutProvider><AppContent /></WorkspaceLayoutProvider>;
 }

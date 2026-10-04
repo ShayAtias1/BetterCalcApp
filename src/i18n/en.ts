@@ -21,6 +21,15 @@ export const en: Dictionary = {
     language: 'Language',
   },
 
+  adaptive: {
+    close: 'Close',
+    plan: 'Plan', items: 'Items', quantities: 'Quantities', domain: 'Domain',
+    sheet: 'Sheet', sheets: 'Sheets', view: 'View', more: 'More',
+    browse: 'Browse', reviewOnly: 'Review mode · touch editing comes later',
+    mesh: 'Mesh', bars: 'Bars', stirrups: 'Stirrups', allRebar: 'All reinforcement',
+    revision: 'Revision',
+  },
+
   units: {
     m: 'm',
     m2: 'm²',

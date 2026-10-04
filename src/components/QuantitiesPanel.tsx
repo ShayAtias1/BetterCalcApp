@@ -1,3 +1,4 @@
+import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../store/appStore';
 import QuantityTable from './QuantityTable';
@@ -24,7 +25,9 @@ const MAXIMIZED_RESERVED = 140;
  *
  * Its height lives in session UI state; nothing here is persisted with the project.
  */
-export default function QuantitiesPanel() {
+export default function QuantitiesPanel({ mobileOpen = false, onMobileClose }: { mobileOpen?: boolean; onMobileClose?: () => void }) {
+  const { layout, reviewOnly } = useWorkspaceLayout();
+  const desktop = layout === 'expanded';
   const t = useT();
   const open = useAppStore((s) => s.quantitiesOpen);
   const setOpen = useAppStore((s) => s.setQuantitiesOpen);
@@ -87,7 +90,9 @@ export default function QuantitiesPanel() {
   const counts = { finishes: roomCount, concrete: concreteOf(project).length, rebar: rebarOf(project).length };
   const domainLabel = { finishes: 'workspace.tabs.rooms', concrete: 'workspace.tabs.concrete', rebar: 'workspace.tabs.rebar' } as const;
 
-  if (!open) {
+  if (!desktop && !mobileOpen) return null;
+
+  if (desktop && !open) {
     return (
       <div className="qty-panel-collapsed">
         <button className="btn-ghost small qty-open-btn" onClick={() => setOpen(true)} title={t('quantitiesPanel.open')}>
@@ -101,11 +106,11 @@ export default function QuantitiesPanel() {
 
   return (
     <section
-      className={`qty-panel ${resizing ? 'resizing' : ''} ${maximized ? 'maximized' : ''}`}
-      style={{ height: effectiveHeight }}
+      className={`qty-panel ${desktop ? '' : 'adaptive-quantity-sheet'} ${resizing ? 'resizing' : ''} ${maximized ? 'maximized' : ''}`}
+      style={desktop ? { height: effectiveHeight } : undefined}
       aria-label={t('quantitiesPanel.region')}
     >
-      <button
+      {desktop && <button
         className="qty-panel-resizer"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -114,13 +119,13 @@ export default function QuantitiesPanel() {
         onKeyDown={onResizerKeyDown}
         aria-label={t('quantitiesPanel.resize')}
         title={t('quantitiesPanel.resizeHint')}
-      />
+      />}
       <header className="qty-panel-head">
         <Icon name="table" size={18} />
         <h2 className="qty-panel-title">{t('quantitiesPanel.title')}</h2>
         <span className="qty-panel-meta">{t('quantitiesPanel.roomsInProject', { count: roomCount })}</span>
         <div className="qty-panel-actions">
-          {domain === 'finishes' && (
+          {!reviewOnly && domain === 'finishes' && (
           <button
             className={`btn-ghost small ${showDefaults ? 'active' : ''}`}
             onClick={() => setShowDefaults((v) => !v)}
@@ -132,14 +137,14 @@ export default function QuantitiesPanel() {
           )}
           <span className="top-bar-sep" />
           <QuantityExportActions variant="buttons" />
-          <button
+          {desktop && <button
             className="icon-btn"
             onClick={toggleMaximized}
             title={maximized ? t('quantitiesPanel.restore') : t('quantitiesPanel.maximize')}
           >
             <Icon name={maximized ? 'collapse' : 'expand'} />
-          </button>
-          <button className="icon-btn" onClick={() => setOpen(false)} title={t('quantitiesPanel.close')}>
+          </button>}
+          <button className="icon-btn" onClick={() => desktop ? setOpen(false) : onMobileClose?.()} title={t('quantitiesPanel.close')}>
             <Icon name="close" />
           </button>
         </div>
@@ -153,7 +158,7 @@ export default function QuantitiesPanel() {
         ))}
       </div>
       <div className="qty-panel-body">
-        {domain === 'finishes' && <QuantityTable showDefaults={showDefaults} />}
+        {domain === 'finishes' && <QuantityTable showDefaults={!reviewOnly && showDefaults} />}
         {domain === 'concrete' &&
           (counts.concrete === 0 ? <p className="muted qty-domain-empty">{t('quantitiesPanel.emptyConcrete')}</p> : <ConcreteQuantityTable plan={project} />)}
         {domain === 'rebar' &&

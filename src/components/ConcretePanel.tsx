@@ -1,3 +1,4 @@
+import ReviewFields from './ReviewFields';
 import { useT, formatNumber } from '../i18n';
 import { useAppStore } from '../store/appStore';
 import type { Calibration } from '../types';
@@ -19,7 +20,7 @@ function volumeText(calc: ConcreteCalc, t: ReturnType<typeof useT>, field: 'volu
   return v === null ? t('concrete.notCalculable') : `${formatNumber(round(v, 2))} ${t('units.m3')}`;
 }
 
-export default function ConcretePanel() {
+export default function ConcretePanel({ readOnly = false }: { readOnly?: boolean }) {
   const t = useT();
   const project = useAppStore((s) => s.project);
   const currentPage = useAppStore((s) => s.currentPage);
@@ -55,7 +56,7 @@ export default function ConcretePanel() {
             <span className="detail-title" dir="auto">{markLabel(selected, t)}</span>
             <span className="detail-subtitle">{t(`concrete.kinds.${selected.kind}`)}</span>
           </span>
-          <button className="icon-btn" title={t('concrete.duplicate')} aria-label={t('concrete.duplicate')} onClick={() => duplicateElement(selected.id)}>
+          {!readOnly && <><button className="icon-btn" title={t('concrete.duplicate')} aria-label={t('concrete.duplicate')} onClick={() => duplicateElement(selected.id)}>
             <Icon name="copy" />
           </button>
           <button
@@ -67,15 +68,15 @@ export default function ConcretePanel() {
           >
             <Icon name="trash" />
           </button>
-        </div>
-        <ConcreteDetail
+        </>}</div>
+        <ReviewFields readOnly={readOnly}><ConcreteDetail
           key={selected.id}
           element={selected}
           siblings={elements}
           calibration={project.pages[selected.pageNumber]?.calibration ?? null}
           onUpdate={(patch) => updateElement(selected.id, patch)}
           onChangeKind={(kind) => changeKind(selected.id, kind)}
-        />
+        /></ReviewFields>
       </div>
     );
   }
@@ -88,6 +89,7 @@ export default function ConcretePanel() {
 
   return (
     <div className="room-panel">
+      <div hidden={readOnly}>
       <div className="concrete-kinds" role="group" aria-label={t('concrete.kindPicker')}>
         {CONCRETE_KINDS.map((kind) => (
           <button
@@ -132,6 +134,7 @@ export default function ConcretePanel() {
         doneLabel={(count) => t('concrete.copy.done', { count })}
       />
 
+      </div>
       <div className="room-list">
         <span className="section-label">{t('concrete.zones', { count: elements.length })}</span>
         {elements.length === 0 && (

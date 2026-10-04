@@ -1,3 +1,4 @@
+import ReviewFields from './ReviewFields';
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { useAppStore } from '../store/appStore';
@@ -33,7 +34,7 @@ const OPENING_TYPES: OpeningType[] = ['door', 'window', 'custom'];
  */
 const SHOW_AUTO_DETECT = false;
 
-export default function RoomPanel() {
+export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) {
   const t = useT();
   const project = useAppStore((s) => s.project);
   const selectedRoomId = useAppStore((s) => s.selectedRoomId);
@@ -74,6 +75,8 @@ export default function RoomPanel() {
     lastOpened.current = manuallyCreatedRoomId;
   }, [manuallyCreatedRoomId]);
 
+  useEffect(() => { if (readOnly && selectedRoomId) setDetailOpen(true); }, [readOnly, selectedRoomId]);
+
   if (!project) return null;
   const apartmentNumbers = apartmentNumbersInProject(project);
   const groups = groupRoomsByApartment(project);
@@ -107,7 +110,7 @@ export default function RoomPanel() {
               {detailRoom.apartmentNumber ? t('rooms.apartment', { apartment: detailRoom.apartmentNumber }) : t('rooms.unassigned')}
             </span>
           </span>
-          <button className="icon-btn" title={t('rooms.duplicate')} onClick={() => duplicateRoom(detailRoom.id)}>
+          {!readOnly && <><button className="icon-btn" title={t('rooms.duplicate')} onClick={() => duplicateRoom(detailRoom.id)}>
             <Icon name="copy" />
           </button>
           <button
@@ -121,8 +124,8 @@ export default function RoomPanel() {
           >
             <Icon name="trash" />
           </button>
-        </div>
-        <RoomDetail
+        </>}</div>
+        <ReviewFields readOnly={readOnly}><RoomDetail
           key={detailRoom.id}
           room={detailRoom}
           project={project}
@@ -136,7 +139,7 @@ export default function RoomPanel() {
           onAddOpening={(type) => addOpening(detailRoom.id, type)}
           onUpdateOpening={(openingId, patch) => updateOpening(detailRoom.id, openingId, patch)}
           onRemoveOpening={(openingId) => removeOpening(detailRoom.id, openingId)}
-        />
+        /></ReviewFields>
       </div>
     );
   }
@@ -152,6 +155,7 @@ export default function RoomPanel() {
       {/* Suggestions awaiting review take over the top of the tab until they are handled. */}
       {SHOW_AUTO_DETECT && <DetectionReviewPanel />}
 
+      <div hidden={readOnly}>
       <div className="room-create-row">
         <button
           className={`btn-primary ${toolMode === 'draw' ? 'active' : ''}`}
@@ -236,6 +240,7 @@ export default function RoomPanel() {
         </select>
       </div>
 
+      </div>
       <div className="room-list">
         <span className="section-label">{t('rooms.markedAreas', { count: project.rooms.length })}</span>
         {project.rooms.length === 0 && (
@@ -255,14 +260,14 @@ export default function RoomPanel() {
                     by tinting the whole group, which is what used to swallow the selected room. */}
                 <button
                   className="apartment-group-title"
-                  onClick={() => setActiveApartmentNumber(group.apartmentNumber)}
+                  onClick={() => { if (!readOnly) setActiveApartmentNumber(group.apartmentNumber); }}
                   title={isUnassigned ? t('rooms.workUnassigned') : t('rooms.makeActive', { apartment: group.apartmentNumber })}
                 >
                   {isUnassigned ? t('rooms.unassigned') : t('rooms.apartment', { apartment: group.apartmentNumber })}
                   <span className="apartment-group-count">{group.rooms.length}</span>
                   {isActive && <span className="apartment-active-flag">{t('rooms.active')}</span>}
                 </button>
-                {!isUnassigned && (
+                {!readOnly && !isUnassigned && (
                   <button
                     className="icon-btn"
                     title={t('rooms.duplicateApartment', { apartment: group.apartmentNumber })}
@@ -286,7 +291,7 @@ export default function RoomPanel() {
                     {r.pageNumber !== currentPage && <span className="room-list-page">{t('rooms.page', { page: r.pageNumber })}</span>}
                     {/* Row actions appear on hover and on keyboard focus, so they stop competing
                         with the room name while staying reachable by tab. */}
-                    <span className="room-row-actions">
+                    <span className="room-row-actions" hidden={readOnly}>
                       <button
                         className="icon-btn"
                         title={t('rooms.duplicate')}
@@ -319,9 +324,9 @@ export default function RoomPanel() {
       {/* Room details are a separate view — the list stays a list, however many apartments it holds. */}
 
       {/* Auto detection is a secondary path: its launcher only appears when asked for. */}
-      {SHOW_AUTO_DETECT && showDetection && <AutoDetectPanel />}
+      {!readOnly && SHOW_AUTO_DETECT && showDetection && <AutoDetectPanel />}
 
-      {apartmentDialogSource !== null && (
+      {!readOnly && apartmentDialogSource !== null && (
         <DuplicateApartmentDialog
           project={project}
           sourceApartmentNumber={apartmentDialogSource}

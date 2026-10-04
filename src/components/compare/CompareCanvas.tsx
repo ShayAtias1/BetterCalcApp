@@ -1,3 +1,4 @@
+import { useWorkspaceLayout } from '../../hooks/useWorkspaceLayout';
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { v4 as uuid } from 'uuid';
 import { loadPdfPlanSource, type PdfPlanSource } from '../../lib/planSource';
@@ -257,6 +258,9 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
   const measurementsVisible = useCompareStore((s) => s.measurementsVisible);
   const markupFontScale = useCompareStore((s) => s.markupFontScale);
 
+  const { layout, reviewOnly: inputReviewOnly } = useWorkspaceLayout();
+  const reviewOnly = inputReviewOnly || layout !== 'expanded';
+
   const { containerRef, zoom, pan, screenToNative, handleWheel, fitToContainer, beginPanDrag, updatePanDrag, endPanDrag } =
     useCanvasTransform();
 
@@ -442,6 +446,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (reviewOnly) return;
       if (e.key === 'Escape') {
         clearMeasurePoints();
         clearCalibration();
@@ -472,9 +477,10 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [measureTool, measurePoints, markupTool, markupPoints, selectedMarkupId, selectedMeasurementId, deleteMeasurement, undo, redo]);
+  }, [reviewOnly, measureTool, measurePoints, markupTool, markupPoints, selectedMarkupId, selectedMeasurementId, deleteMeasurement, undo, redo]);
 
   const handleMouseDown = (e: MouseEvent) => {
+    if (reviewOnly) return;
     if (toolMode === 'select') {
       const handleTarget = (e.target as Element).closest?.('[data-handle-markup-id]');
       if (handleTarget) {
@@ -523,6 +529,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
     }
   };
   const handleMouseMove = (e: MouseEvent) => {
+    if (reviewOnly) return;
     if (isPanning.current) {
       updatePanDrag(e.clientX, e.clientY);
       return;
@@ -613,6 +620,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
     }
   };
   const handleDoubleClick = (e: MouseEvent) => {
+    if (reviewOnly) return;
     if (toolMode !== 'select') return;
     // Double-clicking a text note reopens it for editing.
     const bodyTarget = (e.target as Element).closest?.('[data-markup-id]');
@@ -630,6 +638,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
   };
 
   const handleClick = (e: MouseEvent) => {
+    if (reviewOnly) return;
     if (isPanning.current || alignDrag.current) return;
     const native = screenToNative(e.clientX, e.clientY);
 

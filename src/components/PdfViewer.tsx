@@ -1,3 +1,4 @@
+import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { v4 as uuid } from 'uuid';
 import { loadPdfPlanSource, type PdfPlanSource } from '../lib/planSource';
@@ -163,6 +164,7 @@ function MarkupShape({ markup, strokeW, draggable }: { markup: Markup; strokeW: 
 }
 
 export default function PdfViewer() {
+  const { reviewOnly } = useWorkspaceLayout();
   const t = useT();
   const language = useLanguage();
   const project = useAppStore((s) => s.project);
@@ -475,6 +477,7 @@ export default function PdfViewer() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (reviewOnly) return;
       // Anything typed into a field (including the text-note dialog and the contenteditable case)
       // must never reach the shortcuts below that delete or undo.
       const target = e.target as HTMLElement | null;
@@ -559,6 +562,7 @@ export default function PdfViewer() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    reviewOnly,
     clearDrawingPoints,
     drawingPoints.length,
     finishDrawing,
@@ -601,6 +605,7 @@ export default function PdfViewer() {
   }, [markupPoints, markupTool]);
 
   const handleMouseDown = (e: MouseEvent) => {
+    if (reviewOnly) return;
     const isPanGesture = toolMode === 'pan' || e.button === 1 || spaceHeld.current;
     if (isPanGesture) {
       isPanning.current = true;
@@ -682,6 +687,7 @@ export default function PdfViewer() {
   };
 
   const handleMouseMove = (e: MouseEvent) => {
+    if (reviewOnly) return;
     if (isPanning.current && updatePanDrag(e.clientX, e.clientY)) {
       return;
     }
@@ -806,6 +812,7 @@ export default function PdfViewer() {
   };
 
   const handleDoubleClick = (e: MouseEvent) => {
+    if (reviewOnly) return;
     if (toolMode !== 'select' || drawTarget !== 'room' || !overlayVisible.finishes || room?.pageNumber !== currentPage) return;
     // Double-clicking a text note reopens it for editing.
     const bodyTarget = (e.target as Element).closest?.('[data-markup-id]');
@@ -826,6 +833,7 @@ export default function PdfViewer() {
   };
 
   const handleClick = (e: MouseEvent) => {
+    if (reviewOnly) return;
     if (suppressStructuralClick.current) {
       suppressStructuralClick.current = false;
       return;
@@ -1060,7 +1068,7 @@ export default function PdfViewer() {
                 zoom={zoom}
               />
             )}
-            <MeshLayoutOverlay plan={structuralPlan ?? project} pageNumber={currentPage} selectedId={selectedRebarId} zoom={zoom} visible={overlayVisible.rebar} screenToNative={screenToNative} interactionAllowed={toolMode === 'select'} />
+            <MeshLayoutOverlay plan={structuralPlan ?? project} pageNumber={currentPage} selectedId={selectedRebarId} zoom={zoom} visible={overlayVisible.rebar} screenToNative={screenToNative} interactionAllowed={!reviewOnly && toolMode === 'select'} />
             {overlayVisible.rebar && (
               <RebarZones pageNumber={currentPage} pages={project.pages} selectedBarId={selectedDrawnBarId} calibration={project.pages[currentPage]?.calibration ?? null} items={rebarOf(structuralPlan ?? project).filter((m) => m.pageNumber === currentPage)} selectedId={selectedRebarId} strokeW={strokeW} zoom={zoom} />
             )}

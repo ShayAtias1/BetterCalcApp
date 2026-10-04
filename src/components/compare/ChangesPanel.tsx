@@ -1,3 +1,4 @@
+import { useWorkspaceLayout } from '../../hooks/useWorkspaceLayout';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCompareStore } from '../../store/compareStore';
 import type { AreaKind } from '../../types/compare';
@@ -25,7 +26,10 @@ const MAXIMIZED_RESERVED = 140;
  * It is also the navigation surface: a row selects its measurement and, when that measurement
  * belongs to another source page, takes the user there.
  */
-export default function ChangesPanel() {
+export default function ChangesPanel({ mobileOpen = false, onMobileClose }: { mobileOpen?: boolean; onMobileClose?: () => void }) {
+  const { layout, reviewOnly } = useWorkspaceLayout();
+  const desktop = layout === 'expanded';
+  const readOnly = reviewOnly || !desktop;
   const t = useT();
   const comparison = useCompareStore((s) => s.comparison);
   const currentPageKey = useCompareStore((s) => s.currentPageKey);
@@ -93,7 +97,8 @@ export default function ChangesPanel() {
   const demolition = totalsOf('demolition');
   const construction = totalsOf('construction');
 
-  if (!open) {
+  if (!desktop && !mobileOpen) return null;
+  if (desktop && !open) {
     return (
       <div className="qty-panel-collapsed">
         <button className="btn-ghost small qty-open-btn" onClick={() => setOpen(true)} title={t('compare.changes.open')}>
@@ -108,8 +113,8 @@ export default function ChangesPanel() {
   }
 
   return (
-    <section className={`qty-panel changes-panel ${resizing ? 'resizing' : ''} ${maximized ? 'maximized' : ''}`} style={{ height: effectiveHeight }} aria-label={t('compare.changes.title')}>
-      <button
+    <section className={`qty-panel ${desktop ? '' : 'adaptive-quantity-sheet'} changes-panel ${resizing ? 'resizing' : ''} ${maximized ? 'maximized' : ''}`} style={desktop ? { height: effectiveHeight } : undefined} aria-label={t('compare.changes.title')}>
+      {desktop && <button
         className="qty-panel-resizer"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -118,7 +123,7 @@ export default function ChangesPanel() {
         onKeyDown={onResizerKeyDown}
         aria-label={t('compare.changes.resize')}
         title={t('quantitiesPanel.resizeHint')}
-      />
+      />}
       <header className="qty-panel-head">
         <Icon name="table" size={18} />
         <h2 className="qty-panel-title">{t('compare.changes.title')}</h2>
@@ -136,10 +141,10 @@ export default function ChangesPanel() {
               <span className="tool-label">{t('common.page', { page: currentPageKey })}</span>
             </button>
           </div>
-          <button className="icon-btn" onClick={toggleMaximized} title={maximized ? t('quantitiesPanel.restore') : t('quantitiesPanel.maximize')}>
+          <button hidden={!desktop} className="icon-btn" onClick={toggleMaximized} title={maximized ? t('quantitiesPanel.restore') : t('quantitiesPanel.maximize')}>
             <Icon name={maximized ? 'collapse' : 'expand'} />
           </button>
-          <button className="icon-btn" onClick={() => setOpen(false)} title={t('compare.changes.close')}>
+          <button className="icon-btn" onClick={() => desktop ? setOpen(false) : onMobileClose?.()} title={t('compare.changes.close')}>
             <Icon name="close" />
           </button>
         </div>
@@ -154,6 +159,7 @@ export default function ChangesPanel() {
             return (
               <div key={kind} className={`changes-summary-item ${kind}`}>
                 <input
+                  disabled={readOnly}
                   type="color"
                   value={comparison.areaKindColors[kind]}
                   onChange={(e) => setAreaKindColor(kind, e.target.value)}
@@ -216,6 +222,7 @@ export default function ChangesPanel() {
                         <span className="changes-kind-cell">
                           <span className="color-dot" style={{ background: comparison.areaKindColors[m.areaKind!] }} />
                           <select
+                            disabled={readOnly}
                             className="changes-kind-select"
                             value={m.areaKind}
                             onClick={(e) => e.stopPropagation()}
@@ -239,6 +246,7 @@ export default function ChangesPanel() {
                             type="number"
                             step="0.05"
                             min="0.1"
+                            disabled={readOnly}
                             className="inline-number"
                             value={m.wallHeightM ?? comparison.wallHeightDefaultM}
                             onClick={(e) => e.stopPropagation()}
@@ -255,6 +263,7 @@ export default function ChangesPanel() {
                       <td className="num order">{round(m.areaM2 ?? 0, 2)}</td>
                       <td className="row-actions">
                         <button
+                          hidden={readOnly}
                           className="icon-btn danger"
                           title={t('compare.changes.delete')}
                           onClick={(e) => {
