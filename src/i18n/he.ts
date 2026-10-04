@@ -875,6 +875,11 @@ export const he = {
   // Rebar takeoff: mesh zones (a marked area plus layers) and manual bars.
   rebar: {
     spatial: {
+      mode: 'פריסת מוטות',
+      area: 'אזור מוטות',
+      individual: 'מוטות בודדים',
+      drawBar: 'צייר מוט',
+
       count: '{count} מוטות',
       markArea: 'סמן אזור',
       changeZone: 'סמן אזור מחדש',

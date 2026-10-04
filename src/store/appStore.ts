@@ -235,7 +235,7 @@ interface AppState {
    * in history — and reset to 'room' whenever a plan is opened or closed.
    */
   drawTarget: DrawTarget;
-  barsDrawing: 'zone' | null;
+  barsDrawing: 'zone' | 'line' | null;
   /** The concrete zone open in the Concrete tab's form. Session UI state, like `selectedRoomId`: not persisted and cleared by undo, redo, page changes and plan switches. */
   selectedConcreteId: string | null;
   /** The rebar item open in the Rebar tab's form. Session UI state, cleared like `selectedConcreteId`. */
@@ -350,6 +350,9 @@ interface AppState {
   changeConcreteElementKind: (id: string, kind: ConcreteKind) => void;
   /** Translate a whole zone in one undo/autosave action; manual sheet coordinates stay local. */
   startBarsZone: (id: string) => void;
+  startDrawingBar: (id: string) => void;
+  setBarsIndividualMode: (id: string) => void;
+  finishDrawnBar: (start: Point, end: Point) => void;
   removeBarsZone: (id: string) => void;
   moveStructuralZone: (kind: 'concrete' | 'mesh' | 'bars', id: string, offset: Point) => void;
   duplicateConcreteElement: (id: string) => void;
@@ -987,6 +990,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedMarkupId: null,
       selectedConcreteId: null,
       selectedRebarId: null,
+      barsDrawing: null,
       drawingPoints: [],
       calibrationPoints: [],
       measurePoints: [],
@@ -1051,10 +1055,37 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ project: { ...updateConcrete(project, id, patch), updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
+  setBarsIndividualMode: (id) => {
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    if (!project || !item || item.kind !== 'bars' || item.barsZone || item.drawnBars !== undefined) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, id, { drawnBars: [] }), updatedAt: Date.now() }, drawingPoints: [], barsDrawing: null });
+    scheduleSave(get, set);
+  },
+  startDrawingBar: (id) => {
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    if (!item || item.kind !== 'bars' || item.barsZone) return;
+    get().setBarsIndividualMode(id);
+    get().setCurrentPage(item.pageNumber);
+    ensureOverlayVisible('rebar', get, set);
+    set({ selectedRebarId: id, drawTarget: 'rebar', barsDrawing: 'line', toolMode: 'draw', drawingPoints: [] });
+  },
+  finishDrawnBar: (start, end) => {
+    const { project, selectedRebarId, currentPage, barsDrawing } = get();
+    const item = project && rebarOf(project).find((i) => i.id === selectedRebarId);
+    if (!project || !item || item.kind !== 'bars' || item.barsZone || barsDrawing !== 'line' || item.pageNumber !== currentPage) return;
+    if (Math.hypot(end.x - start.x, end.y - start.y) < 1e-9) return;
+    const bar = { id: uuid(), pageNumber: currentPage, start: { ...start }, end: { ...end } };
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, item.id, { drawnBars: [...(item.drawnBars ?? []), bar] }), updatedAt: Date.now() }, drawingPoints: [] });
+    scheduleSave(get, set);
+  },
   startBarsZone: (id) => {
     const { project } = get();
     const item = project && rebarOf(project).find((i) => i.id === id);
-    if (!item || item.kind !== 'bars') return;
+    if (!item || item.kind !== 'bars' || item.drawnBars !== undefined) return;
     ensureOverlayVisible('rebar', get, set);
     set({ selectedRebarId: id, drawTarget: 'rebar', barsDrawing: 'zone', toolMode: 'draw-rect', drawingPoints: [] });
   },
@@ -1120,7 +1151,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
     return created.length;
   },
-  setSelectedRebarId: (id) => set({ selectedRebarId: id }),
+  setSelectedRebarId: (id) => set({ selectedRebarId: id, barsDrawing: null, drawingPoints: [] }),
   editMeshLayout: (id, level, edit) => {
     const { project } = get();
     const mesh = project && rebarOf(project).find((i) => i.id === id && i.kind === 'mesh');
@@ -1220,6 +1251,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   finishDrawing: () => {
+    if (get().barsDrawing === 'line') return;
     if (get().drawTarget !== 'room') return commitStructuralZone(get, set, get().drawingPoints);
     const { project, drawingPoints, currentPage, activeApartmentNumber } = get();
     if (!project || drawingPoints.length < 3) {

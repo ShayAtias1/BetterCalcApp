@@ -492,6 +492,8 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
   const siblings = plan ? rebarOf(plan) : [];
   const startZone = useAppStore((s) => s.startBarsZone);
   const removeZone = useAppStore((s) => s.removeBarsZone);
+  const startLine = useAppStore((s) => s.startDrawingBar);
+  const individualMode = useAppStore((s) => s.setBarsIndividualMode);
   const calibration = plan?.pages[bars.pageNumber]?.calibration ?? null;
   const calc = resolveStraightBars(bars, calibration);
   const zone = bars.barsZone;
@@ -500,10 +502,17 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
     <div className="room-detail">
       {calc.status !== 'ok' && <div className="warning-box">{statusMessage(calc, t)}</div>}
       <Results calc={calc} showLength />
-      <div className="concrete-kinds">
+      <div className="concrete-kinds" role="group" aria-label={t('rebar.spatial.mode')}>
+        <button className={`btn-ghost small ${zone ? 'active' : ''}`} disabled={bars.drawnBars !== undefined} onClick={() => startZone(bars.id)}>{t('rebar.spatial.area')}</button>
+        <button className={`btn-ghost small ${bars.drawnBars !== undefined ? 'active' : ''}`} disabled={!!zone} onClick={() => individualMode(bars.id)}>{t('rebar.spatial.individual')}</button>
+      </div>
+      {bars.drawnBars !== undefined ? <>
+        <button className="btn-ghost small" onClick={() => startLine(bars.id)}>{t('rebar.spatial.drawBar')}</button>
+        <p className="muted">{t('rebar.spatial.count', { count: calc.count ?? '-' })}</p>
+      </> : <div className="concrete-kinds">
         <button className="btn-ghost small" onClick={() => startZone(bars.id)}>{t(zone ? 'rebar.spatial.changeZone' : 'rebar.spatial.markArea')}</button>
         {zone && <button className="btn-ghost small danger" onClick={() => removeZone(bars.id)}>{t('rebar.spatial.removeZone')}</button>}
-      </div>
+      </div>}
       {zone && <>
         <div className="form-row">
           <label>{t('rebar.spatial.direction')}</label>
@@ -528,11 +537,11 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
           <label>{t('rebar.diameter')}</label>
           <DiameterSelect value={bars.diameterMm} onChange={(mm) => updateItem(bars.id, { diameterMm: mm })} />
         </div>
-        <div className="form-row">
+        {bars.drawnBars === undefined && <div className="form-row">
           <label>{t('rebar.barCount')}</label>
           <NumberField value={bars.count || undefined} step="1" onChange={(v) => updateItem(bars.id, { count: v ?? 0 })} />
-        </div>
-        {(!zone || zone.lengthMode === 'manual') && <div className="form-row">
+        </div>}
+        {bars.drawnBars === undefined && (!zone || zone.lengthMode === 'manual') && <div className="form-row">
           <label>{t('rebar.barLength')} ({t('units.m')})</label>
           <NumberField value={(zone ? zone.manualLengthM : bars.lengthM) || undefined} onChange={(v) => updateItem(bars.id,
             zone ? { barsZone: { ...zone, manualLengthM: v ?? 0 } } : { lengthM: v ?? 0 })} />

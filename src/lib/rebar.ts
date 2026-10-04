@@ -44,6 +44,7 @@
 
 import type { Calibration } from '../types';
 import type { RebarBars, RebarItem, RebarLayer, RebarLayerDirection, RebarLevel, RebarMesh } from '../types/structural';
+import { distancePx, pxToMeters } from './geometry';
 import { meshLayers, normalizeMesh } from './rebarMesh';
 import { finiteNonNegative, finitePositive, zoneGeometry } from './zoneGeometry';
 
@@ -181,7 +182,7 @@ function calculateLayer(layer: RebarLayer, zone: ReturnType<typeof zoneGeometry>
 }
 
 export interface StraightBarsResult extends RebarCalc {
-  mode: 'legacy' | 'zone';
+  mode: 'legacy' | 'zone' | 'individual';
   count: number | null;
   effectiveLengthM: number | null;
   automaticLengthM: number | null;
@@ -191,6 +192,19 @@ export interface StraightBarsResult extends RebarCalc {
 export function resolveStraightBars(item: RebarBars, calibration: Calibration | null): StraightBarsResult {
   const wastePercent = finiteNonNegative(item.wastePercent, 0);
   const diameterMm = finitePositive(item.diameterMm);
+  if (item.drawnBars !== undefined) {
+    const count = item.drawnBars.length;
+    const scale = finitePositive(calibration?.metersPerPixel);
+    const lengths = scale ? item.drawnBars.map((bar) => pxToMeters(distancePx(bar.start, bar.end), scale)) : [];
+    const valid = lengths.every((length) => Number.isFinite(length) && length > 0);
+    const status: RebarStatus = !scale && count > 0 ? 'no-scale' : !valid || diameterMm === null ? 'invalid-input' : 'ok';
+    const total = lengths.reduce((sum, length) => sum + length, 0);
+    const uniform = lengths.length > 0 && lengths.every((length) => Math.abs(length - lengths[0]) < 1e-8) ? lengths[0] : null;
+    const calc = status === 'ok'
+      ? finish('ok', [layerResult(item.id, diameterMm!, null, count, uniform, total, false)], wastePercent)
+      : finish(status, [emptyLayer(item.id, false, diameterMm)], wastePercent);
+    return { ...calc, mode: 'individual', count, effectiveLengthM: uniform, automaticLengthM: null };
+  }
   const zone = item.barsZone;
   const sides = zone ? zoneGeometry(zone.points, calibration?.metersPerPixel ?? 0)?.sides : null;
   const automaticLengthM = sides ? (zone?.direction === 'short' ? sides.shortM : sides.longM) : null;

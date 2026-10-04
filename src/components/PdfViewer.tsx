@@ -164,6 +164,8 @@ export default function PdfViewer() {
   const toolMode = useAppStore((s) => s.toolMode);
   const overlayVisible = useAppStore((s) => s.overlayVisible);
   const drawTarget = useAppStore((s) => s.drawTarget);
+  const barsDrawing = useAppStore((s) => s.barsDrawing);
+  const finishDrawnBar = useAppStore((s) => s.finishDrawnBar);
   const selectedConcreteId = useAppStore((s) => s.selectedConcreteId);
   const setSelectedConcreteId = useAppStore((s) => s.setSelectedConcreteId);
   const selectedRebarId = useAppStore((s) => s.selectedRebarId);
@@ -723,6 +725,12 @@ export default function PdfViewer() {
       return;
     }
 
+    if (toolMode === 'draw' && barsDrawing === 'line') {
+      if (drawingPoints.length === 0) addDrawingPoint(native);
+      else finishDrawnBar(drawingPoints[0], orthoSnap ? snapOrtho(drawingPoints[0], native) : native);
+      return;
+    }
+
     if (toolMode === 'draw') {
       if (drawingPoints.length >= 3) {
         const first = drawingPoints[0];
@@ -959,6 +967,9 @@ export default function PdfViewer() {
                 );
               })}
 
+            {toolMode === 'draw' && barsDrawing === 'line' && drawingPoints.length === 1 && hoverPoint && <line
+              x1={drawingPoints[0].x} y1={drawingPoints[0].y} x2={hoverPoint.x} y2={hoverPoint.y}
+              stroke="#c2410c" strokeWidth={strokeW} strokeDasharray={`${4 / zoom} ${4 / zoom}`} />}
             {/* In-progress polygon drawing */}
             {toolMode === 'draw' && drawingPoints.length > 0 && (
               <g>
