@@ -120,8 +120,8 @@ test('session preferences start off and are scoped by plan and mesh without writ
   store.getState().setLevel('plan-a', 'mesh-1', 'top');
   store.getState().setEnabled('plan-b', 'mesh-1', false);
   assert.deepEqual(store.getState().views, {
-    '["plan-a","mesh-1"]': { enabled: true, level: 'top' },
-    '["plan-b","mesh-1"]': { enabled: false, level: 'bottom' },
+    '["plan-a","mesh-1"]': { enabled: true, level: 'top', editing: false, selectedPlacementId: null, sourceKey: null, overrides: {} },
+    '["plan-b","mesh-1"]': { enabled: false, level: 'bottom', editing: false, selectedPlacementId: null, sourceKey: null, overrides: {} },
   });
   assert.ok(!('["plan-a","mesh-2"]' in store.getState().views));
 });

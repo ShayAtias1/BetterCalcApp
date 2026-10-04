@@ -906,6 +906,14 @@ export const en: Dictionary = {
     copyBottomToTop: 'Copy Bottom to Top',
     copyBottomToTopHint: 'Starts Top from the same values - each level stays editable on its own',
     layout: {
+      edit: 'Edit layout',
+      exitEdit: 'Exit layout editing',
+      rotate: 'Rotate 90°',
+      reset: 'Reset to proposed layout',
+      selectedSheet: 'Sheet {number} of {count}',
+      quantityNotice: 'Layout edits do not affect quantities yet',
+      sessionNotice: 'Layout edits are temporary and reset on reload.',
+
       show: 'Show mesh layout',
       viewLevel: 'Layout viewing level',
       noGeometry: 'No plan geometry available for layout preview',

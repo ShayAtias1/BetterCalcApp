@@ -846,7 +846,7 @@ export default function PdfViewer() {
                 zoom={zoom}
               />
             )}
-            <MeshLayoutOverlay plan={project} pageNumber={currentPage} selectedId={selectedRebarId} zoom={zoom} visible={overlayVisible.rebar} />
+            <MeshLayoutOverlay plan={project} pageNumber={currentPage} selectedId={selectedRebarId} zoom={zoom} visible={overlayVisible.rebar} screenToNative={screenToNative} interactionAllowed={toolMode === 'select'} />
             {overlayVisible.rebar && (
               <RebarZones items={rebarOf(project).filter((m) => m.pageNumber === currentPage)} selectedId={selectedRebarId} strokeW={strokeW} zoom={zoom} />
             )}

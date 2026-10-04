@@ -910,6 +910,14 @@ export const he = {
     copyBottomToTop: 'העתק מתחתון לעליון',
     copyBottomToTopHint: 'מתחיל את העליון מאותם ערכים - כל מפלס נשאר ניתן לעריכה בנפרד',
     layout: {
+      edit: 'עריכת פריסה',
+      exitEdit: 'יציאה מעריכת פריסה',
+      rotate: 'סובב 90°',
+      reset: 'איפוס לפריסה מוצעת',
+      selectedSheet: 'רשת {number} מתוך {count}',
+      quantityNotice: 'שינויים בפריסה עדיין אינם משפיעים על הכמות',
+      sessionNotice: 'שינויים בפריסה זמניים ומתאפסים בטעינה מחדש.',
+
       show: 'הצג פריסת רשתות',
       viewLevel: 'מפלס להצגת הפריסה',
       noGeometry: 'אין גאומטריה להצגת הפריסה על התכנית',

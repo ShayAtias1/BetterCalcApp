@@ -1,12 +1,16 @@
-import { useId, useMemo } from 'react';
-import type { Calibration, Plan } from '../types';
+import { useId, useMemo, useRef, useEffect, type PointerEvent } from 'react';
+import type { Calibration, Plan, Point } from '../types';
 import type { RebarLevel, RebarMesh } from '../types/structural';
 import { useT } from '../i18n';
 import { meshLevels } from '../lib/rebarMesh';
 import { rebarOf } from '../lib/structuralPlan';
 import { REBAR_COLOR } from '../lib/structuralOverlay';
-import { prepareMeshLayoutPreview, meshLayoutViewLevel, meshPreviewLabelsVisible, type MeshLayoutPreview } from '../lib/meshLayoutPreview';
-import { useMeshLayoutPreviewStore, useMeshLayoutView } from '../store/meshLayoutPreviewStore';
+import { prepareMeshLayoutPreview, renderMeshLayoutPreview, meshLayoutViewLevel, meshPreviewLabelsVisible, type MeshLayoutPreview } from '../lib/meshLayoutPreview';
+import { useMeshLayoutPreviewStore, useMeshLayoutView, meshLayoutCanInteract } from '../store/meshLayoutPreviewStore';
+
+import { applyPlacementOverrides, planToLocal, movePlacement, rotatePlacement, type MeshPlacementOverride } from '../lib/meshLayoutEditing';
+import type { MeshSheetPlacement } from '../lib/meshSheetPlacement';
+import { useAppStore } from '../store/appStore';
 
 const MESSAGE_KEY = {
   'not-rectangular': 'rebar.layout.rectangularOnly',
@@ -19,11 +23,18 @@ export function MeshLayoutControl({ planId, mesh, calibration }: { planId: strin
   const t = useT();
   const messageId = useId();
   const view = useMeshLayoutView(planId, mesh.id);
+  const visible = useAppStore((s) => s.overlayVisible.rebar);
+  const actions = useMeshLayoutPreviewStore.getState();
   const setEnabled = useMeshLayoutPreviewStore((s) => s.setEnabled);
   const setLevel = useMeshLayoutPreviewStore((s) => s.setLevel);
   const preview = useMemo(() => view.enabled ? prepareMeshLayoutPreview(mesh, calibration) : null, [mesh, calibration, view.enabled]);
   const levels = meshLevels(mesh).map((l) => l.level);
   const level = meshLayoutViewLevel(levels, view.level);
+  const editing = meshLayoutCanInteract(view, preview, visible);
+  const overrides = preview?.status === 'ready' && view.sourceKey === preview.sourceKey ? view.overrides : {};
+  const automatic = preview?.status === 'ready' && level ? preview.automatic.placementsByLevel[level] ?? [] : [];
+  const selectedIndex = automatic.findIndex((p) => p.id === view.selectedPlacementId);
+  const selected = applyPlacementOverrides(automatic, level ? overrides[level] ?? {} : {})[selectedIndex];
   const message = preview && preview.status !== 'ready' ? t(MESSAGE_KEY[preview.status]) : null;
   return (
     <div className="rebar-layout-control">
@@ -40,23 +51,51 @@ export function MeshLayoutControl({ planId, mesh, calibration }: { planId: strin
           ))}
         </div>
       )}
+      {view.enabled && visible && preview?.status === 'ready' && level && (
+        <>
+          <button className="btn-ghost small" aria-pressed={editing} onClick={() => {
+            if (!editing) useAppStore.getState().setToolMode('select');
+            actions.setEditing(planId, mesh.id, !editing, preview, visible);
+          }}>{t(editing ? 'rebar.layout.exitEdit' : 'rebar.layout.edit')}</button>
+          {editing && <>
+            <p className="muted" role="status">{t('rebar.layout.quantityNotice')}</p>
+            <p className="muted">{t('rebar.layout.sessionNotice')}</p>
+            {selected && <>
+              <p>{t('rebar.layout.selectedSheet', { number: selectedIndex + 1, count: automatic.length })}</p>
+              <button className="btn-ghost small" onClick={() => actions.setOverride(planId, mesh.id, level, rotatePlacement(selected, overrides[level]?.[selected.id]?.rotation))}>{t('rebar.layout.rotate')}</button>
+            </>}
+            <button className="btn-ghost small" disabled={!Object.keys(overrides[level] ?? {}).length} onClick={() => actions.resetLevel(planId, mesh.id, level)}>{t('rebar.layout.reset')}</button>
+          </>}
+        </>
+      )}
       {message && <p className="muted" id={messageId} role="status">{message}</p>}
     </div>
   );
 }
 
-/** Presentation only: full physical outlines with translucent overlap, never hit targets. */
-export function MeshSheetPreviewLayer({ preview, level, zoom, visible }: { preview: MeshLayoutPreview | null; level: RebarLevel; zoom: number; visible: boolean }) {
+/** Full physical outlines. Hit targets exist only while explicitly editing a supported layout. */
+export function MeshSheetPreviewLayer({ preview, level, zoom, visible, interaction }: { preview: MeshLayoutPreview | null; level: RebarLevel; zoom: number; visible: boolean; interaction?: {
+  selectedId: string | null;
+  start: (id: string, event: PointerEvent<SVGPolygonElement>) => void;
+  move: (event: PointerEvent<SVGPolygonElement>) => void;
+  end: (event: PointerEvent<SVGPolygonElement>) => void;
+} }) {
   if (!visible || !preview || preview.status !== 'ready' || !Number.isFinite(zoom) || zoom <= 0) return null;
   const shownLevel = meshLayoutViewLevel(preview.levels, level);
   if (!shownLevel) return null;
   const labels = meshPreviewLabelsVisible(preview, shownLevel, zoom);
   return (
-    <g className="mesh-layout-preview" data-level={shownLevel} pointerEvents="none" aria-hidden="true">
+    <g className="mesh-layout-preview" data-level={shownLevel} pointerEvents={interaction ? 'auto' : 'none'} aria-hidden="true"
+      onMouseDown={interaction ? (e) => { if (e.button === 0) e.stopPropagation(); } : undefined}
+      onClick={interaction ? (e) => e.stopPropagation() : undefined}
+      onDoubleClick={interaction ? (e) => e.stopPropagation() : undefined}>
       {preview.sheetsByLevel[shownLevel]!.map((sheet) => (
         <g key={sheet.id} data-placement-id={sheet.id}>
-          <polygon points={sheet.points} fill={REBAR_COLOR} fillOpacity={0.055} stroke={REBAR_COLOR} strokeOpacity={0.6} strokeWidth={1 / zoom} />
-          {labels && <text x={sheet.labelPosition.x} y={sheet.labelPosition.y} fontSize={9 / zoom} fill={REBAR_COLOR} textAnchor="middle" dominantBaseline="middle" direction="ltr" paintOrder="stroke" stroke="#fff" strokeWidth={2 / zoom}>{sheet.number}</text>}
+          <polygon points={sheet.points} fill={REBAR_COLOR} fillOpacity={interaction?.selectedId === sheet.id ? 0.14 : 0.055} stroke={REBAR_COLOR} strokeOpacity={interaction?.selectedId === sheet.id ? 1 : 0.6} strokeWidth={(interaction?.selectedId === sheet.id ? 2 : 1) / zoom}
+            style={interaction ? { cursor: 'move', touchAction: 'none' } : undefined}
+            onPointerDown={interaction ? (e) => interaction.start(sheet.id, e) : undefined}
+            onPointerMove={interaction?.move} onPointerUp={interaction?.end} onPointerCancel={interaction?.end} onLostPointerCapture={interaction?.end} />
+          {labels && <text pointerEvents="none" x={sheet.labelPosition.x} y={sheet.labelPosition.y} fontSize={9 / zoom} fill={REBAR_COLOR} textAnchor="middle" dominantBaseline="middle" direction="ltr" paintOrder="stroke" stroke="#fff" strokeWidth={2 / zoom}>{sheet.number}</text>}
         </g>
       ))}
     </g>
@@ -64,10 +103,40 @@ export function MeshSheetPreviewLayer({ preview, level, zoom, visible }: { previ
 }
 
 /** Only the selected Mesh on the visible page is previewed. View/Rebar remains the master switch. */
-export function MeshLayoutOverlay({ plan, pageNumber, selectedId, zoom, visible }: { plan: Plan; pageNumber: number; selectedId: string | null; zoom: number; visible: boolean }) {
+export function MeshLayoutOverlay({ plan, pageNumber, selectedId, zoom, visible, screenToNative, interactionAllowed = true }: { plan: Plan; pageNumber: number; selectedId: string | null; zoom: number; visible: boolean; screenToNative?: (x: number, y: number) => Point; interactionAllowed?: boolean }) {
   const mesh = rebarOf(plan).find((item): item is RebarMesh => item.id === selectedId && item.kind === 'mesh' && item.pageNumber === pageNumber);
   const view = useMeshLayoutView(plan.id, mesh?.id ?? '');
   const calibration = mesh ? plan.pages[mesh.pageNumber]?.calibration ?? null : null;
-  const preview = useMemo(() => visible && mesh && view.enabled ? prepareMeshLayoutPreview(mesh, calibration) : null, [visible, mesh, calibration, view.enabled]);
-  return <MeshSheetPreviewLayer preview={preview} level={view.level} zoom={zoom} visible={visible && view.enabled} />;
+  const automatic = useMemo(() => visible && mesh && view.enabled ? prepareMeshLayoutPreview(mesh, calibration) : null, [visible, mesh, calibration, view.enabled]);
+  const preview = useMemo(() => automatic?.status === 'ready' && automatic.sourceKey === view.sourceKey ? renderMeshLayoutPreview(automatic.automatic, view.overrides) : automatic, [automatic, view.sourceKey, view.overrides]);
+  const level = automatic?.status === 'ready' ? meshLayoutViewLevel(automatic.levels, view.level) : null;
+  const editable = meshLayoutCanInteract(view, automatic, visible) && interactionAllowed && !!screenToNative;
+  const drag = useRef<{ pointerId: number; placement: MeshSheetPlacement; rotation: MeshPlacementOverride['rotation']; start: Point } | null>(null);
+  useEffect(() => { drag.current = null; }, [editable, level, mesh?.id, plan.id, automatic]);
+  const actions = useMeshLayoutPreviewStore.getState();
+  const interaction = editable && mesh && level && automatic?.status === 'ready' && screenToNative ? {
+    selectedId: view.selectedPlacementId,
+    start: (id: string, e: PointerEvent<SVGPolygonElement>) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const placement = applyPlacementOverrides(automatic.automatic.placementsByLevel[level]!, view.overrides[level] ?? {}).find((p) => p.id === id)!;
+      actions.select(plan.id, mesh.id, id);
+      drag.current = { pointerId: e.pointerId, placement, rotation: view.overrides[level]?.[id]?.rotation ?? 0,
+        start: planToLocal(screenToNative(e.clientX, e.clientY), automatic.automatic.zoneFrame!, automatic.automatic.metersPerPixel!) };
+      e.currentTarget.setPointerCapture(e.pointerId);
+    },
+    move: (e: PointerEvent<SVGPolygonElement>) => {
+      const active = drag.current;
+      if (!active || active.pointerId !== e.pointerId) return;
+      e.preventDefault(); e.stopPropagation();
+      const current = planToLocal(screenToNative(e.clientX, e.clientY), automatic.automatic.zoneFrame!, automatic.automatic.metersPerPixel!);
+      actions.setOverride(plan.id, mesh.id, level, movePlacement(active.placement, active.rotation, active.start, current));
+    },
+    end: (e: PointerEvent<SVGPolygonElement>) => {
+      if (drag.current?.pointerId !== e.pointerId) return;
+      e.stopPropagation(); drag.current = null;
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    },
+  } : undefined;
+  return <MeshSheetPreviewLayer preview={preview} level={view.level} zoom={zoom} visible={visible && view.enabled} interaction={interaction} />;
 }

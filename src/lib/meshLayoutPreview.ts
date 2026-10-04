@@ -1,7 +1,8 @@
 /** V2B presentation geometry only: map V2A's full physical sheets into native plan pixels. */
 import type { Calibration, Point } from '../types';
 import type { RebarLevel, RebarMesh } from '../types/structural';
-import { calculateMeshSheetPlacements } from './meshSheetPlacement';
+import { applyPlacementOverrides, localToPlan, type MeshPlacementOverrides } from './meshLayoutEditing';
+import { calculateMeshSheetPlacements, type MeshSheetPlacementLayout } from './meshSheetPlacement';
 import { calculateMeshSheets } from './meshSheets';
 import { finitePositive, isRectangle, zoneGeometry } from './zoneGeometry';
 
@@ -17,6 +18,9 @@ export interface MeshPreviewSheet {
 }
 export interface MeshLayoutPreviewReady {
   status: 'ready';
+  automatic: MeshSheetPlacementLayout;
+  /** Compact geometry signature, so old overrides cannot attach to a changed proposed grid. */
+  sourceKey: string;
   levels: RebarLevel[];
   sheetsByLevel: Partial<Record<RebarLevel, MeshPreviewSheet[]>>;
   /** Native-pixel space between labels; used with zoom to avoid unreadable labels. */
@@ -51,14 +55,19 @@ export function prepareMeshLayoutPreview(mesh: RebarMesh, calibration: Calibrati
   if (layout.status !== 'ok') return { status: 'unavailable' };
   const { zoneFrame: frame, metersPerPixel } = layout;
   if (!frame || metersPerPixel === null) return { status: 'no-plan-geometry' };
-  const mapPoint = (x: number, y: number): Point => ({
-    x: frame.originPx.x + (frame.xAxis.x * x + frame.yAxis.x * y) / metersPerPixel,
-    y: frame.originPx.y + (frame.xAxis.y * x + frame.yAxis.y * y) / metersPerPixel,
-  });
+  return renderMeshLayoutPreview(layout);
+}
+
+/** Render the automatic source plus session overrides, without changing V2A. */
+export function renderMeshLayoutPreview(layout: MeshSheetPlacementLayout, overrides: Partial<Record<RebarLevel, MeshPlacementOverrides>> = {}): MeshLayoutPreview {
+  const frame = layout.zoneFrame;
+  const metersPerPixel = layout.metersPerPixel;
+  if (!frame || metersPerPixel === null) return { status: 'no-plan-geometry' };
+  const mapPoint = (x: number, y: number): Point => localToPlan({ x, y }, frame, metersPerPixel);
   const sheetsByLevel: MeshLayoutPreviewReady['sheetsByLevel'] = {};
   const levels = Object.keys(layout.placementsByLevel) as RebarLevel[];
   for (const level of levels) {
-    sheetsByLevel[level] = layout.placementsByLevel[level]!.map((p, index) => {
+    sheetsByLevel[level] = applyPlacementOverrides(layout.placementsByLevel[level]!, overrides[level] ?? {}).map((p, index) => {
       const corners = [mapPoint(p.x, p.y), mapPoint(p.x + p.width, p.y), mapPoint(p.x + p.width, p.y + p.height), mapPoint(p.x, p.y + p.height)];
       const inset = Math.min(p.width, p.height) * 0.18;
       // Keep identifiers away from the zone's central mark/specification label when possible.
@@ -77,5 +86,7 @@ export function prepareMeshLayoutPreview(mesh: RebarMesh, calibration: Calibrati
   if (!Number.isFinite(labelSpacingPx) || Object.values(sheetsByLevel).flat().some((s) => !Number.isFinite(s.labelPosition.x) || !Number.isFinite(s.labelPosition.y) || /NaN|Infinity/.test(s.points))) {
     return { status: 'no-plan-geometry' };
   }
-  return { status: 'ready', levels, sheetsByLevel, labelSpacingPx };
+  const sourceKey = JSON.stringify([frame, metersPerPixel, layout.zoneDimensions, layout.sheetDimensions,
+    layout.overlapM, layout.orientation, layout.rows, layout.columns, levels.map((level) => layout.placementsByLevel[level]![0].id)]);
+  return { status: 'ready', automatic: layout, sourceKey, levels, sheetsByLevel, labelSpacingPx };
 }
