@@ -1,8 +1,8 @@
 /**
  * Concrete and rebar zones rasterized onto the exported plan page - the canvas twin of
  * ConcreteZones / RebarZones (the text comes from lib/structuralOverlay, shared with the screen).
- * Zones only: a hatched or dotted outline, the mark and a compact notation. Individual bars and
- * mesh sheets are never drawn. Points are native page pixels; `offsetY` is the header band above
+ * Concrete/Mesh keep their existing outlines and notation. Spatial Straight Bars reuse the same
+ * prepared zone and actual bar lines as the UI. Mesh sheets are not drawn here. Points are native page pixels; `offsetY` is the header band above
  * the plan, `mult` the export scale.
  */
 

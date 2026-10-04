@@ -57,6 +57,7 @@ export default function RebarPanel() {
   const copyRoomsToRebar = useAppStore((s) => s.copyRoomsToRebar);
   const deleteItem = useAppStore((s) => s.deleteRebarItem);
   const duplicateMesh = useAppStore((s) => s.duplicateRebarMesh);
+  const duplicateBars = useAppStore((s) => s.duplicateStraightBars);
 
   if (!project) return null;
   const items = rebarOf(project);
@@ -75,13 +76,11 @@ export default function RebarPanel() {
           <span className="color-dot" style={{ background: REBAR_COLOR }} />
           <span className="detail-header-text">
             <span className="detail-title" dir="auto">{markLabel(selected, t)}</span>
-            <span className="detail-subtitle">{t(selected.kind === 'mesh' ? 'rebar.meshZone' : 'rebar.manualBars')}</span>
+            <span className="detail-subtitle">{t(selected.kind === 'mesh' ? 'rebar.meshZone' : selected.barsZone ? 'rebar.spatial.area' : selected.drawnBars !== undefined ? 'rebar.spatial.individual' : 'rebar.manualBars')}</span>
           </span>
-          {selected.kind === 'mesh' && (
-            <button className="icon-btn" title={t('rebar.duplicate')} aria-label={t('rebar.duplicate')} onClick={() => duplicateMesh(selected.id)}>
-              <Icon name="copy" />
-            </button>
-          )}
+          <button className="icon-btn" title={t(selected.kind === 'mesh' ? 'rebar.duplicate' : 'rebar.spatial.duplicateItem')} aria-label={t(selected.kind === 'mesh' ? 'rebar.duplicate' : 'rebar.spatial.duplicateItem')} onClick={() => selected.kind === 'mesh' ? duplicateMesh(selected.id) : duplicateBars(selected.id)}>
+            <Icon name="copy" />
+          </button>
           <button
             className="icon-btn danger"
             title={t('rebar.delete')}
@@ -496,6 +495,10 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
   const removeZone = useAppStore((s) => s.removeBarsZone);
   const startLine = useAppStore((s) => s.startDrawingBar);
   const individualMode = useAppStore((s) => s.setBarsIndividualMode);
+  const removeLayout = useAppStore((s) => s.removeDrawnBarsLayout);
+  const barsDrawing = useAppStore((s) => s.barsDrawing);
+  const toolMode = useAppStore((s) => s.toolMode);
+  const setToolMode = useAppStore((s) => s.setToolMode);
   const selectedBarId = useAppStore((s) => s.selectedDrawnBarId);
   const selectBar = useAppStore((s) => s.setSelectedDrawnBarId);
   const resizeBar = useAppStore((s) => s.resizeDrawnBar);
@@ -503,6 +506,7 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
   const deleteBar = useAppStore((s) => s.deleteDrawnBar);
   const selectedBar = bars.drawnBars?.find((bar) => bar.id === selectedBarId);
   const calibration = plan?.pages[bars.pageNumber]?.calibration ?? null;
+  const selectedCalibration = selectedBar ? plan?.pages[selectedBar.pageNumber]?.calibration ?? null : null;
   const calc = resolveStraightBars(bars, calibration, plan?.pages);
   const zone = bars.barsZone;
 
@@ -515,7 +519,15 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
         <button className={`btn-ghost small ${bars.drawnBars !== undefined ? 'active' : ''}`} disabled={!!zone} onClick={() => individualMode(bars.id)}>{t('rebar.spatial.individual')}</button>
       </div>
       {bars.drawnBars !== undefined ? <>
-        <button className="btn-ghost small" onClick={() => startLine(bars.id)}>{t('rebar.spatial.drawBar')}</button>
+        <div className="concrete-kinds">
+          <button className={`btn-ghost small ${barsDrawing === 'line' && toolMode === 'draw' ? 'active' : ''}`}
+            onClick={() => barsDrawing === 'line' && toolMode === 'draw' ? setToolMode('select') : startLine(bars.id)}>
+            {t(barsDrawing === 'line' && toolMode === 'draw' ? 'rebar.spatial.finishDrawing' : 'rebar.spatial.drawBar')}
+          </button>
+          {bars.drawnBars.length > 0 && <button className="btn-ghost small" onClick={() => { selectBar(null); setToolMode('select'); }}>{t('rebar.spatial.moveGroup')}</button>}
+          <button className="btn-ghost small danger" onClick={() => { if (confirm(t('rebar.spatial.removeLayoutConfirm'))) removeLayout(bars.id); }}>{t('rebar.spatial.removeLayout')}</button>
+        </div>
+        {!selectedBar && bars.drawnBars.length > 0 && <p className="muted">{t('rebar.spatial.groupHint')}</p>}
         <p className="muted">{t('rebar.spatial.count', { count: calc.count ?? '-' })}</p>
         {selectedBar && <section className="rebar-direction">
           <div className="rebar-direction-head">
@@ -524,11 +536,11 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
               onClick={() => duplicateBar(bars.id, selectedBar.id)}><Icon name="copy" /></button>
             <button className="icon-btn danger" title={t('rebar.spatial.deleteBar')} aria-label={t('rebar.spatial.deleteBar')}
               onClick={() => deleteBar(bars.id, selectedBar.id)}><Icon name="trash" /></button>
-            <button className="btn-ghost small" onClick={() => selectBar(null)}>{t('rebar.spatial.doneEditing')}</button>
+            <button className="btn-ghost small" onClick={() => { selectBar(null); setToolMode('select'); }}>{t('rebar.spatial.doneEditing')}</button>
           </div>
-          {calibration ? <div className="form-row">
+          {selectedCalibration ? <div className="form-row">
             <label>{t('rebar.barLength')} ({t('units.m')})</label>
-            <NumberField value={drawnBarLength(selectedBar, calibration.metersPerPixel) ?? undefined}
+            <NumberField value={drawnBarLength(selectedBar, selectedCalibration.metersPerPixel) ?? undefined}
               onChange={(v) => { if (v) resizeBar(bars.id, selectedBar.id, v); }} />
           </div> : <p className="muted">{t('concrete.noScale')}</p>}
         </section>}

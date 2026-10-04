@@ -213,7 +213,7 @@ export function resolveStraightBars(item: RebarBars, calibration: Calibration | 
   const sides = zone ? zoneGeometry(zone.points, calibration?.metersPerPixel ?? 0)?.sides : null;
   const automaticLengthM = sides ? (zone?.direction === 'short' ? sides.shortM : sides.longM) : null;
   const lengthM = zone ? zone.lengthMode === 'manual' ? finitePositive(zone.manualLengthM) : automaticLengthM : finitePositive(item.lengthM);
-  const count = typeof item.count === 'number' && Number.isFinite(item.count) && item.count >= 0 ? item.count : null;
+  const count = typeof item.count === 'number' && Number.isFinite(item.count) && item.count >= 0 && (!zone || Number.isSafeInteger(item.count)) ? item.count : null;
   const status: RebarStatus = zone && zone.lengthMode !== 'manual' && !finitePositive(calibration?.metersPerPixel)
     ? 'no-scale' : diameterMm === null || lengthM === null || count === null ? 'invalid-input' : 'ok';
   const calc = status === 'ok'

@@ -110,5 +110,5 @@ export function barsLengthDescription(d: RebarLevelRow, x: ExportContext): strin
 
 export function levelReportSpecification(d: RebarLevelRow, x: ExportContext): string {
   const specification = levelSpecification(d, x);
-  return d.kind === 'bars' ? `${specification}\n${barsLengthDescription(d, x)}` : specification;
+  return d.kind === 'bars' ? `${specification} · ${barsLengthDescription(d, x)}` : specification;
 }

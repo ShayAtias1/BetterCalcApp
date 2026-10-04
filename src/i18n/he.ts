@@ -875,6 +875,13 @@ export const he = {
   // Rebar takeoff: mesh zones (a marked area plus layers) and manual bars.
   rebar: {
     spatial: {
+      duplicateItem: 'שכפל פריט מוטות',
+      finishDrawing: 'סיום ציור',
+      moveGroup: 'הזז את כל הקבוצה',
+      groupHint: 'גרור מוט להזזת הקבוצה הנבחרת; לחץ על מוט לעריכה בנפרד.',
+      removeLayout: 'הסר פריסה מצוירת',
+      removeLayoutConfirm: 'להסיר את כל המוטות המצוירים ולחזור להזנה מספרית? הקוטר, הסימון והפחת נשמרים.',
+
       selectedBar: 'מוט נבחר',
       duplicateBar: 'שכפל מוט',
       deleteBar: 'מחק מוט',

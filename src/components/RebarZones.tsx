@@ -13,8 +13,8 @@ export { REBAR_COLOR };
  * Rebar mesh zones of the page on screen: a lightweight dotted outline with a faint tint and a
  * short label — the mark, then one line per reinforcement level (`Bottom: Ø12 @ 20 — 2 directions`,
  * or `Bottom: Long Ø12@20 | Short Ø10@15`). On a zone too small for that, the mark and a compact
- * B / T tag. Individual bars are never drawn. Purely visual and not interactive: selecting happens through the
- * viewer's click handler, in the Rebar tab only. Manual bars have no shape, so no overlay.
+ * B / T tag. Spatial Bars use the same prepared lines as plan exports. This overlay stays purely visual;
+ * selection and dragging use the viewer's existing handlers. Legacy numerical Bars have no overlay.
  */
 export default function RebarZones({
   items,

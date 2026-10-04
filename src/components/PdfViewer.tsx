@@ -235,10 +235,10 @@ export default function PdfViewer() {
 
   const vertexDrag = useRef<{ pointIndex: number } | null>(null);
   const structuralDrag = useRef<{
-    kind: 'concrete' | 'mesh' | 'bars'; id: string; start: Point; points: Point[]; offset: Point;
+    kind: 'concrete' | 'mesh' | 'bars'; id: string; start: Point; points: Point[]; offset: Point; drawnBars?: DrawnStraightBar[];
   } | null>(null);
   const [structuralPreview, setStructuralPreview] = useState<{
-    kind: 'concrete' | 'mesh' | 'bars'; id: string; points: Point[];
+    kind: 'concrete' | 'mesh' | 'bars'; id: string; points: Point[]; drawnBars?: DrawnStraightBar[];
   } | null>(null);
   const barDrag = useRef<{ itemId: string; bar: DrawnStraightBar; start: Point; endpoint: 'start' | 'end' | null; preview: DrawnStraightBar | null } | null>(null);
   const [barPreview, setBarPreview] = useState<{ itemId: string; bar: DrawnStraightBar } | null>(null);
@@ -256,6 +256,7 @@ export default function PdfViewer() {
       ? updateConcreteElement(project, structuralPreview.id, { points: structuralPreview.points })
       : (() => {
         const item = rebarOf(project).find((i) => i.id === structuralPreview.id);
+        if (item?.kind === 'bars' && structuralPreview.drawnBars) return updateRebarItem(project, item.id, { drawnBars: structuralPreview.drawnBars });
         return item?.kind === 'bars' && item.barsZone
           ? updateRebarItem(project, item.id, { barsZone: { ...item.barsZone, points: structuralPreview.points } })
           : updateRebarItem(project, structuralPreview.id, { points: structuralPreview.points });
@@ -449,6 +450,10 @@ export default function PdfViewer() {
 
       if (e.code === 'Space') spaceHeld.current = true;
       if (e.key === 'Escape') {
+        structuralDrag.current = null;
+        barDrag.current = null;
+        setStructuralPreview(null);
+        setBarPreview(null);
         clearDrawingPoints();
         clearMeasurePoints();
         clearMarkupPoints();
@@ -481,7 +486,10 @@ export default function PdfViewer() {
       // room confirmation) as the sidebar's ✕ buttons — so it lands in undo history identically.
       // A selected markup wins over a selected room: it is the more recent selection on the plan.
       if ((e.key === 'Delete' || e.key === 'Backspace') && !isEditingField && !textDraft) {
-        if (selectedMarkupId) {
+        if (drawTarget === 'rebar' && overlayVisible.rebar && selectedRebarId && selectedDrawnBarId) {
+          e.preventDefault();
+          useAppStore.getState().deleteDrawnBar(selectedRebarId, selectedDrawnBarId);
+        } else if (selectedMarkupId) {
           e.preventDefault();
           deleteMarkup(selectedMarkupId);
         } else if (selectedRoomId) {
@@ -513,6 +521,10 @@ export default function PdfViewer() {
     markupPoints,
     selectedMarkupId,
     selectedRoomId,
+    selectedRebarId,
+    selectedDrawnBarId,
+    drawTarget,
+    overlayVisible.rebar,
     clearDetectionCandidates,
     project,
     textDraft,
@@ -563,6 +575,8 @@ export default function PdfViewer() {
             barDrag.current = { itemId: selected.id, bar, start: native,
               endpoint: endpointIndex === 0 ? 'start' : endpointIndex === 1 ? 'end' : null, preview: null };
           }
+        } else if (!selectedDrawnBarId && selected.drawnBars.some((b) => b.pageNumber === currentPage && hitStraightBar(native, b, 6 / zoom))) {
+          structuralDrag.current = { kind: 'bars', id: selected.id, start: native, points: [], offset: { x: 0, y: 0 }, drawnBars: selected.drawnBars };
         }
         return;
       }
@@ -637,6 +651,7 @@ export default function PdfViewer() {
       drag.offset = offset;
       setStructuralPreview({
         kind: drag.kind, id: drag.id,
+        ...(drag.drawnBars ? { drawnBars: drag.drawnBars.map((bar) => translateBar(bar, offset)) } : {}),
         points: drag.points.map((point) => ({ ...point, x: point.x + offset.x, y: point.y + offset.y })),
       });
       return;

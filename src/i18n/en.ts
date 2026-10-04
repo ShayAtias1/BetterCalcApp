@@ -871,6 +871,13 @@ export const en: Dictionary = {
   // Rebar takeoff: mesh zones (a marked area plus layers) and manual bars.
   rebar: {
     spatial: {
+      duplicateItem: 'Duplicate bars item',
+      finishDrawing: 'Finish drawing',
+      moveGroup: 'Move whole group',
+      groupHint: 'Drag a bar to move the selected group; click a bar to edit it individually.',
+      removeLayout: 'Remove drawn layout',
+      removeLayoutConfirm: 'Remove all drawn bars and return this item to numerical entry? Diameter, mark and waste are kept.',
+
       selectedBar: 'Selected bar',
       duplicateBar: 'Duplicate bar',
       deleteBar: 'Delete bar',

@@ -46,7 +46,7 @@ import {
 import { polygonAreaPx } from '../lib/geometry';
 import { isRectangle } from '../lib/zoneGeometry';
 import { resolveStraightBars } from '../lib/rebar';
-import { resizeStraightBar } from '../lib/straightBarsGeometry';
+import { resizeStraightBar, translateBar } from '../lib/straightBarsGeometry';
 import { overlayForTool, readOverlayVisibility, OVERLAY_STORAGE_KEY, type OverlayKey, type OverlayVisibility } from '../lib/overlayVisibility';
 import { createHistoryTracker } from '../lib/undoHistory';
 import { loadPdfPlanSource } from '../lib/planSource';
@@ -379,6 +379,8 @@ interface AppState {
   /** Adds a manual-bars row on the current page and selects it. */
   addRebarBars: () => void;
   duplicateRebarMesh: (id: string) => void;
+  duplicateStraightBars: (id: string) => void;
+  removeDrawnBarsLayout: (id: string) => void;
   deleteRebarItem: (id: string) => void;
   /** Which reinforcement levels (Bottom / Top / both) a mesh zone has. One undo step. */
   setRebarMeshLevels: (id: string, choice: MeshLevelChoice) => void;
@@ -684,7 +686,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedConcreteId: null,
       selectedRebarId: null, selectedDrawnBarId: null,
       drawTarget: 'room',
-  barsDrawing: null,
+      barsDrawing: null,
       exportRegions: {},
       activeApartmentNumber: '',
       history: [],
@@ -1079,7 +1081,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     const bar = item?.kind === 'bars' ? item.drawnBars?.find((b) => b.id === barId) : undefined;
     if (!project || !bar) return;
     const resized = resizeStraightBar(bar, lengthM, project.pages[bar.pageNumber]?.calibration?.metersPerPixel ?? 0);
-    if (resized) get().editDrawnBar(itemId, resized);
+    if (!resized || !item || item.kind !== 'bars' || !item.drawnBars) return;
+    historyTracker.pushDebounced(get, set, project);
+    set({ project: { ...updateRebar(project, itemId, { drawnBars: item.drawnBars.map((b) => b.id === barId ? resized : b) }), updatedAt: Date.now() } });
+    scheduleSave(get, set);
   },
   duplicateDrawnBar: (itemId, barId) => {
     const { project } = get();
@@ -1116,7 +1121,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().setBarsIndividualMode(id);
     get().setCurrentPage(item.pageNumber);
     ensureOverlayVisible('rebar', get, set);
-    set({ selectedRebarId: id, drawTarget: 'rebar', barsDrawing: 'line', toolMode: 'draw', drawingPoints: [] });
+    set({ selectedRebarId: id, selectedDrawnBarId: null, drawTarget: 'rebar', barsDrawing: 'line', toolMode: 'draw', drawingPoints: [] });
   },
   finishDrawnBar: (start, end) => {
     const { project, selectedRebarId, currentPage, barsDrawing } = get();
@@ -1128,12 +1133,37 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ project: { ...updateRebar(project, item.id, { drawnBars: [...(item.drawnBars ?? []), bar] }), updatedAt: Date.now() }, drawingPoints: [], selectedDrawnBarId: bar.id });
     scheduleSave(get, set);
   },
+  removeDrawnBarsLayout: (id) => {
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    if (!project || !item || item.kind !== 'bars' || item.drawnBars === undefined) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, id, { drawnBars: undefined, count: 0, lengthM: 0 }), updatedAt: Date.now() },
+      selectedDrawnBarId: null, barsDrawing: null, drawingPoints: [], toolMode: 'select' });
+    scheduleSave(get, set);
+  },
+  duplicateStraightBars: (id) => {
+    const { project } = get();
+    const source = project && rebarOf(project).find((i) => i.id === id);
+    if (!project || !source || source.kind !== 'bars') return;
+    const copy = { ...structuredClone(source), id: uuid() };
+    if (!hasManualMark(copy)) copy.autoNumber = nextAutoNumber(rebarOf(project), 'bars');
+    if (copy.barsZone) copy.barsZone.points = structuralDuplicatePoints(project, copy.barsZone.pageNumber, copy.barsZone.points);
+    if (copy.drawnBars !== undefined) {
+      const offset = structuralDuplicatePoints(project, source.pageNumber, [{ x: 0, y: 0 }])[0];
+      copy.drawnBars = copy.drawnBars.map((bar) => ({ ...translateBar(bar, offset), id: uuid() }));
+    }
+    historyTracker.push(get, set, project);
+    set({ project: { ...addRebarItem(project, copy), updatedAt: Date.now() }, selectedRebarId: copy.id,
+      selectedDrawnBarId: null, barsDrawing: null, drawingPoints: [], toolMode: 'select' });
+    scheduleSave(get, set);
+  },
   startBarsZone: (id) => {
     const { project } = get();
     const item = project && rebarOf(project).find((i) => i.id === id);
     if (!item || item.kind !== 'bars' || item.drawnBars !== undefined) return;
     ensureOverlayVisible('rebar', get, set);
-    set({ selectedRebarId: id, drawTarget: 'rebar', barsDrawing: 'zone', toolMode: 'draw-rect', drawingPoints: [] });
+    set({ selectedRebarId: id, selectedDrawnBarId: null, drawTarget: 'rebar', barsDrawing: 'zone', toolMode: 'draw-rect', drawingPoints: [] });
   },
   removeBarsZone: (id) => {
     const { project } = get();
@@ -1153,9 +1183,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       : rebarOf(project).find((item) => item.id === id);
     if (!source) return;
     const original = 'points' in source ? source.points : source.kind === 'bars' ? source.barsZone?.points : undefined;
-    if (!original) return;
-    const points = original.map((point) => ({ ...point, x: point.x + offset.x, y: point.y + offset.y }));
+    if (!original && !(source.kind === 'bars' && source.drawnBars?.length)) return;
+    const points = original?.map((point) => ({ ...point, x: point.x + offset.x, y: point.y + offset.y })) ?? [];
     const next = kind === 'concrete' ? updateConcrete(project, id, { points })
+      : source.kind === 'bars' && source.drawnBars ? updateRebar(project, id, { drawnBars: source.drawnBars.map((bar) => translateBar(bar, offset)) })
       : source.kind === 'bars' && source.barsZone ? updateRebar(project, id, { barsZone: { ...source.barsZone, points } })
       : updateRebar(project, id, { points });
     historyTracker.push(get, set, project);
@@ -1220,7 +1251,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!project) return;
     historyTracker.push(get, set, project);
     const bars = newRebarBars(project, currentPage);
-    set({ project: { ...addRebarItem(project, bars), updatedAt: Date.now() }, selectedRebarId: bars.id });
+    set({ project: { ...addRebarItem(project, bars), updatedAt: Date.now() }, selectedRebarId: bars.id, selectedDrawnBarId: null, barsDrawing: null, drawingPoints: [], toolMode: 'select' });
     scheduleSave(get, set);
   },
   duplicateRebarMesh: (id) => {
