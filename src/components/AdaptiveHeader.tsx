@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useT } from '../i18n';
 import Icon from './Icon';
+import { BrandHomeLink } from './BrandLogo';
 import TopBarMenu, { type MenuId } from './TopBarMenu';
 import LanguageSwitch from './LanguageSwitch';
 
@@ -15,9 +16,12 @@ export default function AdaptiveHeader({ title, sheet, sheetCount, onSheet, onBa
     <div className="adaptive-header-main">
       <button className="icon-btn" onClick={onBack} aria-label={t('topBar.backToOverview')}><Icon name="back" /></button>
       <div className="adaptive-plan-title" dir="auto" title={title}>{title}</div>
-      <span className={`save-state save-state-${saveState}`} role="status">{t(`topBar.save.${saveState}`)}</span>
-      <TopBarMenu id="view" openId={menu} setOpenId={setMenu} icon="eye" label={t('adaptive.view')} variant="ghost">{view}</TopBarMenu>
+      <BrandHomeLink title={t('topBar.goHome')} responsive />
       <TopBarMenu id="settings" openId={menu} setOpenId={setMenu} label={t('adaptive.more')} variant="ghost">
+        <div className="adaptive-menu-status">
+          <span className={`save-state save-state-${saveState}`} role="status">{t(`topBar.save.${saveState}`)}</span>
+          <span className={calibrated ? 'muted' : 'cal-missing'}>{t(calibrated ? 'pageStatus.calibrated' : 'pageStatus.notCalibrated')}</span>
+        </div>
         {more && <div className="menu-action-group" onClick={(event) => {
           if (event.target instanceof Element && event.target.closest('button.menu-item')) setMenu(null);
         }}>{more}</div>}<LanguageSwitch />
@@ -34,7 +38,9 @@ export default function AdaptiveHeader({ title, sheet, sheetCount, onSheet, onBa
         </label>
       </TopBarMenu>
       <button className="icon-btn" disabled={sheet >= sheetCount} onClick={() => onSheet(sheet + 1)} aria-label={t('topBar.nextPage')}><Icon name="chevron-next" /></button>
-      <span className={calibrated ? 'muted' : 'cal-missing'}>{t(calibrated ? 'pageStatus.calibrated' : 'pageStatus.notCalibrated')}</span>
+      <TopBarMenu id="view" openId={menu} setOpenId={setMenu} icon="eye" label={t('adaptive.view')} variant="ghost">{view}</TopBarMenu>
+      <span className={`save-state save-state-${saveState} adaptive-save-state`} role="status">{t(`topBar.save.${saveState}`)}</span>
+      <span className={`adaptive-calibration-state ${calibrated ? 'muted' : 'cal-missing'}`}>{t(calibrated ? 'pageStatus.calibrated' : 'pageStatus.notCalibrated')}</span>
     </div>
   </header>;
 }

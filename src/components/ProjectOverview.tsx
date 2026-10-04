@@ -14,6 +14,8 @@ import { everything, hasAnyContent, type ExportContent } from '../lib/exportCont
 import { BrandHomeLink } from './BrandLogo';
 import NewComparisonDialog from './compare/NewComparisonDialog';
 import LanguageSwitch from './LanguageSwitch';
+import TopBarMenu, { type MenuId } from './TopBarMenu';
+import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import type { Comparison } from '../types/compare';
 
 /** What a comparison row says: which flat, how many revised plans, when it was last touched. */
@@ -51,6 +53,8 @@ function primaryOrder(a: CategoryAmount, t: TranslateFn): string {
  */
 export default function ProjectOverview() {
   const t = useT();
+  const { layout } = useWorkspaceLayout();
+  const [headerMenu, setHeaderMenu] = useState<MenuId | null>(null);
   const project = useAppStore((s) => s.currentProject);
   const plans = useAppStore((s) => s.projectPlans);
   const closeProject = useAppStore((s) => s.closeProject);
@@ -147,10 +151,10 @@ export default function ProjectOverview() {
   };
 
   return (
-    <div className="workspace home">
+    <div className="workspace home project-overview-workspace">
       <div className="top-bar">
         <div className="top-bar-group identity">
-          <BrandHomeLink title={t('topBar.goHome')} />
+          <BrandHomeLink title={t('topBar.goHome')} responsive />
           {/* "Projects" sits right next to the logo (the reading start in either direction). */}
           <button className="btn-ghost small" onClick={() => void closeProject()} title={t('projectOverview.backToProjects')}>
             <Icon name="exit" />
@@ -161,12 +165,15 @@ export default function ProjectOverview() {
             dir="auto"
             value={project.name}
             onChange={(e) => renameProject(e.target.value)}
-            title={t('projectOverview.projectName')}
+            title={project.name}
+            aria-label={t('projectOverview.projectName')}
           />
         </div>
         <div className="top-bar-group grow" />
         <div className="top-bar-group output">
-          <LanguageSwitch />
+          {layout === 'expanded' ? <LanguageSwitch /> : <TopBarMenu id="settings" openId={headerMenu} setOpenId={setHeaderMenu} label={t('adaptive.more')} variant="ghost">
+            <LanguageSwitch />
+          </TopBarMenu>}
         </div>
       </div>
 
@@ -202,9 +209,9 @@ export default function ProjectOverview() {
                   <p className="muted">{t('projectOverview.takeoffIntro')}</p>
                 </div>
                 {/* The project exports cover the quantity plans only, so they live in this panel. */}
-                <div className="panel-head-actions">
+                <div className="panel-head-actions project-plan-actions">
                   <button
-                    className="btn-secondary"
+                    className="btn-secondary project-export-excel"
                     disabled={!!busy || plans.length === 0}
                     onClick={() => setExportDialog({ kind: 'excel', content: everything(exportAvailable) })}
                     title={t('projectOverview.excelHint')}
@@ -213,7 +220,7 @@ export default function ProjectOverview() {
                     {busy === 'excel' ? t('common.exporting') : t('projectOverview.excel')}
                   </button>
                   <button
-                    className="btn-secondary"
+                    className="btn-secondary project-export-pdf"
                     disabled={!!busy || plans.length === 0}
                     onClick={() => setExportDialog({ kind: 'pdf', content: everything(exportAvailable) })}
                     title={t('projectOverview.pdfHint')}
@@ -221,7 +228,7 @@ export default function ProjectOverview() {
                     <Icon name="download" />
                     {busy === 'pdf' ? t('common.exporting') : t('projectOverview.pdf')}
                   </button>
-                  <button className="btn-primary" onClick={() => setAdding(true)} disabled={!!busy}>
+                  <button className="btn-primary project-new-plan" onClick={() => setAdding(true)} disabled={!!busy}>
                     <Icon name="plus" />
                     {t('projectOverview.newPlan')}
                   </button>
@@ -239,7 +246,7 @@ export default function ProjectOverview() {
                     <li key={r.plan.id} onClick={() => void openPlan(r.plan.id)} title={t('projectOverview.openPlan')}>
                       <Icon name="map" />
                       <span className="saved-list-text">
-                        <span className="saved-list-name" dir="auto">{r.plan.name}</span>
+                        <span className="saved-list-name" dir="auto" title={r.plan.name}>{r.plan.name}</span>
                         <span className="saved-list-meta">
                           {r.calibratedPageCount > 0
                             ? t('projectOverview.planMeta', { rooms: r.roomCount, pages: r.calibratedPageCount })
@@ -247,6 +254,8 @@ export default function ProjectOverview() {
                         </span>
                       </span>
                       <span className={`plan-status plan-status-${r.status}`}>{planStatusLabel(r.status)}</span>
+                      {layout !== 'expanded' && <button className="icon-btn plan-open-action" title={t('projectOverview.openPlan')} aria-label={t('projectOverview.openPlan')}
+                        onClick={(event) => { event.stopPropagation(); void openPlan(r.plan.id); }}><Icon name="chevron-next" /></button>}
                       <span className="list-item-actions" onClick={(e) => e.stopPropagation()}>
                         <button className="icon-btn" title={t('projectOverview.rename')} onClick={() => onRename(r.plan.id, r.plan.name)}>
                           <Icon name="text" />
@@ -292,7 +301,7 @@ export default function ProjectOverview() {
                     <li key={c.id} onClick={() => void openComparison(c.id)} title={t('projectOverview.openComparison')}>
                       <Icon name="layers" />
                       <span className="saved-list-text">
-                        <span className="saved-list-name" dir="auto">{c.name}</span>
+                        <span className="saved-list-name" dir="auto" title={c.name}>{c.name}</span>
                         <span className="saved-list-meta">{comparisonMeta(c, t)}</span>
                       </span>
                       {/* TODO: "Move to Project" for comparisons — reassign `projectId` and move the id between the

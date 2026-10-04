@@ -3334,3 +3334,65 @@ html[dir='rtl'] .qty-table .col-room {
 .responsive-popover select { max-width: 100%; min-width: 0; }
 .responsive-popover .grid-menu-controls { padding: 4px 8px; }
 .responsive-popover .grid-spacing-row { flex-wrap: wrap; gap: 4px; }
+
+/* Compact headers reserve a real title region and reuse the desktop brand assets. */
+.adaptive-header-main { min-width: 0; }
+.adaptive-header-main > .icon-btn, .adaptive-header-main > .top-bar-menu-anchor { flex: none; }
+.adaptive-plan-title { flex: 1 1 0; }
+.adaptive-header .app-brand { display: flex; margin: 0; padding-inline: 4px; }
+.adaptive-header .adaptive-sheet-bar { min-width: 0; flex-wrap: wrap; }
+.adaptive-header .adaptive-sheet-bar > .top-bar-menu-anchor { flex: none; }
+.adaptive-header .adaptive-save-state { margin-inline-start: auto; }
+.adaptive-header .adaptive-calibration-state { margin-inline-start: 4px; }
+.adaptive-menu-status { display: none; }
+.responsive-popover[data-layout="narrow"] .adaptive-menu-status { display: grid; gap: 4px; padding: 6px 10px; }
+[data-layout="narrow"] .adaptive-header :is(.adaptive-save-state, .adaptive-calibration-state) { display: none; }
+[data-layout="narrow"] .adaptive-sheet-bar > .top-bar-menu-anchor:last-of-type { margin-inline-start: auto; }
+@media (max-width: 420px) {
+  .responsive-brand .app-brand-logo { height: 22px; }
+}
+
+/* Project overview: actions wrap before text becomes a squeezed column. */
+:is([data-layout="compact"], [data-layout="narrow"]) .project-overview .home-panel-head { flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+:is([data-layout="compact"], [data-layout="narrow"]) .project-overview .home-panel-text { flex: 1 1 280px; min-width: 0; }
+:is([data-layout="compact"], [data-layout="narrow"]) .project-overview .panel-head-actions { flex-wrap: wrap; gap: 8px; }
+:is([data-layout="compact"], [data-layout="narrow"]) .project-overview-workspace .top-bar { height: auto; min-height: 48px; }
+:is([data-layout="compact"], [data-layout="narrow"]) .project-overview-workspace .top-bar-group.identity {
+  flex: 1 1 0; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px;
+}
+:is([data-layout="compact"], [data-layout="narrow"]) .project-overview-workspace .top-bar-group.identity > .app-brand { grid-column: 3; grid-row: 1; margin: 0; }
+:is([data-layout="compact"], [data-layout="narrow"]) .project-overview-workspace .top-bar-group.identity > .btn-ghost { grid-column: 1; grid-row: 1; }
+:is([data-layout="compact"], [data-layout="narrow"]) .project-overview-workspace .project-name-input {
+  grid-column: 2; grid-row: 1; width: 100%; max-width: none; min-width: 0; box-sizing: border-box;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+:is([data-layout="compact"], [data-layout="narrow"]) .project-overview-workspace .top-bar-group.grow { display: none; }
+[data-layout="narrow"] .project-overview-workspace .top-bar-group.identity > .btn-ghost .btn-label { display: none; }
+[data-layout="narrow"] .project-overview-workspace .top-bar-group.identity > .btn-ghost { min-width: 44px; }
+[data-layout="narrow"] .project-overview .home-panel { padding: 12px; }
+[data-layout="narrow"] .project-overview .home-panel-head { display: flex; flex-direction: column; align-items: stretch; }
+[data-layout="narrow"] .project-overview .home-panel-text { flex: none; width: 100%; }
+[data-layout="narrow"] .project-overview .project-plan-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+[data-layout="narrow"] .project-plan-actions .project-new-plan { grid-column: 1 / -1; grid-row: 1; }
+[data-layout="narrow"] .project-plan-actions .project-export-pdf { grid-column: 1; grid-row: 2; }
+[data-layout="narrow"] .project-plan-actions .project-export-excel { grid-column: 2; grid-row: 2; }
+[data-layout="narrow"] .project-overview .home-panel-head > .btn-primary { width: 100%; }
+[data-layout="narrow"] .project-overview .empty-state { padding-block: 16px; }
+
+/* Phone plan cards keep names/counts full-width, with separate status and action rows. */
+[data-layout="narrow"] .project-overview .plan-list { gap: 8px; }
+[data-layout="narrow"] .project-overview .plan-list li { display: grid; grid-template-columns: 24px minmax(0, 1fr) 44px; gap: 8px; padding: 10px; border-color: var(--border); }
+[data-layout="narrow"] .project-overview .plan-list li > svg { grid-column: 1; grid-row: 1; }
+[data-layout="narrow"] .project-overview .saved-list-text { grid-column: 2; grid-row: 1; min-width: 0; }
+[data-layout="narrow"] .project-overview .saved-list-name { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+[data-layout="narrow"] .project-overview .saved-list-meta { white-space: normal; overflow-wrap: anywhere; }
+[data-layout="narrow"] .project-overview .plan-status { grid-column: 1 / 3; grid-row: 2; justify-self: start; max-width: 100%; white-space: normal; }
+[data-layout="narrow"] .project-overview .plan-open-action { grid-column: 3; grid-row: 1; }
+[data-layout="narrow"] .project-overview .list-item-actions { grid-column: 1 / -1; grid-row: 3; justify-content: flex-end; opacity: 1; min-width: 0; }
+[data-layout="compact"] .project-overview .plan-list li { flex-wrap: wrap; }
+[data-layout="compact"] .project-overview .saved-list-text { flex-basis: 240px; }
+[data-layout="compact"] .project-overview .list-item-actions { opacity: 1; }
+[data-layout="narrow"] .project-overview .project-domains { display: flex; flex-wrap: wrap; }
+[data-layout="narrow"] .project-overview .project-domains button { flex: 1; min-height: 44px; }
+
+[data-layout="narrow"] .project-overview .plan-list li:not(:has(.plan-status)) .list-item-actions { grid-row: 2; }
