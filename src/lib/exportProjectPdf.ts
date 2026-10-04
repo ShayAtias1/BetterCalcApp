@@ -72,13 +72,17 @@ export class ReportWriter {
     if (this.y + rows * ROW_H > PAGE_H - MARGIN) this.newPage();
   }
 
-  private drawCells(cells: string[], widths: number[], bg: string, color: string, bold: boolean) {
+  private drawCells(cells: string[], widths: number[], bg: string, color: string, bold: boolean, columnSeparators = false) {
     const usable = PAGE_W - MARGIN * 2;
     this.pt.fillRect(MARGIN, this.y, usable, ROW_H, bg);
     this.pt.strokeRect(MARGIN, this.y, usable, ROW_H, C_BORDER);
     let edge = this.startX;
     cells.forEach((cell, i) => {
       const w = widths[i] ?? 0;
+      if (columnSeparators && i > 0) {
+        // Match the Finishes table's subtle body and header divider treatment.
+        this.pt.line(edge, this.y, edge, this.y + ROW_H, bg === C_HEADER ? '#4B739A' : C_BORDER, 1);
+      }
       this.pt.fillText(cell, edge + (this.sign * w) / 2, this.y + ROW_H / 2 + 4, { size: 12, bold, color, align: 'center', maxWidth: w - 6 });
       edge += this.sign * w;
     });
@@ -92,11 +96,11 @@ export class ReportWriter {
     this.y += 26;
   }
 
-  table(headers: string[], weights: number[], rows: TableRow[]) {
+  table(headers: string[], weights: number[], rows: TableRow[], columnSeparators = false) {
     const usable = PAGE_W - MARGIN * 2;
     const total = weights.reduce((a, b) => a + b, 0);
     const widths = weights.map((w) => (usable * w) / total);
-    const header = () => this.drawCells(headers, widths, C_HEADER, '#ffffff', true);
+    const header = () => this.drawCells(headers, widths, C_HEADER, '#ffffff', true, columnSeparators);
     this.ensure(2);
     header();
     rows.forEach((row, i) => {
@@ -104,7 +108,7 @@ export class ReportWriter {
         this.newPage();
         header(); // repeat the header on every page the table continues onto
       }
-      this.drawCells(row.cells, widths, row.bg ?? (i % 2 === 0 ? C_ZEBRA_A : C_ZEBRA_B), '#1e293b', !!row.bold);
+      this.drawCells(row.cells, widths, row.bg ?? (i % 2 === 0 ? C_ZEBRA_A : C_ZEBRA_B), '#1e293b', !!row.bold, columnSeparators);
     });
     this.y += ROW_H * 0.5;
   }

@@ -35,7 +35,7 @@ export type PdfBlock =
 /** What a report writer must be able to do for `writeBlocks` — the plan report's and the project report's writers both can. */
 export interface BlockWriter {
   section(title: string): void;
-  table(headers: string[], weights: number[], rows: PdfTableRow[]): void;
+  table(headers: string[], weights: number[], rows: PdfTableRow[], columnSeparators?: boolean): void;
   note(text: string): void;
   shapeCard?(card: StirrupShapeCard): void;
 }
@@ -44,7 +44,7 @@ export interface BlockWriter {
 export function writeBlocks(writer: BlockWriter, blocks: PdfBlock[]): void {
   for (const block of blocks) {
     if (block.type === 'section') writer.section(block.title);
-    else if (block.type === 'table') writer.table(block.headers, block.weights, block.rows);
+    else if (block.type === 'table') writer.table(block.headers, block.weights, block.rows, true);
     else if (block.type === 'shape') writer.shapeCard?.(block.card);
     else writer.note(block.text);
   }
