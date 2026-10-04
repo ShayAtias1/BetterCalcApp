@@ -872,8 +872,17 @@ export const en: Dictionary = {
   rebar: {
     stirrupName: 'Stirrup',
     stirrup: {
-      shapeWidth: 'Shape width',
-      shapeHeight: 'Shape height',
+      leftLeg: 'Left leg',
+      base: 'Base',
+      rightLeg: 'Right leg',
+      horizontalLeg: 'Horizontal leg',
+      verticalLeg: 'Vertical leg',
+      segmentLength: 'Segment length',
+      controlPoint: 'Control point',
+      addPoint: 'Add point',
+      removePoint: 'Remove point',
+      shapeWidth: 'Width',
+      shapeHeight: 'Height',
       automaticSpacing: 'Automatic by spacing',
       automaticGrid: 'Automatic grid',
 

@@ -876,8 +876,17 @@ export const he = {
   rebar: {
     stirrupName: 'חישוק',
     stirrup: {
-      shapeWidth: 'רוחב הצורה',
-      shapeHeight: 'גובה הצורה',
+      leftLeg: 'צלע שמאל',
+      base: 'בסיס',
+      rightLeg: 'צלע ימין',
+      horizontalLeg: 'צלע אופקית',
+      verticalLeg: 'צלע אנכית',
+      segmentLength: 'אורך צלע',
+      controlPoint: 'נקודת עריכה',
+      addPoint: 'הוסף נקודה',
+      removePoint: 'מחק נקודה',
+      shapeWidth: 'רוחב',
+      shapeHeight: 'גובה',
       automaticSpacing: 'כמות אוטומטית לפי מרווח',
       automaticGrid: 'רשת פריסה אוטומטית',
 

@@ -1,4 +1,7 @@
-import type { RebarStirrup, StirrupTemplate } from '../types/structural';
+import { useRef, useState } from 'react';
+import type { PointerEvent } from 'react';
+import type { Point } from '../types';
+import type { RebarStirrup, StirrupShape, StirrupTemplate } from '../types/structural';
 import { formatNumber, useT } from '../i18n';
 import { prepareStirrupShape, resizeStirrupSegment, stirrupTemplate } from '../lib/stirrupShape';
 import { useAppStore } from '../store/appStore';
@@ -9,45 +12,159 @@ import NumberField from './NumberField';
 export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
   const t = useT();
   const update = useAppStore((s) => s.updateRebarItem);
-  const model = prepareStirrupShape(item.shape);
-  const set = (shape: RebarStirrup['shape']) => update(item.id, { shape });
+  const [selectedSegment, selectSegment] = useState<number | null>(null);
+  const [selectedPoint, selectPoint] = useState<number | null>(null);
+  const [preview, setPreview] = useState<StirrupShape | null>(null);
+  const drag = useRef<{
+    index: number; pointerId: number; origin: Point; shape: StirrupShape;
+    next: StirrupShape; scale: number; minX: number; minY: number;
+  } | null>(null);
+  const shape = preview ?? item.shape;
+  const prepared = prepareStirrupShape(shape);
+  // Keep the preview frame fixed during a drag so the handle follows the pointer.
+  const normalize = (point: Point) => drag.current
+    ? { x: 15 + (point.x - drag.current.minX) * drag.current.scale, y: 15 + (point.y - drag.current.minY) * drag.current.scale }
+    : point;
+  const model = drag.current ? { ...prepared,
+    points: shape.points.map(normalize),
+    segments: prepared.segments.map((segment) => ({ ...segment,
+      normalizedStart: normalize(segment.start), normalizedEnd: normalize(segment.end) })),
+  } : prepared;
+  const set = (next: StirrupShape) => update(item.id, { shape: next });
+  const custom = shape.template === 'custom';
+  const chooseSegment = (index: number) => { selectSegment(index); selectPoint(null); };
+  const semanticFields = shape.template === 'u'
+    ? [{ key: 'leftLeg', segment: 0 }, { key: 'base', segment: 1 }, { key: 'rightLeg', segment: 2 }]
+    : shape.template === 'l'
+      ? [{ key: 'horizontalLeg', segment: 1 }, { key: 'verticalLeg', segment: 0 }]
+      : [{ key: 'shapeWidth', segment: 1 }, { key: 'shapeHeight', segment: 0 }];
+  const semanticSegment = (index: number) => shape.template === 'rectangle' ? index % 2 : index;
+  const dimensionName = (index: number) => custom ? t('rebar.stirrup.segmentLength')
+    : t(`rebar.stirrup.${semanticFields.find((field) => field.segment === semanticSegment(index))!.key}`);
+  const editDimension = (segment: number, value: number | undefined) => {
+    const lengthM = cmToMeters(value);
+    if (!lengthM || !Number.isFinite(lengthM)) return;
+    const lengths = prepared.segments.map((side) => side.lengthM);
+    lengths[segment] = lengthM;
+    if (shape.template === 'u') {
+      const [left, base, right] = lengths;
+      set({ ...shape, points: [{ x: 0, y: 0 }, { x: 0, y: left },
+        { x: base, y: left }, { x: base, y: left - right }] });
+    } else set(stirrupTemplate(shape.template, lengths[1], lengths[0]));
+  };
+  const pointerPosition = (event: PointerEvent<SVGElement>): Point | null => {
+    const svg = event.currentTarget instanceof SVGSVGElement ? event.currentTarget : event.currentTarget.ownerSVGElement;
+    const matrix = svg?.getScreenCTM();
+    if (!svg || !matrix) return null;
+    const point = svg.createSVGPoint();
+    point.x = event.clientX; point.y = event.clientY;
+    return point.matrixTransform(matrix.inverse());
+  };
+  const startDrag = (event: PointerEvent<SVGCircleElement>, index: number) => {
+    if (!custom || event.button !== 0) return;
+    event.preventDefault(); event.stopPropagation();
+    selectPoint(index); selectSegment(null);
+    const origin = pointerPosition(event);
+    if (!origin) return;
+    const scale = 70 / Math.max(prepared.widthM, prepared.heightM, 0.01);
+    drag.current = { index, pointerId: event.pointerId, origin, shape: item.shape, next: item.shape, scale,
+      minX: Math.min(...item.shape.points.map((point) => point.x)),
+      minY: Math.min(...item.shape.points.map((point) => point.y)) };
+    event.currentTarget.ownerSVGElement?.setPointerCapture(event.pointerId);
+    setPreview(item.shape);
+  };
+  const moveDrag = (event: PointerEvent<SVGSVGElement>) => {
+    const active = drag.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+    const position = pointerPosition(event);
+    if (!position) return;
+    active.next = { ...active.shape, points: active.shape.points.map((point, index) => index === active.index
+      ? { x: point.x + (position.x - active.origin.x) / active.scale,
+        y: point.y + (position.y - active.origin.y) / active.scale } : { ...point }) };
+    setPreview(active.next);
+  };
+  const finishDrag = (event: PointerEvent<SVGSVGElement>, cancel = false) => {
+    const active = drag.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+    if (!cancel) moveDrag(event);
+    drag.current = null; setPreview(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    if (!cancel && prepareStirrupShape(active.next).valid && active.next.points.some((point, index) =>
+      point.x !== active.shape.points[index].x || point.y !== active.shape.points[index].y)) set(active.next);
+  };
+  const activeSegment = selectedSegment === null ? undefined : model.segments[selectedSegment];
   return <section className="rebar-level">
     <span className="section-label">{t('rebar.stirrup.shape')}</span>
     <select value={item.shape.template} onChange={(e) => {
       const template = e.target.value as StirrupTemplate;
+      selectSegment(null); selectPoint(null);
       set(template === 'custom' ? { ...item.shape, template } : stirrupTemplate(template, model.widthM || 0.3, model.heightM || 0.5));
     }}>
       {(['rectangle', 'u', 'l', 'custom'] as const).map((template) => <option key={template} value={template}>{t(`rebar.stirrup.templates.${template}`)}</option>)}
     </select>
-    <svg viewBox="0 0 110 110" width="100%" height="180" direction="ltr" aria-label={t('rebar.stirrup.shape')}>
-      <polyline points={model.points.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#c2410c" strokeWidth="1.5" />
-      {model.closed && model.points.length > 2 && <line x1={model.points.at(-1)!.x} y1={model.points.at(-1)!.y} x2={model.points[0].x} y2={model.points[0].y} stroke="#c2410c" strokeWidth="1.5" />}
-      {model.segments.map((segment) => <text key={segment.index} x={(segment.normalizedStart.x + segment.normalizedEnd.x) / 2 + 3}
-        y={(segment.normalizedStart.y + segment.normalizedEnd.y) / 2 - 3} fontSize="5" fill="#78716c">{formatNumber(round(segment.lengthM * 100, 1))}</text>)}
-      {model.points.map((p, index) => <circle key={index} cx={p.x} cy={p.y} r="2" fill="#fff" stroke="#c2410c" />)}
+    <svg viewBox="0 0 110 110" width="100%" height="220" direction="ltr" aria-label={t('rebar.stirrup.shape')}
+      style={{ touchAction: custom ? 'none' : 'auto' }} onPointerMove={moveDrag}
+      onPointerUp={(event) => finishDrag(event)} onPointerCancel={(event) => finishDrag(event, true)}>
+      {model.segments.map((segment) => {
+        const selected = selectedSegment === segment.index;
+        const color = selected ? '#c2410c' : selectedSegment !== null ? '#a8a29e' : '#c2410c';
+        const midpoint = { x: (segment.normalizedStart.x + segment.normalizedEnd.x) / 2,
+          y: (segment.normalizedStart.y + segment.normalizedEnd.y) / 2 };
+        const vertical = Math.abs(segment.normalizedEnd.y - segment.normalizedStart.y) > Math.abs(segment.normalizedEnd.x - segment.normalizedStart.x);
+        const labelX = midpoint.x + (vertical ? (midpoint.x < 50 ? -4 : 4) : 0);
+        const labelY = midpoint.y + (vertical ? 0 : (midpoint.y < 50 ? -4 : 7));
+        return <g key={segment.index} role="button" tabIndex={0}
+          aria-label={`${dimensionName(segment.index)}: ${formatNumber(round(segment.lengthM * 100, 1))} ${t('units.cm')}`}
+          aria-pressed={selected} style={{ cursor: 'pointer' }} onClick={() => chooseSegment(segment.index)}
+          onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); chooseSegment(segment.index); } }}>
+          <title>{dimensionName(segment.index)}</title>
+          <line x1={segment.normalizedStart.x} y1={segment.normalizedStart.y}
+            x2={segment.normalizedEnd.x} y2={segment.normalizedEnd.y} stroke="transparent" strokeWidth="8" />
+          <line x1={segment.normalizedStart.x} y1={segment.normalizedStart.y}
+            x2={segment.normalizedEnd.x} y2={segment.normalizedEnd.y} stroke={color} strokeWidth={selected ? 2.5 : 1.5} />
+          <text x={labelX} y={labelY} fontSize="5" fill={color}
+            textAnchor={vertical ? (midpoint.x < 50 ? 'end' : 'start') : 'middle'} dominantBaseline="middle">
+            {formatNumber(round(segment.lengthM * 100, 1))}
+          </text>
+        </g>;
+      })}
+      {custom && model.points.map((point, index) => <circle key={index} cx={point.x} cy={point.y} r="2.5"
+        fill={selectedPoint === index ? '#c2410c' : '#fff'} stroke="#c2410c" role="button" tabIndex={0}
+        aria-label={t('rebar.stirrup.controlPoint')} aria-pressed={selectedPoint === index}
+        style={{ cursor: 'grab' }} onPointerDown={(event) => startDrag(event, index)}
+        onClick={(event) => { event.stopPropagation(); selectPoint(index); selectSegment(null); }}
+        onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectPoint(index); selectSegment(null); } }} />)}
     </svg>
-    {item.shape.template !== 'custom' ? <div className="form-grid">
-      {(['widthM', 'heightM'] as const).map((field) => <div className="form-row" key={field}>
-        <label>{t(field === 'widthM' ? 'rebar.stirrup.shapeWidth' : 'rebar.stirrup.shapeHeight')} ({t('units.cm')})</label>
-        <NumberField value={metersToCm(model[field]) ?? undefined} onChange={(v) => set(stirrupTemplate(item.shape.template,
-          field === 'widthM' ? cmToMeters(v) ?? 0 : model.widthM, field === 'heightM' ? cmToMeters(v) ?? 0 : model.heightM))} />
+    {!custom ? <div className="form-grid">
+      {semanticFields.map((field) => <div className="form-row" key={field.key}
+        style={selectedSegment !== null && semanticSegment(selectedSegment) === field.segment ? { background: '#fff7ed', borderRadius: 4 } : undefined}>
+        <label>{t(`rebar.stirrup.${field.key}`)} ({t('units.cm')})</label>
+        <NumberField value={metersToCm(prepared.segments[field.segment]?.lengthM) ?? undefined}
+          onChange={(value) => editDimension(field.segment, value)} />
       </div>)}
     </div> : <>
-      <label className="wi-check"><input type="checkbox" checked={item.shape.closed} onChange={(e) => set({ ...item.shape, closed: e.target.checked })} />{t('rebar.stirrup.closed')}</label>
-      {item.shape.points.map((point, index) => <div key={index} className="form-grid">
-        <span>{t('rebar.stirrup.vertex', { number: index + 1 })}</span>
-        {(['x', 'y'] as const).map((axis) => <label key={axis}>{axis.toUpperCase()} ({t('units.cm')})
-          <input type="number" step="1" value={round(point[axis] * 100, 4)} onChange={(e) => {
-            const value = Number(e.target.value); if (e.target.value.trim() === '' || !Number.isFinite(value)) return;
-            set({ ...item.shape, points: item.shape.points.map((p, i) => i === index ? { ...p, [axis]: value / 100 } : { ...p }) });
-          }} /></label>)}
-        <button className="btn-ghost small danger" disabled={item.shape.points.length <= (item.shape.closed ? 3 : 2)} onClick={() => set({ ...item.shape, points: item.shape.points.filter((_, i) => i !== index) })}>{t('rebar.stirrup.removeVertex')}</button>
-      </div>)}
-      <button className="btn-ghost small" onClick={() => { const last = item.shape.points.at(-1) ?? { x: 0, y: 0 }; set({ ...item.shape, points: [...item.shape.points, { x: last.x + 0.1, y: last.y }] }); }}>{t('rebar.stirrup.addVertex')}</button>
-      {model.segments.map((segment) => <div className="form-row" key={segment.index}>
-        <label>{t('rebar.stirrup.segment', { number: segment.index + 1 })} ({t('units.cm')})</label>
-        <NumberField value={metersToCm(segment.lengthM) ?? undefined} onChange={(v) => { if (v) set(resizeStirrupSegment(item.shape, segment.index, cmToMeters(v)!)); }} />
-      </div>)}
+      {activeSegment && <div className="form-row">
+        <label>{t('rebar.stirrup.segmentLength')} ({t('units.cm')})</label>
+        <NumberField key={activeSegment.index} value={metersToCm(activeSegment.lengthM) ?? undefined}
+          onChange={(value) => { if (value && Number.isFinite(value)) set(resizeStirrupSegment(item.shape, activeSegment.index, cmToMeters(value)!)); }} />
+      </div>}
+      <div className="inline-actions">
+        <button className="btn-ghost small" onClick={() => {
+          const segment = model.segments[selectedSegment ?? model.segments.length - 1];
+          if (!segment) return;
+          const points = item.shape.points.map((point) => ({ ...point }));
+          points.splice(segment.index + 1, 0, { x: (segment.start.x + segment.end.x) / 2, y: (segment.start.y + segment.end.y) / 2 });
+          set({ ...item.shape, points }); selectPoint(segment.index + 1); selectSegment(null);
+        }}>{t('rebar.stirrup.addPoint')}</button>
+        {selectedPoint !== null && selectedPoint < item.shape.points.length && <button className="btn-ghost small danger"
+          disabled={item.shape.points.length <= (item.shape.closed ? 3 : 2)} onClick={() => {
+            set({ ...item.shape, points: item.shape.points.filter((_, index) => index !== selectedPoint).map((point) => ({ ...point })) });
+            selectPoint(null); selectSegment(null);
+          }}>{t('rebar.stirrup.removePoint')}</button>}
+      </div>
+      <label className="wi-check"><input type="checkbox" checked={item.shape.closed} onChange={(e) => {
+        set({ ...item.shape, closed: e.target.checked }); selectSegment(null);
+      }} />{t('rebar.stirrup.closed')}</label>
     </>}
     <p>{t('rebar.stirrup.geometricLength')}: {model.geometricLengthM === null ? '-' : formatNumber(round(model.geometricLengthM, 3))} {t('units.m')}</p>
     <label className="wi-check"><input type="checkbox" checked={item.lengthMode === 'manual'} onChange={(e) => update(item.id, {
