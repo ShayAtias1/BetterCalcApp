@@ -89,7 +89,7 @@ function Workspace() {
       <QuantitiesPanel mobileOpen={destination === 'quantities'} onMobileClose={() => setDestination('plan')} />
       {layout === 'narrow' && <nav className="mobile-destinations" aria-label={t('adaptive.plan')}>
         {(['plan', 'items', 'quantities'] as const).map((next) => <button key={next} aria-current={destination === next ? 'page' : undefined} onClick={() => setDestination(next)}>{t(`adaptive.${next}`)}</button>)}
-      </nav>
+      </nav>}
       <QuantityExportDialogs />
     </div>
   );
