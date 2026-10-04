@@ -28,6 +28,7 @@ export class ViewerPdfDocument {
   private primary:PdfiumDocument | null;
   private sources=new Set<ViewerPdfPage>();
   private disposed=false;
+  private fallbackReason:string | null=null;
   private metadata:PDFDocumentProxy;
   private constructor(metadata:PDFDocumentProxy,bytes:ArrayBuffer){
     this.metadata=metadata;
@@ -62,8 +63,10 @@ export class ViewerPdfDocument {
     return source;
   }
   getPrimary(){return this.primary;}
+  getFallbackReason(){return this.fallbackReason;}
   useFallback(error:unknown){
     if(!this.primary)return;
+    this.fallbackReason=error instanceof Error?error.message:String(error);
     console.warn('Main PDF viewer switching to PDF.js fallback',error);
     trackError('pdf_load',error);
     this.primary.dispose();this.primary=null;
@@ -131,6 +134,7 @@ class ViewerPdfPage implements ViewerPageSource {
           const ctx=canvasContext(canvas,width,height);
           ctx.putImageData(new ImageData(new Uint8ClampedArray(raster.pixels),width,height),0,0);
           if(ctx.isContextLost?.())throw new Error('PDFium canvas context lost');
+          this.logRendered('pdfium',region,scale,width,height);
           return;
         }catch(error){
           check();
@@ -148,6 +152,7 @@ class ViewerPdfPage implements ViewerPageSource {
         check();
         if(ctx.isContextLost?.())throw new Error('PDF.js fallback canvas context lost');
         canvasContext(canvas,width,height).drawImage(staged,0,0);
+        this.logRendered('pdfjs',region,scale,width,height);
       }finally{staged.width=staged.height=0;}
     })().catch(error=>{
       if(!isViewerRenderCancelled(error))console.error('Main PDF viewer render failed',error);
@@ -159,6 +164,17 @@ class ViewerPdfPage implements ViewerPageSource {
     }};
     this.active.add(handle);
     return handle;
+  }
+  /** Log completed pixels, not the intended engine: fallback must be explicit in development. */
+  private logRendered(renderer:'pdfium'|'pdfjs',region:ViewerRegion,scale:number,width:number,height:number){
+    if(!import.meta.env.DEV)return;
+    const fallback=renderer==='pdfjs';
+    const reason=fallback?` reason=${this.document.getFallbackReason() ?? 'unknown'}`:'';
+    console.info(`[BetterCalc PDF] renderer=${renderer} page=${this.pageNumber} fallback=${fallback}${reason}`,{
+      rotation:this.rotation,pageBox:this.page.view,userUnit:this.page.userUnit,
+      native:this.getNativeSize(),region,scale,raster:{width,height},
+      background:'#ffffff',alpha:true,
+    });
   }
   release(){
     if(this.released)return;

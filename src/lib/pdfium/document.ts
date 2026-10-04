@@ -56,7 +56,10 @@ export class PdfiumDocument {
         this.pending.delete(data.id);clearTimeout(pending.timer);
         if('error' in data)pending.reject(new Error(data.error));else pending.resolve(data.result);
       };
-      worker.onerror=(event)=>{event.preventDefault();if(worker===this.worker)this.terminate(new Error('PDFium worker failed'));};
+      worker.onerror=(event)=>{
+        event.preventDefault();
+        if(worker===this.worker)this.terminate(new Error(`PDFium worker failed${event.message?`: ${event.message}`:''}`));
+      };
       worker.onmessageerror=()=>{if(worker===this.worker)this.terminate(new Error('PDFium worker message failed'));};
       const initialization=this.request(worker,{kind:'open',bytes:this.bytes.slice(0)}).then(result=>{
         if(this.disposed || this.worker!==worker)throw viewerRenderCancelled();
