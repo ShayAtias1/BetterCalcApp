@@ -21,7 +21,7 @@
 import type { TranslateFn } from '../i18n';
 import type { ConcreteKind } from '../types/structural';
 
-export type MarkKind = ConcreteKind | 'mesh' | 'bars';
+export type MarkKind = ConcreteKind | 'mesh' | 'bars' | 'stirrup';
 
 /** The mark-related fields shared by concrete elements and rebar items. */
 export interface MarkFields {
@@ -34,7 +34,7 @@ export interface MarkFields {
 }
 
 /** The letter the pre-localisation automatic marks started with. Only used to read old data. */
-const LEGACY_PREFIX: Record<MarkKind, string> = { slab: 'S', wall: 'W', beam: 'B', column: 'C', mesh: 'M', bars: 'R' };
+const LEGACY_PREFIX: Record<MarkKind, string> = { slab: 'S', wall: 'W', beam: 'B', column: 'C', mesh: 'M', bars: 'R', stirrup: 'H' };
 
 /** The number inside an old automatic mark of this kind (`S07` → 7), or null for anything else. */
 export function legacyAutoNumber(kind: MarkKind, mark: string): number | null {
@@ -56,7 +56,7 @@ export const hasManualMark = (item: Pick<MarkFields, 'mark'>): boolean => typeof
 
 /** The kind's name in the language of `t` — the word an automatic mark starts with. */
 export function kindName(kind: MarkKind, t: TranslateFn): string {
-  return kind === 'mesh' ? t('rebar.mesh') : kind === 'bars' ? t('rebar.bars') : t(`concrete.kinds.${kind}`);
+  return kind === 'mesh' ? t('rebar.mesh') : kind === 'bars' ? t('rebar.bars') : kind === 'stirrup' ? t('rebar.stirrupName') : t(`concrete.kinds.${kind}`);
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');

@@ -319,7 +319,7 @@ export interface RebarItemRow {
   /** The user's own mark, '' when automatic — print it with `markLabel` in the report language. */
   mark: string;
   autoNumber?: number;
-  kind: 'mesh' | 'bars';
+  kind: 'mesh' | 'bars' | 'stirrup';
   /** The reinforcement level of a mesh line; null for manual bars and for a mesh with none. */
   level: RebarLevel | null;
   diameterMm: number | null;
@@ -426,7 +426,7 @@ export interface RebarLevelRow {
   pageNumber: number;
   mark: string;
   autoNumber?: number;
-  kind: 'mesh' | 'bars';
+  kind: 'mesh' | 'bars' | 'stirrup';
   level: RebarLevel | null;
   /** The item rows the level is made of: one per direction (one for uniform and for manual bars). */
   parts: RebarItemRow[];

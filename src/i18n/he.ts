@@ -874,6 +874,25 @@ export const he = {
 
   // Rebar takeoff: mesh zones (a marked area plus layers) and manual bars.
   rebar: {
+    stirrupName: 'חישוק',
+    stirrup: {
+      shape: 'צורה',
+      closed: 'צורה סגורה',
+      vertex: 'קודקוד {number}',
+      segment: 'מקטע {number}',
+      removeVertex: 'הסר קודקוד',
+      addVertex: 'הוסף קודקוד / רגל קצה',
+      geometricLength: 'אורך גאומטרי',
+      manualLength: 'אורך ידני לחישוב',
+      lengthUsed: 'אורך בשימוש',
+      geometricHint: 'מקטעים גאומטריים בלבד; ללא תוספת כיפוף או ווים אוטומטיים.',
+      templates: {
+        rectangle: 'מלבן סגור',
+        u: 'צורת U',
+        l: 'צורת L',
+        custom: 'צורה מותאמת',
+      },
+    },
     spatial: {
       duplicateItem: 'שכפל פריט מוטות',
       finishDrawing: 'סיום ציור',

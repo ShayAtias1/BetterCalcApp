@@ -223,5 +223,6 @@ export function resolveStraightBars(item: RebarBars, calibration: Calibration | 
 }
 
 export function calculateRebar(item: RebarItem, calibration: Calibration | null, pages?: Plan['pages']): RebarCalc {
+  if (item.kind === 'stirrup') return finish('invalid-input', [], finiteNonNegative(item.wastePercent, 0));
   return item.kind === 'mesh' ? calculateMesh(item, calibration) : resolveStraightBars(item, calibration, pages);
 }

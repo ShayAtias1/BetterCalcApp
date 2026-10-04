@@ -16,6 +16,7 @@ import ExistingAreaPicker from './ExistingAreaPicker';
 import { MeshLayoutControl } from './MeshLayoutPreview';
 import NumberField from './NumberField';
 import Icon from './Icon';
+import StirrupShapeBuilder from './StirrupShapeBuilder';
 import { drawnBarLength } from '../lib/straightBarsGeometry';
 
 type T = ReturnType<typeof useT>;
@@ -76,7 +77,7 @@ export default function RebarPanel() {
           <span className="color-dot" style={{ background: REBAR_COLOR }} />
           <span className="detail-header-text">
             <span className="detail-title" dir="auto">{markLabel(selected, t)}</span>
-            <span className="detail-subtitle">{t(selected.kind === 'mesh' ? 'rebar.meshZone' : selected.barsZone ? 'rebar.bars' : selected.drawnBars !== undefined ? 'rebar.spatial.individual' : 'rebar.manualBars')}</span>
+            <span className="detail-subtitle">{t(selected.kind === 'mesh' ? 'rebar.meshZone' : selected.kind === 'bars' && selected.barsZone ? 'rebar.bars' : selected.kind === 'bars' && selected.drawnBars !== undefined ? 'rebar.spatial.individual' : 'rebar.manualBars')}</span>
           </span>
           <button className="icon-btn" title={t(selected.kind === 'mesh' ? 'rebar.duplicate' : 'rebar.spatial.duplicateItem')} aria-label={t(selected.kind === 'mesh' ? 'rebar.duplicate' : 'rebar.spatial.duplicateItem')} onClick={() => selected.kind === 'mesh' ? duplicateMesh(selected.id) : duplicateBars(selected.id)}>
             <Icon name="copy" />
@@ -93,7 +94,7 @@ export default function RebarPanel() {
         </div>
         {selected.kind === 'mesh' ? (
           <MeshDetail key={selected.id} mesh={selected} calibration={project.pages[selected.pageNumber]?.calibration ?? null} />
-        ) : (
+        ) : selected.kind === 'stirrup' ? <StirrupShapeBuilder item={selected} /> : (
           <BarsDetail key={selected.id} bars={selected} />
         )}
       </div>

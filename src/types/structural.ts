@@ -164,4 +164,43 @@ export interface RebarBars extends MarkFields {
   wastePercent?: number;
 }
 
-export type RebarItem = RebarMesh | RebarBars;
+export type RebarItem = RebarMesh | RebarBars | RebarStirrup;
+
+export type StirrupTemplate = 'rectangle' | 'u' | 'l' | 'custom';
+/** Physical segments in local metres, independent of plan calibration. End legs are explicit vertices. */
+export interface StirrupShape {
+  template: StirrupTemplate;
+  points: Point[];
+  closed: boolean;
+}
+export interface StirrupPlacementBase {
+  id: string;
+  pageNumber: number;
+  quantityMode: 'automatic' | 'manual';
+  manualQuantity?: number;
+}
+export interface StirrupLinePlacement extends StirrupPlacementBase {
+  kind: 'line';
+  start: Point;
+  end: Point;
+  spacingM: number;
+}
+export interface StirrupAreaPlacement extends StirrupPlacementBase {
+  kind: 'area';
+  points: Point[];
+  spacingXM: number;
+  spacingYM: number;
+}
+export type StirrupPlacement = StirrupLinePlacement | StirrupAreaPlacement;
+export interface RebarStirrup extends MarkFields {
+  id: string;
+  kind: 'stirrup';
+  /** Creation page; each placement has its own page. */
+  pageNumber: number;
+  diameterMm: number;
+  shape: StirrupShape;
+  lengthMode: 'automatic' | 'manual';
+  manualLengthM?: number;
+  wastePercent?: number;
+  placements: StirrupPlacement[];
+}

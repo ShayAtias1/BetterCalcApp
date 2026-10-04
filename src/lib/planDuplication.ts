@@ -36,7 +36,7 @@ export function clonePlanForDuplicate(source: Plan, name: string): Plan {
           rebarItems: copy.rebarItems.map((item) =>
             item.kind === 'mesh'
               ? { ...renewManualMeshSheetIds(withRenewedLayerIds(item), uuid), id: uuid() }
-              : { ...item, id: uuid(), ...(item.drawnBars !== undefined ? { drawnBars: item.drawnBars.map((bar) => ({ ...bar, id: uuid() })) } : {}) }
+              : { ...item, id: uuid(), ...(item.kind === 'bars' && item.drawnBars !== undefined ? { drawnBars: item.drawnBars.map((bar) => ({ ...bar, id: uuid() })) } : {}) }
           ),
         }
       : {}),

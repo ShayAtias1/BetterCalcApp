@@ -870,6 +870,25 @@ export const en: Dictionary = {
 
   // Rebar takeoff: mesh zones (a marked area plus layers) and manual bars.
   rebar: {
+    stirrupName: 'Stirrup',
+    stirrup: {
+      shape: 'Shape',
+      closed: 'Closed shape',
+      vertex: 'Vertex {number}',
+      segment: 'Segment {number}',
+      removeVertex: 'Remove vertex',
+      addVertex: 'Add vertex / end leg',
+      geometricLength: 'Geometric length',
+      manualLength: 'Manual length override',
+      lengthUsed: 'Length used',
+      geometricHint: 'Geometric segments only; no bend allowance or automatic hooks.',
+      templates: {
+        rectangle: 'Closed rectangle',
+        u: 'U shape',
+        l: 'L shape',
+        custom: 'Custom shape',
+      },
+    },
     spatial: {
       duplicateItem: 'Duplicate bars item',
       finishDrawing: 'Finish drawing',

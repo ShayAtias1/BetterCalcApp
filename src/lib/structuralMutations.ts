@@ -8,7 +8,7 @@ import { resolveSheetSettings } from './meshSheets';
 import { v4 as uuid } from 'uuid';
 import type { Plan, Point, Room } from '../types';
 import { polygonAreaPx } from './geometry';
-import type { ConcreteElement, ConcreteKind, MeshReinforcement, RebarBars, RebarItem, RebarLevel, RebarMesh } from '../types/structural';
+import type { ConcreteElement, ConcreteKind, MeshReinforcement, RebarBars, RebarItem, RebarLevel, RebarMesh, RebarStirrup } from '../types/structural';
 import { copyReinforcement, emptyReinforcement } from './rebarMesh';
 import { concreteOf, rebarOf } from './structuralPlan';
 import { hasManualMark, nextAutoNumber } from './structuralMarks';
@@ -118,7 +118,7 @@ export function addRebarItem(plan: Plan, item: RebarItem): Plan {
   return { ...plan, rebarItems: [...rebarOf(plan), item] };
 }
 
-export type RebarPatch = Partial<Omit<RebarMesh, 'id' | 'kind'>> & Partial<Omit<RebarBars, 'id' | 'kind'>>;
+export type RebarPatch = Partial<Omit<RebarMesh, 'id' | 'kind'>> & Partial<Omit<RebarBars, 'id' | 'kind'>> & Partial<Omit<RebarStirrup, 'id' | 'kind'>>;
 
 /** Merges `patch` into the item (id and kind never change); a field patched to `undefined` is removed. Unknown id: unchanged. */
 export function updateRebarItem(plan: Plan, id: string, patch: RebarPatch): Plan {
