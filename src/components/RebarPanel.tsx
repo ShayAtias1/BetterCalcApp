@@ -54,6 +54,7 @@ export default function RebarPanel() {
   const addBars = useAppStore((s) => s.addRebarBars);
   const copyRoomsToRebar = useAppStore((s) => s.copyRoomsToRebar);
   const deleteItem = useAppStore((s) => s.deleteRebarItem);
+  const duplicateMesh = useAppStore((s) => s.duplicateRebarMesh);
 
   if (!project) return null;
   const items = rebarOf(project);
@@ -74,6 +75,11 @@ export default function RebarPanel() {
             <span className="detail-title" dir="auto">{markLabel(selected, t)}</span>
             <span className="detail-subtitle">{t(selected.kind === 'mesh' ? 'rebar.meshZone' : 'rebar.manualBars')}</span>
           </span>
+          {selected.kind === 'mesh' && (
+            <button className="btn-ghost small" title={t('rebar.duplicate')} onClick={() => duplicateMesh(selected.id)}>
+              {t('rebar.duplicate')}
+            </button>
+          )}
           <button
             className="icon-btn danger"
             title={t('rebar.delete')}

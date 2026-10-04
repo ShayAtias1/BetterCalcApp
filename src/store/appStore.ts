@@ -1,5 +1,6 @@
 import { rebarOf } from '../lib/structuralPlan';
-import { editManualMeshLayout, type ManualMeshEdit } from '../lib/manualMeshLayout';
+import { withRenewedLayerIds } from '../lib/rebarMesh';
+import { editManualMeshLayout, renewManualMeshSheetIds, type ManualMeshEdit } from '../lib/manualMeshLayout';
 import { create } from 'zustand';
 import { v4 as uuid } from 'uuid';
 import type { AreaCalcMode, AreaKind, AreaShape, Calibration, ExportRegion, Markup, MarkupTool, Measurement, MeasureTool, Opening, OpeningType, Point, Plan, Project, Room, ToolMode, WorkItem, WorkType } from '../types';
@@ -351,6 +352,7 @@ interface AppState {
   editMeshLayout: (id: string, level: RebarLevel, edit: ManualMeshEdit) => void;
   /** Adds a manual-bars row on the current page and selects it. */
   addRebarBars: () => void;
+  duplicateRebarMesh: (id: string) => void;
   deleteRebarItem: (id: string) => void;
   /** Which reinforcement levels (Bottom / Top / both) a mesh zone has. One undo step. */
   setRebarMeshLevels: (id: string, choice: MeshLevelChoice) => void;
@@ -1068,6 +1070,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     historyTracker.push(get, set, project);
     const bars = newRebarBars(project, currentPage);
     set({ project: { ...addRebarItem(project, bars), updatedAt: Date.now() }, selectedRebarId: bars.id });
+    scheduleSave(get, set);
+  },
+  duplicateRebarMesh: (id) => {
+    const { project } = get();
+    const source = project && rebarOf(project).find((item) => item.id === id);
+    if (!project || !source || source.kind !== 'mesh') return;
+    const copy = { ...renewManualMeshSheetIds(withRenewedLayerIds(structuredClone(source)), uuid), id: uuid() };
+    historyTracker.push(get, set, project);
+    set({ project: { ...addRebarItem(project, copy), updatedAt: Date.now() }, selectedRebarId: copy.id });
     scheduleSave(get, set);
   },
   deleteRebarItem: (id) => {

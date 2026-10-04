@@ -905,9 +905,9 @@ export const en: Dictionary = {
     removeLegacyExtra: 'Remove',
     copyBottomToTop: 'Copy Bottom to Top',
     copyBottomToTopHint: 'Starts Top from the same values - each level stays editable on its own',
+    duplicate: 'Duplicate mesh',
     purchaseWeight: 'Purchase weight',
     layout: {
-      duplicate: 'Duplicate sheet',
       add: 'Add sheet',
       remove: 'Remove sheet',
       manual: 'Manual layout',
