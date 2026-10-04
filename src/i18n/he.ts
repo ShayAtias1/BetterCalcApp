@@ -909,6 +909,14 @@ export const he = {
     removeLegacyExtra: 'הסרה',
     copyBottomToTop: 'העתק מתחתון לעליון',
     copyBottomToTopHint: 'מתחיל את העליון מאותם ערכים - כל מפלס נשאר ניתן לעריכה בנפרד',
+    layout: {
+      show: 'הצג פריסת רשתות',
+      viewLevel: 'מפלס להצגת הפריסה',
+      noGeometry: 'אין גאומטריה להצגת הפריסה על התכנית',
+      rectangularOnly: 'פריסת רשתות זמינה כרגע לאזורים מלבניים',
+      tooLarge: 'הפריסה גדולה מדי לתצוגה מקדימה',
+      unavailable: 'הפריסה אינה זמינה עד להזנת הגדרות יריעה ומפלס זיון תקינים.',
+    },
     sheets: {
       title: 'יריעות רשת',
       length: 'אורך יריעה',

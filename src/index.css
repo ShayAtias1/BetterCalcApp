@@ -3168,6 +3168,17 @@ html[dir='rtl'] .qty-table .col-room {
 }
 
 /* Mesh sheets (procurement): secondary to the reinforcement levels above. */
+.rebar-layout-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-block: 10px;
+}
+.rebar-layout-control .concrete-kinds,
+.rebar-layout-control p {
+  margin: 0;
+}
+
 .rebar-sheets {
   margin-bottom: var(--s-3);
   padding-top: var(--s-2);

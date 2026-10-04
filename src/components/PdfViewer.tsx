@@ -38,6 +38,7 @@ import { useGridStore } from '../store/gridStore';
 import GridLayer from './GridLayer';
 import ConcreteZones from './ConcreteZones';
 import RebarZones from './RebarZones';
+import { MeshLayoutOverlay } from './MeshLayoutPreview';
 import { concreteOf, rebarOf } from '../lib/structuralPlan';
 
 const VERTEX_HIT_RADIUS_SCREEN = 9;
@@ -845,6 +846,7 @@ export default function PdfViewer() {
                 zoom={zoom}
               />
             )}
+            <MeshLayoutOverlay plan={project} pageNumber={currentPage} selectedId={selectedRebarId} zoom={zoom} visible={overlayVisible.rebar} />
             {overlayVisible.rebar && (
               <RebarZones items={rebarOf(project).filter((m) => m.pageNumber === currentPage)} selectedId={selectedRebarId} strokeW={strokeW} zoom={zoom} />
             )}

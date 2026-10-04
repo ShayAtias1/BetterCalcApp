@@ -13,6 +13,7 @@ import { zoneGeometry } from '../lib/zoneGeometry';
 import { round } from '../lib/geometry';
 import { REBAR_COLOR } from './RebarZones';
 import ExistingAreaPicker from './ExistingAreaPicker';
+import { MeshLayoutControl } from './MeshLayoutPreview';
 import NumberField from './NumberField';
 import Icon from './Icon';
 
@@ -414,6 +415,7 @@ function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calib
       {message && <div className="warning-box">{message}</div>}
       <MeshSheets mesh={mesh} result={sheets} />
       <Results calc={calc} showLength={false} />
+      {plan && <MeshLayoutControl planId={plan.id} mesh={mesh} calibration={calibration} />}
 
       <div className="form-grid">
         <div className="form-row">

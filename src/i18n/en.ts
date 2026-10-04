@@ -905,6 +905,14 @@ export const en: Dictionary = {
     removeLegacyExtra: 'Remove',
     copyBottomToTop: 'Copy Bottom to Top',
     copyBottomToTopHint: 'Starts Top from the same values - each level stays editable on its own',
+    layout: {
+      show: 'Show mesh layout',
+      viewLevel: 'Layout viewing level',
+      noGeometry: 'No plan geometry available for layout preview',
+      rectangularOnly: 'Mesh layout is currently available for rectangular zones',
+      tooLarge: 'Mesh layout is too large to preview',
+      unavailable: 'Mesh layout is unavailable until the sheet settings and reinforcement level are valid.',
+    },
     sheets: {
       title: 'Mesh sheets',
       length: 'Sheet length',
