@@ -30,11 +30,21 @@ export const en: Dictionary = {
     coreOnly: 'Advanced touch editing comes in Package 3.',
   },
 
+  phoneReview: {
+    scope: 'Scope', currentSheet: 'Current sheet', currentPlan: 'Current plan', project: 'Entire project',
+    search: 'Search items', type: 'Type', individual: 'Individual Bars', showOnPlan: 'Show on Plan',
+    net: 'Net', order: 'To order', sheets: 'Sheets', estimated: 'Estimated quantity',
+    sheetItemTotals: 'Item totals for this sheet',
+    itemTotals: 'Item totals across all placements / sheets', incomplete: 'Incomplete specification',
+    noGeometry: 'Numerical item — no geometry to center.', empty: 'No matching items.',
+    openFailed: 'Could not open the plan. Your current work remains open.', discard: 'Discard',
+  },
+
   adaptive: {
     close: 'Close',
     plan: 'Plan', items: 'Items', quantities: 'Quantities', domain: 'Domain',
     sheet: 'Sheet', sheets: 'Sheets', view: 'View', more: 'More',
-    browse: 'Browse', reviewOnly: 'Review mode · touch editing comes later',
+    browse: 'Browse', reviewOnly: 'Review quantities · add measurements and field notes on Plan',
     mesh: 'Mesh', bars: 'Bars', stirrups: 'Stirrups', allRebar: 'All reinforcement',
     revision: 'Revision',
   },

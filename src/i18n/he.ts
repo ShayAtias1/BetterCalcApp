@@ -23,11 +23,21 @@ export const he = {
     coreOnly: 'עריכה מתקדמת במגע תתווסף בחבילה 3.',
   },
 
+  phoneReview: {
+    scope: 'היקף', currentSheet: 'הגיליון הנוכחי', currentPlan: 'התוכנית הנוכחית', project: 'כל הפרויקט',
+    search: 'חיפוש פריטים', type: 'סוג', individual: 'מוטות בודדים', showOnPlan: 'הצגה בתוכנית',
+    net: 'נטו', order: 'להזמנה', sheets: 'יריעות', estimated: 'כמות משוערת',
+    sheetItemTotals: 'סיכומי הפריט בגיליון זה',
+    itemTotals: 'סיכומי הפריט בכל הפריסות / הגיליונות', incomplete: 'מפרט חסר',
+    noGeometry: 'פריט מספרי — אין גאומטריה למרכוז.', empty: 'לא נמצאו פריטים תואמים.',
+    openFailed: 'לא ניתן לפתוח את התוכנית. העבודה הנוכחית נשארה פתוחה.', discard: 'ביטול המדידה',
+  },
+
   adaptive: {
     close: 'סגור',
     plan: 'תוכנית', items: 'פריטים', quantities: 'כמויות', domain: 'תחום',
     sheet: 'גיליון', sheets: 'גיליונות', view: 'תצוגה', more: 'עוד',
-    browse: 'עיון', reviewOnly: 'מצב עיון · עריכה במגע תתווסף בהמשך',
+    browse: 'עיון', reviewOnly: 'עיון בכמויות · מדידות והערות שטח בתוכנית',
     mesh: 'רשתות', bars: 'מוטות', stirrups: 'חישוקים', allRebar: 'כל הזיון',
     revision: 'גרסה',
   },

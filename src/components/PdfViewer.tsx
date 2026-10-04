@@ -1,6 +1,7 @@
 import { useTouchTakeoff } from '../hooks/useTouchTakeoff';
 import { useFieldWorkflowStore } from '../store/fieldWorkflowStore';
 import FieldTools from './FieldTools';
+import { usePlanFocusStore } from '../store/planFocusStore';
 import type { StirrupLinePlacement } from '../types/structural';
 import { usePlanNavigation } from '../hooks/usePlanNavigation';
 import { nativeHitRadius } from '../lib/interactionTargets';
@@ -250,6 +251,9 @@ export default function PdfViewer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
   const [planSource, setPlanSource] = useState<PdfPlanSource | null>(null);
+  const [sourceKey, setSourceKey] = useState('');
+  const [renderedKey, setRenderedKey] = useState('');
+  const focusRequest = usePlanFocusStore((s) => s.request);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const structuralDrag = useRef<{
@@ -315,6 +319,7 @@ export default function PdfViewer() {
       .then(({ source, numPages }) => {
         if (cancelled) return;
         setNumPages(numPages);
+        setSourceKey(`${project.id}:${currentPage}`);
         setPlanSource(source);
       })
       .catch((err) => {
@@ -345,13 +350,13 @@ export default function PdfViewer() {
     // on cancel too, hence the flag). The analytics side fires only once per load of the plan.
     void handle.promise.then(() => {
       const { project, numPages } = useAppStore.getState();
-      if (!cancelled && project) notePlanRendered(project, numPages);
+      if (!cancelled && project) { setRenderedKey(sourceKey); notePlanRendered(project, numPages); }
     });
     return () => {
       cancelled = true;
       handle.cancel();
     };
-  }, [planSource]);
+  }, [planSource, sourceKey]);
 
   // Fit to container on first load / page size change
   useEffect(() => {
@@ -359,6 +364,30 @@ export default function PdfViewer() {
     fitToContainer(pageSize.width, pageSize.height);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageSize]);
+
+  // Focus only after the requested PDF page renders. Closing the inspector is a separate UI
+  // action; wait for its layout/ResizeObserver before centering in the remaining canvas space.
+  useEffect(() => {
+    if (!focusRequest || project?.id !== focusRequest.planId || currentPage !== focusRequest.pageNumber ||
+      renderedKey !== `${focusRequest.planId}:${focusRequest.pageNumber}`) return;
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect || usePlanFocusStore.getState().request !== focusRequest) return;
+        const points = focusRequest.points;
+        if (points.length) {
+          const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
+          const left = Math.min(...xs), right = Math.max(...xs), top = Math.min(...ys), bottom = Math.max(...ys);
+          const usableTop = 120, usableBottom = Math.max(usableTop + 1, rect.height - 64);
+          const fit = Math.min((rect.width - 48) / Math.max(right - left, 1), (usableBottom - usableTop - 40) / Math.max(bottom - top, 1));
+          const zoom = Math.max(0.1, Math.min(transform.getView().zoom, fit));
+          transform.setView({ zoom, pan: { x: rect.width / 2 - (left + right) / 2 * zoom, y: (usableTop + usableBottom) / 2 - (top + bottom) / 2 * zoom } });
+        }
+        usePlanFocusStore.getState().clear();
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusRequest, project?.id, currentPage, renderedKey, containerRef, transform.getView, transform.setView]);
 
   const room = project?.rooms.find((r) => r.id === selectedRoomId) ?? null;
   const areaPlan = structuralPlan ?? project;
@@ -1057,7 +1086,7 @@ export default function PdfViewer() {
       onDoubleClick={handleDoubleClick}
       onClick={handleClick}
     >
-      {!reviewOnly && (touchInput || fieldDraft || layout === 'compact' || geometryAction !== 'browse') && <FieldTools controls={touch} />}
+      {(reviewOnly || touchInput || fieldDraft || layout === 'compact' || geometryAction !== 'browse') && <FieldTools controls={touch} />}
       {loadError && <div className="viewer-error">{loadError}</div>}
       <div
         className="pdf-content"
@@ -1121,7 +1150,7 @@ export default function PdfViewer() {
             )}
             <MeshLayoutOverlay plan={structuralPlan ?? project} pageNumber={currentPage} selectedId={selectedRebarId} zoom={zoom} visible={overlayVisible.rebar} screenToNative={screenToNative} interactionAllowed={!reviewOnly && toolMode === 'select'} />
             {overlayVisible.rebar && (
-              <RebarZones pageNumber={currentPage} pages={project.pages} selectedBarId={selectedDrawnBarId} calibration={project.pages[currentPage]?.calibration ?? null} items={rebarOf(structuralPlan ?? project).filter((m) => m.pageNumber === currentPage)} selectedId={selectedRebarId} strokeW={strokeW} zoom={zoom} />
+              <RebarZones pageNumber={currentPage} pages={project.pages} selectedBarId={selectedDrawnBarId} calibration={project.pages[currentPage]?.calibration ?? null} items={rebarOf(structuralPlan ?? project).filter((m) => m.kind === 'mesh' ? m.pageNumber === currentPage : m.kind === 'bars' ? (m.drawnBars?.some((b) => b.pageNumber === currentPage) ?? (m.barsZone?.pageNumber ?? m.pageNumber) === currentPage) : false)} selectedId={selectedRebarId} strokeW={strokeW} zoom={zoom} />
             )}
 
             {/* Detection suggestions: dashed, faint and unselectable, so they never read as rooms
@@ -1438,11 +1467,11 @@ export default function PdfViewer() {
         )}
       </div>
 
-      {!reviewOnly && textDraft && (
+      {textDraft && (
         <TextNoteDialog
           initialText={textDraft.text}
           initialRotation={textDraft.rotationDeg}
-          onCancel={() => setTextDraft(null)}
+          onCancel={() => { setTextDraft(null); if (fieldDraft) touch.cancel(); }}
           onSubmit={(text, rotationDeg) => {
             if (textDraft.markupId) {
               updateMarkup(textDraft.markupId, { text, rotationDeg });

@@ -8,6 +8,7 @@ import Toolbar from './components/Toolbar';
 import PdfViewer from './components/PdfViewer';
 import CalibrationDialog from './components/CalibrationDialog';
 import RoomPanel from './components/RoomPanel';
+import PhoneReview from './components/PhoneReview';
 import QuantitiesPanel from './components/QuantitiesPanel';
 import QuantityExportDialogs from './components/QuantityExportDialogs';
 import PageStatusBar from './components/PageStatusBar';
@@ -76,11 +77,12 @@ function Workspace() {
           </label>}
           {reviewOnly && <p className="adaptive-review-note muted">{t('adaptive.reviewOnly')}</p>}
           <div className="sidebar-content">
-            {activeTab === 'rooms' && <RoomPanel readOnly={reviewOnly} />}
+            {reviewOnly && <PhoneReview domain={drawTarget} onShowPlan={() => setDestination('plan')} />}
+            {!reviewOnly && activeTab === 'rooms' && <RoomPanel />}
             {!reviewOnly && activeTab === 'measure' && <MeasureToolbar />}
             {!reviewOnly && activeTab === 'markup' && <MarkupToolbar />}
-            {activeTab === 'concrete' && <ConcretePanel readOnly={reviewOnly} />}
-            {activeTab === 'rebar' && <RebarPanel readOnly={reviewOnly} />}
+            {!reviewOnly && activeTab === 'concrete' && <ConcretePanel />}
+            {!reviewOnly && activeTab === 'rebar' && <RebarPanel />}
           </div>
         </AdaptiveInspector>
       </div>

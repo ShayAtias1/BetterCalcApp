@@ -873,6 +873,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   setNewRoomTemplate: (key) => set({ newRoomTemplate: key }),
   applyRoomTemplate: (roomId) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     const room = project.rooms.find((r) => r.id === roomId);
@@ -1089,6 +1090,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSelectedConcreteId: (id) => set({ selectedConcreteId: id }),
   setConcreteKind: (kind) => set({ concreteKind: kind }),
   updateConcreteElement: (id, patch) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
@@ -1096,6 +1098,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   addRebarStirrup: () => {
+    if (!canAuthorTakeoff()) return;
     const { project, currentPage } = get();
     if (!project) return;
     const item = newRebarStirrup(project, currentPage);
@@ -1106,6 +1109,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   duplicateStirrupItem: (id) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     const source = project && rebarOf(project).find((i) => i.id === id);
     if (!project || !source || source.kind !== 'stirrup') return;
@@ -1122,6 +1126,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   duplicateStirrupPlacement: (id, placementId) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     const item = project && rebarOf(project).find((i) => i.id === id);
     const source = item?.kind === 'stirrup' ? item.placements.find((p) => p.id === placementId) : undefined;
@@ -1177,6 +1182,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   deleteStirrupPlacement: (id, placementId) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     const item = project && rebarOf(project).find((i) => i.id === id);
     if (!project || !item || item.kind !== 'stirrup' || !item.placements.some((p) => p.id === placementId)) return;
@@ -1207,6 +1213,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   resizeDrawnBar: (itemId, barId, lengthM) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     const item = project && rebarOf(project).find((i) => i.id === itemId);
     const bar = item?.kind === 'bars' ? item.drawnBars?.find((b) => b.id === barId) : undefined;
@@ -1218,6 +1225,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   duplicateDrawnBar: (itemId, barId) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     const item = project && rebarOf(project).find((i) => i.id === itemId);
     const source = item?.kind === 'bars' ? item.drawnBars?.find((bar) => bar.id === barId) : undefined;
@@ -1229,6 +1237,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   deleteDrawnBar: (itemId, barId) => {
+    if (!canAuthorTakeoff()) return;
     const { project, selectedDrawnBarId } = get();
     const item = project && rebarOf(project).find((i) => i.id === itemId);
     if (!project || !item || item.kind !== 'bars' || !item.drawnBars?.some((bar) => bar.id === barId)) return;
@@ -1257,6 +1266,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ selectedRebarId: id, selectedDrawnBarId: null, selectedStirrupPlacementId: null, drawTarget: 'rebar', barsDrawing: 'line', toolMode: 'draw', drawingPoints: [] });
   },
   finishDrawnBar: (start, end) => {
+    if (!canAuthorTakeoff()) return;
     const { project, selectedRebarId, currentPage, barsDrawing } = get();
     const item = project && rebarOf(project).find((i) => i.id === selectedRebarId);
     if (!project || !item || item.kind !== 'bars' || item.barsZone || barsDrawing !== 'line' || item.pageNumber !== currentPage) return;
@@ -1276,6 +1286,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   duplicateStraightBars: (id) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     const source = project && rebarOf(project).find((i) => i.id === id);
     if (!project || !source || source.kind !== 'bars') return;
@@ -1302,6 +1313,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ selectedRebarId: id, selectedDrawnBarId: null, selectedStirrupPlacementId: null, drawTarget: 'rebar', barsDrawing: 'zone', toolMode: 'draw-rect', drawingPoints: [] });
   },
   removeBarsZone: (id) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     const item = project && rebarOf(project).find((i) => i.id === id);
     if (!project || !item || item.kind !== 'bars' || !item.barsZone) return;
@@ -1360,6 +1372,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   duplicateConcreteElement: (id) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     const source = project && concreteOf(project).find((element) => element.id === id);
     if (!project || !source) return;
@@ -1370,6 +1383,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   changeConcreteElementKind: (id, kind) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     const next = changeKind(project, id, kind);
@@ -1379,6 +1393,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   copyRoomsToConcrete: (roomIds) => {
+    if (!canAuthorTakeoff()) return 0;
     const { project, concreteKind } = get();
     if (!project) return 0;
     const wanted = new Set(roomIds);
@@ -1407,6 +1422,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   updateRebarItem: (id, patch) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
@@ -1414,6 +1430,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   addRebarBars: () => {
+    if (!canAuthorTakeoff()) return;
     const { project, currentPage } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
@@ -1422,6 +1439,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   duplicateRebarMesh: (id) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     const source = project && rebarOf(project).find((item) => item.id === id);
     if (!project || !source || source.kind !== 'mesh') return;
@@ -1435,6 +1453,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   deleteRebarItem: (id) => {
+    if (!canAuthorTakeoff()) return;
     const { project, selectedRebarId } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
@@ -1486,6 +1505,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     return created.length;
   },
   deleteConcreteElement: (id) => {
+    if (!canAuthorTakeoff()) return;
     const { project, selectedConcreteId } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
@@ -1603,6 +1623,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   updateMarkup: (id, patch) => {
+    if (isPhoneWorkspace()) {
+      const note = get().project?.markups?.find((m) => m.id === id);
+      if (note?.tool !== 'text' || Object.keys(patch).some((key) => key !== 'text' && key !== 'rotationDeg')) return;
+    }
     const { project } = get();
     if (!project) return;
     // Debounced like updateMarkupQuiet, so a move/resize burst collapses into one undo step — the
@@ -1615,6 +1639,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   updateMarkupQuiet: (id, patch) => {
+    if (isPhoneWorkspace()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
@@ -1634,6 +1659,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   duplicateMarkup: (id) => {
+    if (isPhoneWorkspace() && !canUseMarkupTool(get().project?.markups?.find((m) => m.id === id)?.tool ?? null)) return;
     const { project } = get();
     if (!project) return;
     const original = (project.markups ?? []).find((m) => m.id === id);
@@ -1653,6 +1679,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSelectedMarkupId: (id) => set({ selectedMarkupId: id }),
 
   updateRoom: (id, patch) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
@@ -1661,6 +1688,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   setRoomType: (roomId, roomType) => {
+    if (!canAuthorTakeoff()) return 'none';
     const { project } = get();
     if (!project) return 'none';
     const room = project.rooms.find((r) => r.id === roomId);
@@ -1685,6 +1713,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     return outcome;
   },
   duplicateRoom: (roomId) => {
+    if (!canAuthorTakeoff()) return null;
     const { project } = get();
     if (!project) return null;
     const original = project.rooms.find((r) => r.id === roomId);
@@ -1708,6 +1737,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     return copy.id;
   },
   duplicateApartment: (sourceApartmentNumber, targetApartmentNumber) => {
+    if (!canAuthorTakeoff()) return 0;
     const { project } = get();
     if (!project) return 0;
     const sourceRooms = project.rooms.filter((r) => r.apartmentNumber === sourceApartmentNumber);
@@ -1732,6 +1762,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     return copies.length;
   },
   deleteRoom: (id) => {
+    if (!canAuthorTakeoff()) return;
     const { project, selectedRoomId } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
@@ -1743,6 +1774,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   addWorkItem: (roomId, type) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     if (!project.rooms.some((r) => r.id === roomId)) return;
@@ -1760,6 +1792,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   updateWorkItem: (roomId, itemId, patch) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
@@ -1772,6 +1805,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   removeWorkItem: (roomId, itemId) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
@@ -1783,6 +1817,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   addOpening: (roomId, type) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
@@ -1792,6 +1827,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   updateOpening: (roomId, openingId, patch) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
@@ -1803,6 +1839,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   removeOpening: (roomId, openingId) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
@@ -1814,6 +1851,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   moveRoomPoint: (roomId, pointIndex, p) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
@@ -1826,6 +1864,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     markDirty(set);
   },
   deleteRoomPoint: (roomId, pointIndex) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.push(get, set, project);

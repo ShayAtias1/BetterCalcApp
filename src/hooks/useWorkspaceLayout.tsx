@@ -19,7 +19,14 @@ export function WorkspaceLayoutProvider({ children }: { children: ReactNode }) {
     const observer = new ResizeObserver(([entry]) => {
       setWorkspaceWidth(entry.contentRect.width);
       const next = band(entry.contentRect.width);
-      if (next === 'narrow' && !['select', 'pan', 'measure', 'markup'].includes(useAppStore.getState().toolMode)) useAppStore.getState().setToolMode('select');
+      if (next === 'narrow') {
+        const state = useAppStore.getState();
+        const supported = state.toolMode === 'select' || state.toolMode === 'pan' ||
+          (state.toolMode === 'measure' && state.measureTool === 'distance') ||
+          (state.toolMode === 'markup' && ['text', 'arrow', 'rectangle'].includes(state.markupTool ?? ''));
+        if (!supported) state.setToolMode('select');
+        useFieldWorkflowStore.getState().setGeometryAction('browse');
+      }
       setLayout(next);
     });
     observer.observe(host);

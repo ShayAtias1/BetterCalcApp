@@ -54,13 +54,13 @@ export default function FieldTools({ controls }: { controls: Controls }) {
           </optgroup>
         </select>
       </label>
-      <button className="icon-btn" disabled={!canUndo || controls.activeDraft} onClick={() => { controls.cancel(); useAppStore.getState().undo(); }} aria-label={t('topBar.undo')}><Icon name="undo" /></button>
+      {!phone && <button className="icon-btn" disabled={!canUndo || controls.activeDraft} onClick={() => { controls.cancel(); useAppStore.getState().undo(); }} aria-label={t('topBar.undo')}><Icon name="undo" /></button>}
     </div>
     {!calibrated && <p className="field-hint muted">{t('field.distanceNeedsScale')}</p>}
     {controls.activeDraft && <div className="field-draft-actions">
       <span className="field-hint" role="status">{controls.distanceResult ?? t('field.adjustPoints', { count: controls.points.length })}</span>
       <button className="btn-ghost" disabled={!controls.points.length} onClick={controls.back}>{t('field.backPoint')}</button>
-      <button className="btn-ghost" onClick={controls.cancel}>{t('common.cancel')}</button>
+      <button className="btn-ghost" onClick={controls.cancel}>{t(phone ? 'phoneReview.discard' : 'common.cancel')}</button>
       <button className="btn-primary" disabled={controls.points.length < controls.minPoints} onClick={controls.finish}>{t(controls.key === 'calibrationPoints' ? 'field.enterDistance' : phone ? 'field.keep' : 'field.finish')}</button>
     </div>}
     {controls.canEditGeometry && !controls.activeDraft && <div className="field-draft-actions">

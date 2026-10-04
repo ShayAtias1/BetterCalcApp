@@ -2,6 +2,7 @@ import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../store/appStore';
 import QuantityTable from './QuantityTable';
+import PhoneReview from './PhoneReview';
 import QuantityExportActions from './QuantityExportActions';
 import { ConcreteQuantityTable, RebarQuantityTable } from './StructuralQuantityTables';
 import { concreteOf, rebarOf } from '../lib/structuralPlan';
@@ -136,7 +137,7 @@ export default function QuantitiesPanel({ mobileOpen = false, onMobileClose }: {
           </button>
           )}
           <span className="top-bar-sep" />
-          <QuantityExportActions variant="buttons" />
+          <QuantityExportActions variant={reviewOnly ? "menu" : "buttons"} />
           {desktop && <button
             className="icon-btn"
             onClick={toggleMaximized}
@@ -158,10 +159,11 @@ export default function QuantitiesPanel({ mobileOpen = false, onMobileClose }: {
         ))}
       </div>
       <div className="qty-panel-body">
-        {domain === 'finishes' && <QuantityTable showDefaults={!reviewOnly && showDefaults} />}
-        {domain === 'concrete' &&
+        {reviewOnly && <PhoneReview quantities domain={domain === 'finishes' ? 'room' : domain} onShowPlan={() => onMobileClose?.()} />}
+        {!reviewOnly && domain === 'finishes' && <QuantityTable showDefaults={!reviewOnly && showDefaults} />}
+        {!reviewOnly && domain === 'concrete' &&
           (counts.concrete === 0 ? <p className="muted qty-domain-empty">{t('quantitiesPanel.emptyConcrete')}</p> : <ConcreteQuantityTable plan={project} />)}
-        {domain === 'rebar' &&
+        {!reviewOnly && domain === 'rebar' &&
           (counts.rebar === 0 ? <p className="muted qty-domain-empty">{t('quantitiesPanel.emptyRebar')}</p> : <RebarQuantityTable plan={project} />)}
       </div>
     </section>

@@ -3267,3 +3267,20 @@ html[dir='rtl'] .qty-table .col-room {
 [data-touch-input='true'] :is(.sidebar-content button, .sidebar-content select, .sidebar-content input:not([type='checkbox'])) { min-height: 44px; }
 [data-touch-input='true'] .sidebar-content .icon-btn { min-width: 44px; }
 [data-layout='narrow'] .field-tools { inset-inline: 8px; }
+
+/* Phone review has vertical cards instead of the desktop report's column groups. */
+.adaptive-workspace-root[data-layout="narrow"] .phone-review { padding: 12px; }
+.phone-review-filters { display: grid; gap: 12px; margin-bottom: 16px; }
+.phone-review-filters label { display: grid; gap: 4px; font-size: 13px; }
+.phone-review-filters input, .phone-review-filters select { width: 100%; min-height: 44px; box-sizing: border-box; }
+.phone-review-card { border: 1px solid var(--border, #d7dde5); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+.phone-review-item { display: grid; gap: 6px; width: 100%; padding: 12px; text-align: start; background: transparent; color: inherit; border: 0; min-height: 48px; overflow-wrap: anywhere; }
+.phone-review-item strong { font-size: 16px; }
+.phone-review-item small { opacity: .7; }
+.phone-review-details { padding: 0 12px 12px; overflow-wrap: anywhere; }
+.phone-review-details p { margin: 8px 0; line-height: 1.5; }
+.phone-review-details button { width: 100%; min-height: 44px; }
+.adaptive-workspace-root[data-layout="narrow"] .qty-panel-head { flex-wrap: wrap; }
+.adaptive-workspace-root[data-layout="narrow"] .qty-panel-meta { display: none; }
+.adaptive-workspace-root[data-layout="narrow"] .qty-domains { display: flex; }
+.adaptive-workspace-root[data-layout="narrow"] .qty-domains button { flex: 1; min-height: 44px; }
