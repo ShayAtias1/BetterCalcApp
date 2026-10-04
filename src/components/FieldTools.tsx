@@ -69,8 +69,8 @@ export default function FieldTools({ controls }: { controls: Controls }) {
       {controls.action !== 'browse' && <button className="btn-ghost" onClick={controls.cancel}>{t('common.cancel')}</button>}
     </div>}
     {controls.canEditBar && controls.canEditGeometry && !controls.activeDraft && <div className="field-draft-actions">
-      <button className="btn-ghost" onClick={() => useFieldWorkflowStore.getState().setGeometryAction('start')}>{t('field.editStart')}</button>
-      <button className="btn-ghost" onClick={() => useFieldWorkflowStore.getState().setGeometryAction('end')}>{t('field.editEnd')}</button>
+      <button className={`btn-ghost ${controls.action === 'start' ? 'active' : ''}`} aria-pressed={controls.action === 'start'} onClick={() => useFieldWorkflowStore.getState().setGeometryAction('start')}>{t('field.editStart')}</button>
+      <button className={`btn-ghost ${controls.action === 'end' ? 'active' : ''}`} aria-pressed={controls.action === 'end'} onClick={() => useFieldWorkflowStore.getState().setGeometryAction('end')}>{t('field.editEnd')}</button>
     </div>}
     {controls.canEditNote && !controls.activeDraft && <button className="btn-ghost" onClick={controls.editNote}>{t('field.editNote')}</button>}
   </div>;

@@ -157,11 +157,12 @@ export function usePlanNavigation({ transform, reviewOnly, contextKey, onTap, on
     if (!contacts.current.size) blocked.current = false;
   };
   const onPointerCancelCapture = (e: PointerEvent<HTMLDivElement>) => {
-    if (contacts.current.has(e.pointerId)) { consume(e); cancel(); }
+    if (contacts.current.has(e.pointerId)) { consume(e); cancel(); return true; }
     else {
       const active = gesture.current;
-      if ((active.owner === 'desktop' || active.owner === 'child') && active.pointerId === e.pointerId) cancel();
+      if ((active.owner === 'desktop' || active.owner === 'child') && active.pointerId === e.pointerId) { cancel(); return true; }
     }
+    return false;
   };
   const suppressMouse = (e: MouseEvent<HTMLDivElement>) => {
     if (!isControl(e.target) && (interruptedDesktop.current || Date.now() < suppressMouseUntil.current || contacts.current.size > 0)) { e.preventDefault(); e.stopPropagation(); }

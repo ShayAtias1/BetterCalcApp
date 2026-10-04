@@ -1,3 +1,4 @@
+import { FIELD_OPERATION_CANCEL } from '../lib/fieldLifecycle';
 import { useEffect, useMemo, useRef } from 'react';
 import { useAppStore } from '../store/appStore';
 import { useMeshLayoutView, useMeshLayoutPreviewStore, meshLayoutCanInteract } from '../store/meshLayoutPreviewStore';
@@ -34,6 +35,10 @@ export function useTouchMeshLayout(transform: CanvasTransform) {
     if (old) useMeshLayoutPreviewStore.getState().resetLevel(old.planId, old.meshId, old.level);
   };
   useEffect(() => { cancel(); return cancel; }, [mesh?.id, page, active, view.level, automatic?.sourceKey]);
+  useEffect(() => {
+    window.addEventListener(FIELD_OPERATION_CANCEL, cancel);
+    return () => window.removeEventListener(FIELD_OPERATION_CANCEL, cancel);
+  }, []);
   const hit = (x: number, y: number, pointerType = 'touch') => {
     if (!active || rendered?.status !== 'ready') return null;
     const point = transform.screenToNative(x, y);

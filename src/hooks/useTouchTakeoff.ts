@@ -1,3 +1,4 @@
+import { FIELD_OPERATION_CANCEL } from '../lib/fieldLifecycle';
 import { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../store/appStore';
 import { useFieldWorkflowStore } from '../store/fieldWorkflowStore';
@@ -47,7 +48,7 @@ export function useTouchTakeoff({ transform, area, line, bar, contextKey, onArea
   const activeDraft = draft && supported && !!key;
   const cancelDrag = () => {
     const active = drag.current; drag.current = null;
-    if (active?.kind === 'point') useAppStore.setState({ [active.key]: active.points });
+    if (active?.kind === 'point' && useAppStore.getState()[active.key].length === active.points.length) useAppStore.setState({ [active.key]: active.points });
     onAreaPreview(null); onLinePreview(null); setPrecision(null);
   };
   useEffect(() => {
@@ -57,6 +58,13 @@ export function useTouchTakeoff({ transform, area, line, bar, contextKey, onArea
     // Selection/tool/sheet changes invalidate a preview; panel visibility is deliberately absent.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contextKey]);
+  const cancelRef = useRef(cancelDrag);
+  cancelRef.current = cancelDrag;
+  useEffect(() => {
+    const interrupt = () => cancelRef.current();
+    window.addEventListener(FIELD_OPERATION_CANCEL, interrupt);
+    return () => { window.removeEventListener(FIELD_OPERATION_CANCEL, interrupt); cancelRef.current(); };
+  }, []);
   const editing: PlanPointerEdit = {
     begin: (x, y, _target, pointerType) => {
       const native = transform.screenToNative(x, y);
@@ -136,7 +144,7 @@ export function useTouchTakeoff({ transform, area, line, bar, contextKey, onArea
       if (store.calibrationPoints.length < 2) store.addCalibrationPoint(native);
     } else if (key === 'drawingPoints') {
       const twoPoint = store.toolMode === 'draw-rect' || store.stirrupDrawing === 'line' || store.barsDrawing === 'line';
-      if (!twoPoint || store.drawingPoints.length < 2) store.addDrawingPoint(store.orthoSnap && store.stirrupDrawing === 'line' && store.drawingPoints.length ? snapOrtho(store.drawingPoints[0], native) : native);
+      if (!twoPoint || store.drawingPoints.length < 2) store.addDrawingPoint(store.orthoSnap && (store.stirrupDrawing === 'line' || store.barsDrawing === 'line') && store.drawingPoints.length ? snapOrtho(store.drawingPoints[0], native) : native);
     } else if (key === 'measurePoints') {
       if (!store.project?.pages[store.currentPage]?.calibration) return true;
       const twoPoint = store.measureTool === 'distance' || (store.measureTool === 'area' && store.areaShape === 'rectangle');

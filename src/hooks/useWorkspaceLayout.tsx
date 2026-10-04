@@ -1,3 +1,5 @@
+import { useFieldLifecycle } from './useFieldLifecycle';
+import { cancelFieldOperation } from '../lib/fieldLifecycle';
 import { setWorkspaceWidth, setWorkspacePointer } from '../lib/workspaceCapabilities';
 import { useFieldWorkflowStore } from '../store/fieldWorkflowStore';
 import { useAppStore } from '../store/appStore';
@@ -9,6 +11,7 @@ const WorkspaceContext = createContext({ layout: 'expanded' as WorkspaceLayout, 
 
 /** Width is measured on the app host, independently of the input device. No saved document state. */
 export function WorkspaceLayoutProvider({ children }: { children: ReactNode }) {
+  useFieldLifecycle();
   const ref = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState(() => band(window.innerWidth));
   const pointerType = useFieldWorkflowStore((s) => s.pointerType);
@@ -24,7 +27,7 @@ export function WorkspaceLayoutProvider({ children }: { children: ReactNode }) {
         const supported = state.toolMode === 'select' || state.toolMode === 'pan' ||
           (state.toolMode === 'measure' && state.measureTool === 'distance') ||
           (state.toolMode === 'markup' && ['text', 'arrow', 'rectangle'].includes(state.markupTool ?? ''));
-        if (!supported) state.setToolMode('select');
+        if (!supported) { cancelFieldOperation(); state.setToolMode('select'); useFieldWorkflowStore.getState().setDraft(false); }
         useFieldWorkflowStore.getState().setGeometryAction('browse');
       }
       setLayout(next);
@@ -37,6 +40,25 @@ export function WorkspaceLayoutProvider({ children }: { children: ReactNode }) {
     };
     input.addEventListener('change', change);
     return () => { observer.disconnect(); input.removeEventListener('change', change); };
+  }, []);
+  useEffect(() => {
+    const host = ref.current;
+    if (!host) return;
+    const viewport = window.visualViewport;
+    let frame = 0;
+    const update = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const height = viewport?.height ?? window.innerHeight;
+        host.style.setProperty('--field-viewport-height', `${height}px`);
+        host.style.setProperty('--field-viewport-top', `${viewport?.offsetTop ?? 0}px`);
+        const focused = document.activeElement;
+        if (focused instanceof HTMLElement && focused.matches('input, textarea, select, [contenteditable="true"]')) focused.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      });
+    };
+    viewport?.addEventListener('resize', update); viewport?.addEventListener('scroll', update);
+    window.addEventListener('resize', update); update();
+    return () => { cancelAnimationFrame(frame); viewport?.removeEventListener('resize', update); viewport?.removeEventListener('scroll', update); window.removeEventListener('resize', update); };
   }, []);
   const reviewOnly = layout === 'narrow';
   return <WorkspaceContext.Provider value={{ layout, reviewOnly, touchInput }}>

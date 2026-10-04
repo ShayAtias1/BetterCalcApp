@@ -3284,3 +3284,32 @@ html[dir='rtl'] .qty-table .col-room {
 .adaptive-workspace-root[data-layout="narrow"] .qty-panel-meta { display: none; }
 .adaptive-workspace-root[data-layout="narrow"] .qty-domains { display: flex; }
 .adaptive-workspace-root[data-layout="narrow"] .qty-domains button { flex: 1; min-height: 44px; }
+
+/* Field forms follow the visual viewport, including the virtual keyboard, without changing plan coordinates. */
+.adaptive-workspace-root:is([data-layout="compact"], [data-layout="narrow"], [data-touch-input="true"]) {
+  max-height: var(--field-viewport-height, 100dvh);
+}
+.adaptive-workspace-root:is([data-layout="compact"], [data-layout="narrow"], [data-touch-input="true"]) .modal-backdrop {
+  top: var(--field-viewport-top, 0px); bottom: auto;
+  height: var(--field-viewport-height, 100dvh);
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  box-sizing: border-box;
+}
+.adaptive-workspace-root:is([data-layout="compact"], [data-layout="narrow"], [data-touch-input="true"]) .modal {
+  max-height: 100%; height: auto; overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box;
+  scroll-padding-block: 16px 80px;
+}
+.adaptive-workspace-root:is([data-layout="compact"], [data-layout="narrow"], [data-touch-input="true"]) .modal-actions {
+  position: sticky; bottom: 0; background: var(--bg-panel); padding-block: 12px; z-index: 1; flex-wrap: wrap;
+}
+.adaptive-workspace-root:is([data-layout="compact"], [data-layout="narrow"], [data-touch-input="true"]) .sidebar-content {
+  scroll-padding-block: 16px 80px;
+}
+.adaptive-header { padding-top: env(safe-area-inset-top); padding-inline: env(safe-area-inset-left) env(safe-area-inset-right); }
+.mobile-destinations { padding-inline: env(safe-area-inset-left) env(safe-area-inset-right); }
+[data-layout="narrow"] .adaptive-inspector { padding-bottom: env(safe-area-inset-bottom); }
+.field-tools { max-height: calc(100% - 24px); overflow-y: auto; overscroll-behavior: contain; }
+[data-touch-input="true"] .sidebar :is(input, select, textarea) { font-size: 16px; }
+[data-touch-input="true"] .modal :is(input, select, textarea) { font-size: 16px; }
+/* LTR native geometry is independent of Hebrew/English UI direction. */
+.pdf-content { direction: ltr; }

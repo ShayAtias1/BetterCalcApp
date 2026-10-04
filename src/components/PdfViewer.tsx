@@ -1,3 +1,4 @@
+import { FIELD_OPERATION_CANCEL } from '../lib/fieldLifecycle';
 import { useTouchMeshLayout } from '../hooks/useTouchMeshLayout';
 import { useTouchTakeoff } from '../hooks/useTouchTakeoff';
 import { useFieldWorkflowStore } from '../store/fieldWorkflowStore';
@@ -306,6 +307,11 @@ export default function PdfViewer() {
   const [regionDraft, setRegionDraft] = useState<ExportRegion | null>(null);
   /** Open text-note editor: a new note at `point`, or an existing one when `markupId` is set. */
   const [textDraft, setTextDraft] = useState<{ point: Point; markupId?: string; text: string; rotationDeg: number } | null>(null);
+  useEffect(() => {
+    const cancel = () => { setTextDraft(null); setRegionDraft(null); };
+    window.addEventListener(FIELD_OPERATION_CANCEL, cancel);
+    return () => window.removeEventListener(FIELD_OPERATION_CANCEL, cancel);
+  }, []);
   const markupDrag = useRef<{ id: string; startClientX: number; startClientY: number; startPoints: Point[]; startOffset: number } | null>(
     null,
   );
@@ -1039,14 +1045,14 @@ export default function PdfViewer() {
   const meshTouch = useTouchMeshLayout(transform);
   const touch = useTouchTakeoff({
     transform, area: selectedArea, bar: selectedTouchBar && individual ? { itemId: individual.id, bar: selectedTouchBar } : null, line: stirrupLine && stirrupItem ? { itemId: stirrupItem.id, placement: stirrupLine } : null,
-    contextKey: `${project?.id}:${currentPage}:${toolMode}:${drawTarget}:${selectedRoomId}:${selectedConcreteId}:${selectedRebarId}:${selectedStirrupPlacementId}:${selectedMarkupId}`,
+    contextKey: `${project?.id}:${currentPage}:${toolMode}:${drawTarget}:${selectedRoomId}:${selectedConcreteId}:${selectedRebarId}:${selectedStirrupPlacementId}:${selectedMarkupId}:${selectedDrawnBarId}`,
     onAreaPreview: setStructuralPreview, onLinePreview: setBarPreview, onTextDraft: setTextDraft,
     finishMeasurement: finishOpenMeasurement, finishMarkup: finishOpenMarkup,
   });
 
   const desktopStart = useRef<Pick<ReturnType<typeof useAppStore.getState>, 'project' | 'history' | 'future' | 'dirty'> | null>(null);
   const navigation = usePlanNavigation({
-    transform, reviewOnly, contextKey: `${project?.id}:${currentPage}:${toolMode}:${drawTarget}:${selectedRoomId}:${selectedConcreteId}:${selectedRebarId}:${selectedStirrupPlacementId}:${selectedMarkupId}`,
+    transform, reviewOnly, contextKey: `${project?.id}:${currentPage}:${toolMode}:${drawTarget}:${selectedRoomId}:${selectedConcreteId}:${selectedRebarId}:${selectedStirrupPlacementId}:${selectedMarkupId}:${selectedDrawnBarId}:${meshLayoutView.level}:${meshLayoutView.editing}`,
     editing: { begin: (x, y, target, pointerType) => meshTouch.active ? meshTouch.editing.begin(x, y, target, pointerType) : touch.editing.begin(x, y, target, pointerType),
       move: (x, y) => { meshTouch.editing.move(x, y); touch.editing.move(x, y); },
       end: (x, y) => { meshTouch.editing.end(x, y); touch.editing.end(x, y); },
@@ -1085,6 +1091,12 @@ export default function PdfViewer() {
       ref={containerRef}
       className={`pdf-viewport tool-${toolMode}`}
       {...navigation}
+      onPointerCancelCapture={(event) => {
+        if (navigation.onPointerCancelCapture(event) && event.pointerType !== 'mouse') { touch.cancel(); meshTouch.editing.cancel(); }
+      }}
+      onLostPointerCaptureCapture={(event) => {
+        if (navigation.onPointerCancelCapture(event) && event.pointerType !== 'mouse') { touch.cancel(); meshTouch.editing.cancel(); }
+      }}
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}

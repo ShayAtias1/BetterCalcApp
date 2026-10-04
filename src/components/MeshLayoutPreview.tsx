@@ -96,7 +96,7 @@ export function MeshLayoutControl({ planId, mesh, calibration }: { planId: strin
 }
 
 /** Full physical outlines. Hit targets exist only while explicitly editing a supported layout. */
-export function MeshSheetPreviewLayer({ preview, level, zoom, visible, interaction }: { preview: MeshLayoutPreview | null; level: RebarLevel; zoom: number; visible: boolean; interaction?: {
+export function MeshSheetPreviewLayer({ preview, level, zoom, visible, interaction, selectedId = null }: { preview: MeshLayoutPreview | null; level: RebarLevel; zoom: number; visible: boolean; selectedId?: string | null; interaction?: {
   selectedId: string | null;
   start: (id: string, event: PointerEvent<SVGPolygonElement>) => void;
   move: (event: PointerEvent<SVGPolygonElement>) => void;
@@ -113,7 +113,7 @@ export function MeshSheetPreviewLayer({ preview, level, zoom, visible, interacti
       onDoubleClick={interaction ? (e) => e.stopPropagation() : undefined}>
       {preview.sheetsByLevel[shownLevel]!.map((sheet) => (
         <g key={sheet.id} data-placement-id={sheet.id}>
-          <polygon data-plan-child-interaction="mesh-sheet" points={sheet.points} fill={REBAR_COLOR} fillOpacity={interaction?.selectedId === sheet.id ? 0.14 : 0.055} stroke={REBAR_COLOR} strokeOpacity={interaction?.selectedId === sheet.id ? 1 : 0.6} strokeWidth={(interaction?.selectedId === sheet.id ? 2 : 1) / zoom}
+          <polygon data-plan-child-interaction="mesh-sheet" points={sheet.points} fill={REBAR_COLOR} fillOpacity={(interaction?.selectedId ?? selectedId) === sheet.id ? 0.14 : 0.055} stroke={REBAR_COLOR} strokeOpacity={(interaction?.selectedId ?? selectedId) === sheet.id ? 1 : 0.6} strokeWidth={((interaction?.selectedId ?? selectedId) === sheet.id ? 2 : 1) / zoom}
             style={interaction ? { cursor: 'move', touchAction: 'none' } : undefined}
             onPointerDown={interaction ? (e) => interaction.start(sheet.id, e) : undefined}
             onPointerMove={interaction?.move} onPointerUp={interaction?.end} onPointerCancel={interaction?.end} onLostPointerCapture={interaction?.end} />
@@ -182,5 +182,5 @@ export function MeshLayoutOverlay({ plan, pageNumber, selectedId, zoom, visible,
       if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
     },
   } : undefined;
-  return <MeshSheetPreviewLayer preview={preview} level={view.level} zoom={zoom} visible={visible && view.enabled} interaction={interaction} />;
+  return <MeshSheetPreviewLayer preview={preview} level={view.level} zoom={zoom} visible={visible && view.enabled} selectedId={view.editing ? view.selectedPlacementId : null} interaction={interaction} />;
 }

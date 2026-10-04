@@ -1,3 +1,4 @@
+import { FIELD_OPERATION_CANCEL } from '../lib/fieldLifecycle';
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent, PointerEvent } from 'react';
@@ -35,6 +36,25 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
     index: number; pointerId: number; origin: Point; shape: StirrupShape;
     next: StirrupShape; scale: number; minX: number; minY: number;
   } | null>(null);
+  useEffect(() => {
+    const cancel = () => {
+      const old = drag.current; drag.current = null; setPreview(null); setExtension(null); setTouchEditing(false);
+      contacts.current.clear(); blocked.current = false; suppressClick.current = Date.now() + 800;
+      if (old && svgRef.current?.hasPointerCapture(old.pointerId)) svgRef.current.releasePointerCapture(old.pointerId);
+    };
+    window.addEventListener(FIELD_OPERATION_CANCEL, cancel);
+    window.addEventListener('blur', cancel);
+    const visibility = () => { if (document.hidden) cancel(); };
+    document.addEventListener('visibilitychange', visibility);
+    let previous = svgRef.current?.getBoundingClientRect();
+    const observer = new ResizeObserver(() => {
+      const next = svgRef.current?.getBoundingClientRect();
+      if (previous && next && (previous.width !== next.width || previous.height !== next.height)) cancel();
+      previous = next;
+    });
+    if (svgRef.current) observer.observe(svgRef.current);
+    return () => { window.removeEventListener(FIELD_OPERATION_CANCEL, cancel); window.removeEventListener('blur', cancel); document.removeEventListener('visibilitychange', visibility); observer.disconnect(); cancel(); };
+  }, [item.id, item.shape, reviewOnly]);
   const shape = preview ?? item.shape;
   const prepared = prepareStirrupShape(shape);
   // Keep the preview frame fixed while moving or extending the shape.
