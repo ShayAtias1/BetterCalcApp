@@ -907,6 +907,7 @@ export const en: Dictionary = {
     copyBottomToTopHint: 'Starts Top from the same values - each level stays editable on its own',
     purchaseWeight: 'Purchase weight',
     layout: {
+      duplicate: 'Duplicate sheet',
       add: 'Add sheet',
       remove: 'Remove sheet',
       manual: 'Manual layout',

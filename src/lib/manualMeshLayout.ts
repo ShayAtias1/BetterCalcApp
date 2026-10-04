@@ -6,7 +6,7 @@ import { resolveMeshProcurement, resolveSheetSettings } from './meshSheets';
 
 export type ManualMeshEdit =
   | { type: 'move'; id: string; x: number; y: number }
-  | { type: 'rotate' | 'remove'; id: string }
+  | { type: 'rotate' | 'remove' | 'duplicate'; id: string }
   | { type: 'add' }
   | { type: 'reset' };
 
@@ -44,7 +44,9 @@ export function editManualMeshLayout(mesh: RebarMesh, calibration: Calibration |
   } else {
     const sheet = sheets.find((s) => s.id === edit.id);
     if (!sheet) return mesh;
-    if (edit.type === 'remove') sheets = sheets.filter((s) => s.id !== edit.id);
+    if (edit.type === 'duplicate') {
+      sheets = [...sheets, { ...sheet, id: newId(), x: sheet.x + 0.2, y: sheet.y + 0.2 }];
+    } else if (edit.type === 'remove') sheets = sheets.filter((s) => s.id !== edit.id);
     else if (edit.type === 'move') {
       if (!Number.isFinite(edit.x) || !Number.isFinite(edit.y) || (sheet.x === edit.x && sheet.y === edit.y)) return mesh;
       sheets = sheets.map((s) => s.id === edit.id ? { ...s, x: edit.x, y: edit.y } : s);

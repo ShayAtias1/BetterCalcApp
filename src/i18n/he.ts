@@ -911,6 +911,7 @@ export const he = {
     copyBottomToTopHint: 'מתחיל את העליון מאותם ערכים - כל מפלס נשאר ניתן לעריכה בנפרד',
     purchaseWeight: 'משקל לרכישה',
     layout: {
+      duplicate: 'שכפל רשת',
       add: 'הוסף רשת',
       remove: 'מחק רשת',
       manual: 'פריסה ידנית',
