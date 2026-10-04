@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import type { prepareStirrupShape } from './stirrupShape';
 import { columnWidths, type ExportContext } from './exportLanguage';
 import { markLabel } from './structuralMarks';
 import { basisText, concreteStatusText, levelReportSpecification, levelQuantity, levelStatus, levelText, overlapCm, sheetSizeText } from './structuralExportText';
@@ -286,45 +287,85 @@ function addRebarAndStirrupSheets(workbook: ExcelJS.Workbook, rows: { planName?:
   if (stirrups.length) addStirrupSheet(workbook, stirrups, withPlan, x);
 }
 
+/** Rasterise the shared report vectors only at Excel's PNG embedding boundary. */
+function stirrupThumbnailPng(shape: ReturnType<typeof prepareStirrupShape>): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = 168;
+  canvas.height = 112;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Unable to render the Stirrup shape thumbnail.');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const xs = shape.points.map((point) => point.x);
+  const ys = shape.points.map((point) => point.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const scale = Math.min(144 / Math.max(maxX - minX, 1), 88 / Math.max(maxY - minY, 1));
+  const x = (value: number) => 84 + (value - (minX + maxX) / 2) * scale;
+  const y = (value: number) => 56 + (value - (minY + maxY) / 2) * scale;
+  ctx.strokeStyle = '#c2410c';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (const segment of shape.segments) {
+    ctx.moveTo(x(segment.normalizedStart.x), y(segment.normalizedStart.y));
+    ctx.lineTo(x(segment.normalizedEnd.x), y(segment.normalizedEnd.y));
+  }
+  ctx.stroke();
+  return canvas.toDataURL('image/png');
+}
+
 function addStirrupSheet(workbook: ExcelJS.Workbook, rows: { planName?: string; row: RebarLevelRow }[], withPlan: boolean, x: ExportContext) {
   const { t } = x;
   const sheet = workbook.addWorksheet(t('rebar.stirrup.excelSheet'), { views: [{ rightToLeft: x.rtl }] });
-  const headers = [t('exports.structural.headers.page'), t('concrete.mark'), t('rebar.stirrup.shape'), t('rebar.diameter'),
+  const headers = [t('exports.structural.headers.page'), t('concrete.mark'), t('rebar.stirrup.shape'), t('rebar.stirrup.report.shapeType'), t('rebar.diameter'),
     `${t('rebar.stirrup.geometricLength')} (${t('units.m')})`, `${t('rebar.stirrup.lengthUsed')} (${t('units.m')})`,
     t('rebar.stirrup.lengthSource'), t('rebar.stirrup.quantity'), `${t('rebar.totalLength')} (${t('units.m')})`,
     `${t('quantitiesPanel.cols.netWeight')} (${t('units.kg')})`, `${t('quantitiesPanel.cols.orderWeight')} (${t('units.kg')})`, t('exports.structural.headers.status')];
   if (withPlan) headers.unshift(t('exports.common.plan'));
-  const widths = [12, 20, 40, 12, 18, 18, 20, 12, 18, 18, 18, 24];
+  const widths = [12, 20, 14, 40, 12, 18, 18, 20, 12, 18, 18, 18, 24];
   if (withPlan) widths.unshift(PLAN_WIDTH);
   columnWidths(widths, headers, x.language, 2).forEach((width, index) => sheet.getColumn(index + 1).width = width);
   headerRow(sheet, headers);
   const offset = withPlan ? 1 : 0;
+  // Preserve the existing value columns, shifted only by the new thumbnail column.
+  const column = (original: number) => original + offset + (original >= 3 ? 1 : 0);
   const first = sheet.rowCount + 1;
   rows.forEach(({ planName, row: d }, index) => {
     const part = d.parts[0], data = part.stirrup;
     const shape = data?.shape;
     const pages = data ? [...new Set(data.placements.map((p) => p.placement.pageNumber))].join(', ') : String(d.pageNumber);
     const description = shape ? `${t(`rebar.stirrup.templates.${shape.template}`)} · ${x.number(Math.round(shape.widthM * 1000) / 10)} × ${x.number(Math.round(shape.heightM * 1000) / 10)} ${t('units.cm')}` : DASH;
-    const cells = [pages, markLabel(d, t), description, num(part.diameterMm), num(data?.geometricLengthM ?? null), num(part.barLengthM),
+    const cells = [pages, markLabel(d, t), '', description, num(part.diameterMm), num(data?.geometricLengthM ?? null), num(part.barLengthM),
       t(data?.lengthSource === 'manual' ? 'rebar.stirrup.manualLength' : 'rebar.stirrup.geometricLength'), num(part.barCount), num(part.netLengthM),
       num(d.netWeightKg), num(d.orderWeightKg), levelStatus(d, x)];
     const row = sheet.addRow(withPlan ? [planName ?? '', ...cells] : cells);
     styleRow(row, index % 2 ? C_ZEBRA_B : C_ZEBRA_A);
-    row.getCell(3 + offset).alignment = { horizontal: 'center', wrapText: true };
-    [4, 5, 6, 8, 9, 10, 11].forEach((column) => row.getCell(column + offset).numFmt = column === 4 || column === 8 ? PCT_FMT : NUM_FMT);
+    row.getCell(column(3)).alignment = { horizontal: 'center', wrapText: true };
+    [4, 5, 6, 8, 9, 10, 11].forEach((original) => row.getCell(column(original)).numFmt = original === 4 || original === 8 ? PCT_FMT : NUM_FMT);
+    row.height = 48;
+    if (shape?.segments.length) {
+      const imageId = workbook.addImage({ base64: stirrupThumbnailPng(shape), extension: 'png' });
+      sheet.addImage(imageId, {
+        tl: { col: 2 + offset + 0.07, row: row.number - 1 + 0.06 },
+        ext: { width: 84, height: 56 },
+        editAs: 'oneCell',
+      });
+    }
   });
   const last = sheet.rowCount;
   const total = sheet.addRow(new Array(headers.length).fill(''));
-  total.getCell(2 + offset).value = t('rebar.summary.total');
-  for (const column of [8, 9, 10, 11]) {
-    const values = rows.map(({ row }) => column === 8 ? row.parts[0].barCount : column === 9 ? row.parts[0].netLengthM : column === 10 ? row.netWeightKg : row.orderWeightKg);
-    const letter = colLetter(column + offset);
-    total.getCell(column + offset).value = values.some((v) => v === null) ? DASH : {
+  total.getCell(column(2)).value = t('rebar.summary.total');
+  for (const original of [8, 9, 10, 11]) {
+    const values = rows.map(({ row }) => original === 8 ? row.parts[0].barCount : original === 9 ? row.parts[0].netLengthM : original === 10 ? row.netWeightKg : row.orderWeightKg);
+    const letter = colLetter(column(original));
+    total.getCell(column(original)).value = values.some((v) => v === null) ? DASH : {
       formula: `ROUND(SUM(${letter}${first}:${letter}${last}),2)`, result: values.reduce<number>((sum, value) => sum + (value ?? 0), 0),
     };
-    total.getCell(column + offset).numFmt = column === 8 ? PCT_FMT : NUM_FMT;
+    total.getCell(column(original)).numFmt = original === 8 ? PCT_FMT : NUM_FMT;
   }
   const missing = rows.filter(({ row }) => row.status !== 'ok').length;
-  if (missing) total.getCell(12 + offset).value = t('exports.structural.missingShort', { count: missing });
+  if (missing) total.getCell(column(12)).value = t('exports.structural.missingShort', { count: missing });
   styleRow(total, C_GRAND, true);
 }

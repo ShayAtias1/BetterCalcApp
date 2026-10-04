@@ -932,6 +932,7 @@ export const he = {
       lengthUsed: 'אורך בשימוש',
       geometricHint: 'מקטעים גאומטריים בלבד; ללא תוספת כיפוף או ווים אוטומטיים.',
       report: {
+        shapeType: 'סוג צורה',
         diameter: 'קוטר',
         mm: 'מ"מ',
         length: 'אורך',

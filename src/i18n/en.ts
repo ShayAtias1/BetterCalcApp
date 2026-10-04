@@ -928,6 +928,7 @@ export const en: Dictionary = {
       lengthUsed: 'Length used',
       geometricHint: 'Geometric segments only; no bend allowance or automatic hooks.',
       report: {
+        shapeType: 'Shape type',
         diameter: 'Diameter',
         mm: 'mm',
         length: 'Length',
