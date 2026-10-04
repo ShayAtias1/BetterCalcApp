@@ -223,7 +223,7 @@ export default function CompareWorkspace() {
       <ChangesPanel mobileOpen={panel === 'quantities'} onMobileClose={() => setPanel('plan')} />
       {layout === 'narrow' && <nav className="mobile-destinations">
         {(['plan', 'items', 'quantities'] as const).map((next) => <button key={next} aria-current={panel === next ? 'page' : undefined} onClick={() => setPanel(next)}>{t(`adaptive.${next}`)}</button>)}
-      </nav>
+      </nav>}
     </div>
   );
 }
