@@ -14,9 +14,9 @@ export default function AdaptiveHeader({ title, sheet, sheetCount, onSheet, onBa
   const [menu, setMenu] = useState<MenuId | null>(null);
   return <header className="adaptive-header">
     <div className="adaptive-header-main">
-      <button className="icon-btn" onClick={onBack} aria-label={t('topBar.backToOverview')}><Icon name="back" /></button>
-      <div className="adaptive-plan-title" dir="auto" title={title}>{title}</div>
       <BrandHomeLink title={t('topBar.goHome')} responsive />
+      <div className="adaptive-plan-title" dir="auto" title={title}>{title}</div>
+      <button className="icon-btn" onClick={onBack} aria-label={t('topBar.backToOverview')}><Icon name="back" /></button>
       <TopBarMenu id="settings" openId={menu} setOpenId={setMenu} label={t('adaptive.more')} variant="ghost">
         <div className="adaptive-menu-status">
           <span className={`save-state save-state-${saveState}`} role="status">{t(`topBar.save.${saveState}`)}</span>
@@ -24,7 +24,7 @@ export default function AdaptiveHeader({ title, sheet, sheetCount, onSheet, onBa
         </div>
         {more && <div className="menu-action-group" onClick={(event) => {
           if (event.target instanceof Element && event.target.closest('button.menu-item')) setMenu(null);
-        }}>{more}</div>}<LanguageSwitch />
+        }}>{more}</div>}<LanguageSwitch labeled />
       </TopBarMenu>
     </div>
     <div className="adaptive-sheet-bar">

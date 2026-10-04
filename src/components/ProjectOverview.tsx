@@ -172,7 +172,7 @@ export default function ProjectOverview() {
         <div className="top-bar-group grow" />
         <div className="top-bar-group output">
           {layout === 'expanded' ? <LanguageSwitch /> : <TopBarMenu id="settings" openId={headerMenu} setOpenId={setHeaderMenu} label={t('adaptive.more')} variant="ghost">
-            <LanguageSwitch />
+            <LanguageSwitch labeled />
           </TopBarMenu>}
         </div>
       </div>

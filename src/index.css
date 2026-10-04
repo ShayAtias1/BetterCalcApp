@@ -3336,8 +3336,17 @@ html[dir='rtl'] .qty-table .col-room {
 .responsive-popover .grid-spacing-row { flex-wrap: wrap; gap: 4px; }
 
 /* Compact headers reserve a real title region and reuse the desktop brand assets. */
-.adaptive-header-main { min-width: 0; }
-.adaptive-header-main > .icon-btn, .adaptive-header-main > .top-bar-menu-anchor { flex: none; }
+.adaptive-header-main {
+  min-width: 0; display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-areas: "brand title back more";
+}
+.adaptive-header-main > .app-brand { grid-area: brand; }
+.adaptive-header-main > .adaptive-plan-title { grid-area: title; }
+.adaptive-header-main > .icon-btn { grid-area: back; }
+.adaptive-header-main > .top-bar-menu-anchor { grid-area: more; }
+.language-control { display: grid; gap: 4px; padding: 6px; }
+.language-control-label { font-size: 12px; font-weight: 600; }
 .adaptive-plan-title { flex: 1 1 0; }
 .adaptive-header .app-brand { display: flex; margin: 0; padding-inline: 4px; }
 .adaptive-header .adaptive-sheet-bar { min-width: 0; flex-wrap: wrap; }
@@ -3360,8 +3369,8 @@ html[dir='rtl'] .qty-table .col-room {
 :is([data-layout="compact"], [data-layout="narrow"]) .project-overview-workspace .top-bar-group.identity {
   flex: 1 1 0; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px;
 }
-:is([data-layout="compact"], [data-layout="narrow"]) .project-overview-workspace .top-bar-group.identity > .app-brand { grid-column: 3; grid-row: 1; margin: 0; }
-:is([data-layout="compact"], [data-layout="narrow"]) .project-overview-workspace .top-bar-group.identity > .btn-ghost { grid-column: 1; grid-row: 1; }
+:is([data-layout="compact"], [data-layout="narrow"]) .project-overview-workspace .top-bar-group.identity > .app-brand { grid-column: 1; grid-row: 1; margin: 0; }
+:is([data-layout="compact"], [data-layout="narrow"]) .project-overview-workspace .top-bar-group.identity > .btn-ghost { grid-column: 3; grid-row: 1; }
 :is([data-layout="compact"], [data-layout="narrow"]) .project-overview-workspace .project-name-input {
   grid-column: 2; grid-row: 1; width: 100%; max-width: none; min-width: 0; box-sizing: border-box;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
