@@ -1151,7 +1151,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   editStirrupPlacement: (id, placement, debounced = false) => {
     const { project } = get();
     const item = project && rebarOf(project).find((i) => i.id === id);
-    if (!project || !item || item.kind !== 'stirrup' || !item.placements.some((p) => p.id === placement.id && p.kind === placement.kind)) return;
+    if (!project || !item || item.kind !== 'stirrup') return;
+    const previous = item.placements.find((p) => p.id === placement.id && p.kind === placement.kind);
+    if (!previous || JSON.stringify(previous) === JSON.stringify(placement)) return;
+    const points = placement.kind === 'line' ? [placement.start, placement.end] : placement.points;
+    if (!points.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y))) return;
+    if (placement.kind === 'line' && Math.hypot(placement.end.x - placement.start.x, placement.end.y - placement.start.y) < 1e-9) return;
+    if (placement.kind === 'area' && !isRectangle(placement.points)) return;
     if (debounced) historyTracker.pushDebounced(get, set, project);
     else historyTracker.push(get, set, project);
     set({ project: { ...updateRebar(project, id, { placements: item.placements.map((p) => p.id === placement.id ? structuredClone(placement) : p) }), updatedAt: Date.now() } });
@@ -1163,7 +1169,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!project || !item || item.kind !== 'stirrup' || !item.placements.some((p) => p.id === placementId)) return;
     historyTracker.push(get, set, project);
     set({ project: { ...updateRebar(project, id, { placements: item.placements.filter((p) => p.id !== placementId) }), updatedAt: Date.now() },
-      selectedStirrupPlacementId: get().selectedStirrupPlacementId === placementId ? null : get().selectedStirrupPlacementId });
+      selectedStirrupPlacementId: get().selectedStirrupPlacementId === placementId ? null : get().selectedStirrupPlacementId,
+      ...(get().selectedStirrupPlacementId === placementId ? { stirrupDrawing: null, drawingPoints: [], toolMode: 'select' as const } : {}) });
     scheduleSave(get, set);
   },
   selectStirrupPlacement: (id, placementId) => {

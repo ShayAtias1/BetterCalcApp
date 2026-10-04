@@ -872,6 +872,11 @@ export const en: Dictionary = {
   rebar: {
     stirrupName: 'Stirrup',
     stirrup: {
+      shapeWidth: 'Shape width',
+      shapeHeight: 'Shape height',
+      automaticSpacing: 'Automatic by spacing',
+      automaticGrid: 'Automatic grid',
+
       dimensions: 'Dimensions',
       distributionSize: 'Distribution size',
       excelSheet: 'Stirrups',

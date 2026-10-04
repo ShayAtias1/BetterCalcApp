@@ -28,7 +28,7 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
     </svg>
     {item.shape.template !== 'custom' ? <div className="form-grid">
       {(['widthM', 'heightM'] as const).map((field) => <div className="form-row" key={field}>
-        <label>{t(field === 'widthM' ? 'concrete.width' : 'concrete.height')} ({t('units.cm')})</label>
+        <label>{t(field === 'widthM' ? 'rebar.stirrup.shapeWidth' : 'rebar.stirrup.shapeHeight')} ({t('units.cm')})</label>
         <NumberField value={metersToCm(model[field]) ?? undefined} onChange={(v) => set(stirrupTemplate(item.shape.template,
           field === 'widthM' ? cmToMeters(v) ?? 0 : model.widthM, field === 'heightM' ? cmToMeters(v) ?? 0 : model.heightM))} />
       </div>)}
@@ -38,7 +38,7 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
         <span>{t('rebar.stirrup.vertex', { number: index + 1 })}</span>
         {(['x', 'y'] as const).map((axis) => <label key={axis}>{axis.toUpperCase()} ({t('units.cm')})
           <input type="number" step="1" value={round(point[axis] * 100, 4)} onChange={(e) => {
-            const value = Number(e.target.value); if (!Number.isFinite(value)) return;
+            const value = Number(e.target.value); if (e.target.value.trim() === '' || !Number.isFinite(value)) return;
             set({ ...item.shape, points: item.shape.points.map((p, i) => i === index ? { ...p, [axis]: value / 100 } : { ...p }) });
           }} /></label>)}
         <button className="btn-ghost small danger" disabled={item.shape.points.length <= (item.shape.closed ? 3 : 2)} onClick={() => set({ ...item.shape, points: item.shape.points.filter((_, i) => i !== index) })}>{t('rebar.stirrup.removeVertex')}</button>

@@ -39,6 +39,7 @@ import GridLayer from './GridLayer';
 import ConcreteZones from './ConcreteZones';
 import RebarZones from './RebarZones';
 import { MeshLayoutOverlay } from './MeshLayoutPreview';
+import { markLabel } from '../lib/structuralMarks';
 import { concreteOf, rebarOf } from '../lib/structuralPlan';
 import { updateConcreteElement, updateRebarItem } from '../lib/structuralMutations';
 import type { DrawnStraightBar } from '../types/structural';
@@ -523,9 +524,18 @@ export default function PdfViewer() {
       // room confirmation) as the sidebar's ✕ buttons — so it lands in undo history identically.
       // A selected markup wins over a selected room: it is the more recent selection on the plan.
       if ((e.key === 'Delete' || e.key === 'Backspace') && !isEditingField && !textDraft) {
-        if (drawTarget === 'rebar' && overlayVisible.rebar && selectedRebarId && selectedDrawnBarId) {
+        if (drawTarget === 'rebar' && overlayVisible.rebar && selectedRebarId && selectedStirrupPlacementId) {
+          e.preventDefault();
+          useAppStore.getState().deleteStirrupPlacement(selectedRebarId, selectedStirrupPlacementId);
+        } else if (drawTarget === 'rebar' && overlayVisible.rebar && selectedRebarId && selectedDrawnBarId) {
           e.preventDefault();
           useAppStore.getState().deleteDrawnBar(selectedRebarId, selectedDrawnBarId);
+        } else if (drawTarget === 'rebar' && overlayVisible.rebar && selectedRebarId && project) {
+          const selected = rebarOf(project).find((item) => item.id === selectedRebarId);
+          if (selected?.kind === 'stirrup') {
+            e.preventDefault();
+            if (confirm(t('rebar.deleteConfirm', { mark: markLabel(selected, t) }))) useAppStore.getState().deleteRebarItem(selected.id);
+          }
         } else if (selectedMarkupId) {
           e.preventDefault();
           deleteMarkup(selectedMarkupId);
@@ -560,6 +570,7 @@ export default function PdfViewer() {
     selectedRoomId,
     selectedRebarId,
     selectedDrawnBarId,
+    selectedStirrupPlacementId,
     drawTarget,
     overlayVisible.rebar,
     clearDetectionCandidates,

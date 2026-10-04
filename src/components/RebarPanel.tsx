@@ -99,7 +99,7 @@ export default function RebarPanel() {
         </div>
         {selected.kind === 'mesh' ? (
           <MeshDetail key={selected.id} mesh={selected} calibration={project.pages[selected.pageNumber]?.calibration ?? null} />
-        ) : selected.kind === 'stirrup' ? <StirrupDetail item={selected} /> : (
+        ) : selected.kind === 'stirrup' ? <StirrupDetail key={selected.id} item={selected} /> : (
           <BarsDetail key={selected.id} bars={selected} />
         )}
       </div>

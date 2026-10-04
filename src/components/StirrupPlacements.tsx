@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { RebarStirrup } from '../types/structural';
 import { formatNumber, useT } from '../i18n';
 import { useAppStore } from '../store/appStore';
@@ -16,11 +17,24 @@ export default function StirrupPlacements({ item }: { item: RebarStirrup }) {
   const duplicate = useAppStore((s) => s.duplicateStirrupPlacement);
   const select = useAppStore((s) => s.selectStirrupPlacement);
   const selected = useAppStore((s) => s.selectedStirrupPlacementId);
+  const currentPage = useAppStore((s) => s.currentPage);
+  const numPages = useAppStore((s) => s.numPages);
+  const [placementPage, setPlacementPage] = useState(currentPage);
+  const begin = (kind: 'line' | 'area') => {
+    useAppStore.getState().setCurrentPage(placementPage);
+    start(item.id, kind);
+  };
   if (!plan) return null;
   return <section className="rebar-level">
     <span className="section-label">{t('rebar.stirrup.placements')}</span>
-    <button className="btn-ghost small" onClick={() => start(item.id, 'line')}>{t('rebar.stirrup.addPlacement')} · {t('rebar.stirrup.line')}</button>
-    <button className="btn-ghost small" onClick={() => start(item.id, 'area')}>{t('rebar.stirrup.addPlacement')} · {t('rebar.stirrup.area')}</button>
+    <div className="form-row"><label>{t('exports.structural.headers.page')}</label>
+      <select value={placementPage} onChange={(e) => setPlacementPage(Number(e.target.value))}>
+        {Array.from({ length: Math.max(numPages, currentPage, 1) }, (_, index) => index + 1).map((page) =>
+          <option key={page} value={page}>{t('concrete.page', { page })}</option>)}
+      </select>
+    </div>
+    <button className="btn-ghost small" onClick={() => begin('line')}>{t('rebar.stirrup.addPlacement')} · {t('rebar.stirrup.line')}</button>
+    <button className="btn-ghost small" onClick={() => begin('area')}>{t('rebar.stirrup.addPlacement')} · {t('rebar.stirrup.area')}</button>
     {item.placements.map((placement, index) => {
       const result = resolveStirrupPlacement(placement, plan.pages);
       return <div className={`rebar-direction ${selected === placement.id ? 'active' : ''}`} key={placement.id}>
@@ -37,6 +51,7 @@ export default function StirrupPlacements({ item }: { item: RebarStirrup }) {
             <NumberField value={metersToCm(placement[axis]) ?? undefined} onChange={(v) => edit(item.id, { ...placement, [axis]: cmToMeters(v) ?? 0 }, true)} />
           </div>)}
         </div>}
+        <p className="muted">{t(placement.quantityMode === 'manual' ? 'rebar.stirrup.manualQuantity' : placement.kind === 'line' ? 'rebar.stirrup.automaticSpacing' : 'rebar.stirrup.automaticGrid')}</p>
         <label className="wi-check"><input type="checkbox" checked={placement.quantityMode === 'manual'} onChange={(e) => edit(item.id, { ...placement,
           quantityMode: e.target.checked ? 'manual' : 'automatic', manualQuantity: e.target.checked ? result.quantity ?? 0 : undefined })} />{t('rebar.stirrup.manualQuantity')}</label>
         {placement.quantityMode === 'manual' && <NumberField value={placement.manualQuantity} step="1" onChange={(v) => edit(item.id, { ...placement, manualQuantity: v ?? 0 }, true)} />}

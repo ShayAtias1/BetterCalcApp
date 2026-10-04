@@ -876,6 +876,11 @@ export const he = {
   rebar: {
     stirrupName: 'חישוק',
     stirrup: {
+      shapeWidth: 'רוחב הצורה',
+      shapeHeight: 'גובה הצורה',
+      automaticSpacing: 'כמות אוטומטית לפי מרווח',
+      automaticGrid: 'רשת פריסה אוטומטית',
+
       dimensions: 'מידות',
       distributionSize: 'גודל פריסה',
       excelSheet: 'חישוקים',
