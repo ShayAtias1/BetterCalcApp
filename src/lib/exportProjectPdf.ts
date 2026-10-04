@@ -8,6 +8,7 @@ import { buildProjectQuantities, planStatusLabel, roomCategoryQuantity, type Cat
 import { buildProjectStructural, finishesSummaryMode } from './structuralQuantities';
 import { buildProjectStructuralPdfLayout, writeBlocks, type StirrupShapeCard } from './structuralPdfLayout';
 import { type ExportContent } from './exportContent';
+import { placeStirrupPdfDimensions } from './stirrupPdfDimensions';
 
 /*
  * The project quantity report: vector text and table lines throughout (see lib/pdfText — Hebrew is
@@ -130,17 +131,25 @@ export class ReportWriter {
       this.pt.line(screenX(segment.normalizedStart.x), screenY(segment.normalizedStart.y),
         screenX(segment.normalizedEnd.x), screenY(segment.normalizedEnd.y), '#c2410c', 1.5);
     }
-    // Main leg dimensions only; the complete true vector remains visible for custom shapes.
-    card.shape.segments.slice(0, 6).forEach((segment) => {
-      const midX = (segment.normalizedStart.x + segment.normalizedEnd.x) / 2;
-      const midY = (segment.normalizedStart.y + segment.normalizedEnd.y) / 2;
-      const vertical = Math.abs(segment.normalizedEnd.y - segment.normalizedStart.y)
-        > Math.abs(segment.normalizedEnd.x - segment.normalizedStart.x);
-      this.pt.fillText(this.x.number(Math.round(segment.lengthM * 1000) / 10),
-        screenX(midX) + (vertical ? (midX < (minX + maxX) / 2 ? -7 : 7) : 0),
-        screenY(midY) + (vertical ? 3 : (midY < (minY + maxY) / 2 ? -5 : 10)),
-        { size: 8, direction: 'ltr', align: vertical ? (midX < (minX + maxX) / 2 ? 'right' : 'left') : 'center', color: '#78716c' });
-    });
+    // Keep the existing annotation density, but separate nearby labels using measured boxes.
+    const dimensions = card.shape.segments.slice(0, 6).map((segment) => ({
+      start: { x: screenX(segment.normalizedStart.x), y: screenY(segment.normalizedStart.y) },
+      end: { x: screenX(segment.normalizedEnd.x), y: screenY(segment.normalizedEnd.y) },
+      text: this.x.number(Math.round(segment.lengthM * 1000) / 10),
+    }));
+    const labels = placeStirrupPdfDimensions(dimensions,
+      { left: diagramX, top: top + 4, width: 104, height: height - 20 },
+      (text) => this.pt.measure(text, 8, false, 'ltr'));
+    for (const label of labels) {
+      if (label.leader) {
+        // Stop at the label edge so the connector never runs through its text.
+        const dx = label.midpoint.x - label.x, dy = label.midpoint.y - label.y;
+        const edge = 1 / Math.max(Math.abs(dx) / (label.width / 2 + 2), Math.abs(dy) / (label.height / 2 + 2));
+        this.pt.line(label.midpoint.x, label.midpoint.y, label.x + dx * edge, label.y + dy * edge, '#a8a29e', 0.5);
+      }
+      this.pt.fillText(label.text, label.x, label.y + 3,
+        { size: 8, direction: 'ltr', align: 'center', color: '#78716c', maxWidth: label.width });
+    }
     this.pt.fillText(this.x.t('units.cm'), diagramX + 52, top + height - 7,
       { size: 8, direction: 'ltr', align: 'center', color: '#78716c' });
     const textWidth = width - 140;
@@ -150,8 +159,6 @@ export class ReportWriter {
     card.details.forEach((detail, index) => this.pt.fillText(detail,
       textX + this.sign * (index % 2) * columnWidth, top + 44 + Math.floor(index / 2) * 22,
       { size: 11, maxWidth: columnWidth - 12 }));
-    if (card.note) this.pt.fillText(card.note, textX, top + height - 14,
-      { size: 8, color: '#78716c', maxWidth: textWidth });
     this.y += height + 4;
   }
 

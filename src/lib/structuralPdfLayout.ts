@@ -24,7 +24,6 @@ export interface StirrupShapeCard {
   title: string;
   shape: ReturnType<typeof prepareStirrupShape>;
   details: string[];
-  note?: string;
 }
 
 export type PdfBlock =
@@ -312,7 +311,6 @@ function stirrupShapeBlocks(rows: { planName?: string; row: RebarLevelRow }[], x
         `${x.t('rebar.stirrup.geometricLength')}: ${fmt(data.geometricLengthM)} ${x.t('units.m')}`,
         ...(showUsedLength ? [`${x.t('rebar.stirrup.lengthUsed')}: ${fmt(part.barLengthM)} ${x.t('units.m')}`] : []),
       ],
-      note: x.t('rebar.stirrup.geometricHint'),
     } });
     if (data.placements.length) blocks.push({ type: 'table', headers: [x.t('exports.structural.headers.type'), x.t('exports.structural.headers.page'),
       x.t('rebar.stirrup.distributionSize'), x.t('rebar.stirrup.spacing'), x.t('rebar.stirrup.quantity'), x.t('exports.structural.headers.status')],
