@@ -45,6 +45,7 @@
 import type { Calibration, Plan } from '../types';
 import type { RebarBars, RebarItem, RebarLayer, RebarLayerDirection, RebarLevel, RebarMesh } from '../types/structural';
 import { distancePx, pxToMeters } from './geometry';
+import { resolveStirrupItem } from './stirrup';
 import { meshLayers, normalizeMesh } from './rebarMesh';
 import { finiteNonNegative, finitePositive, zoneGeometry } from './zoneGeometry';
 
@@ -223,6 +224,6 @@ export function resolveStraightBars(item: RebarBars, calibration: Calibration | 
 }
 
 export function calculateRebar(item: RebarItem, calibration: Calibration | null, pages?: Plan['pages']): RebarCalc {
-  if (item.kind === 'stirrup') return finish('invalid-input', [], finiteNonNegative(item.wastePercent, 0));
+  if (item.kind === 'stirrup') return resolveStirrupItem(item, pages ?? { [item.pageNumber]: { pageNumber: item.pageNumber, calibration } });
   return item.kind === 'mesh' ? calculateMesh(item, calibration) : resolveStraightBars(item, calibration, pages);
 }

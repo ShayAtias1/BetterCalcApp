@@ -19,7 +19,10 @@ import { calculateRebar, resolveStraightBars, incompleteSpecCount, type RebarLay
 import { resolveMeshProcurement, type MeshProcurementResult, type ResolvedSheetSettings } from './meshSheets';
 import { round } from './geometry';
 import { CONCRETE_KINDS } from './structuralMutations';
-import { concreteOf, rebarOf } from './structuralPlan';
+import { resolveStirrupItem } from './stirrup';
+import { prepareStirrupShape } from './stirrupShape';
+import type { StirrupPlacementResult } from './stirrupPlacements';
+import { concreteOf, rebarOf, rebarItemsOnPages } from './structuralPlan';
 
 export interface ConcreteSummaryRow {
   pageNumber: number;
@@ -172,7 +175,7 @@ export function buildRebarSummary(plan: Plan, onlyPages?: ReadonlySet<number>): 
   let missingItems = 0;
   let incompleteSpecs = 0;
 
-  const items = rebarOf(plan).filter((i) => !onlyPages || onlyPages.has(i.pageNumber));
+  const items = rebarItemsOnPages(plan, onlyPages);
   for (const item of items) {
     let page = perPage.get(item.pageNumber);
     if (!page) {
@@ -315,6 +318,7 @@ export function buildConcreteItems(plan: Plan, pages?: ReadonlySet<number>): Con
  */
 export interface RebarItemRow {
   itemId: string;
+  stirrup?: { shape: ReturnType<typeof prepareStirrupShape>; placements: StirrupPlacementResult[]; lengthSource: 'geometric' | 'manual'; geometricLengthM: number | null };
   pageNumber: number;
   /** The user's own mark, '' when automatic — print it with `markLabel` in the report language. */
   mark: string;
@@ -344,7 +348,7 @@ const spacingCmOf = (spacingM: number | null) => (spacingM === null ? null : Mat
 
 export function buildRebarItems(plan: Plan, pages?: ReadonlySet<number>): RebarItemRow[] {
   const rows: RebarItemRow[] = [];
-  const ordered = rebarOf(plan)
+  const ordered = rebarItemsOnPages(plan, pages)
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => !pages || pages.has(item.pageNumber))
     .sort((a, b) => a.item.pageNumber - b.item.pageNumber || a.index - b.index);
@@ -357,6 +361,15 @@ export function buildRebarItems(plan: Plan, pages?: ReadonlySet<number>): RebarI
     const base = { itemId: item.id, pageNumber: item.pageNumber, mark: item.mark, autoNumber: item.autoNumber, kind: item.kind, wastePercent: calc.wastePercent, status: calc.status };
     const none = { level: null, diameterMm: null, spacingCm: null, direction: null, barCount: null, barLengthM: null, netLengthM: null, netWeightKg: null, orderLengthM: null, orderWeightKg: null, estimated: false };
 
+    if (item.kind === 'stirrup') {
+      const resolved = resolveStirrupItem(item, plan.pages);
+      rows.push({ ...base, level: null, diameterMm: positiveOrNull(item.diameterMm), spacingCm: null, direction: null,
+        barCount: resolved.totalCount, barLengthM: resolved.effectiveUnitLength, netLengthM: resolved.totalSteelLength,
+        netWeightKg: resolved.netWeight, orderLengthM: resolved.orderLengthM, orderWeightKg: resolved.orderWeight,
+        estimated: false, stirrup: { shape: prepareStirrupShape(item.shape), placements: resolved.placementResults,
+          lengthSource: resolved.lengthSource, geometricLengthM: resolved.geometricLengthM } });
+      continue;
+    }
     if (item.kind === 'bars') {
       const resolved = resolveStraightBars(item, plan.pages[item.pageNumber]?.calibration ?? null, plan.pages);
       const l = calc.layers[0];
