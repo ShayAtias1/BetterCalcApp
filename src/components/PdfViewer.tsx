@@ -10,7 +10,10 @@ import { nativeHitRadius } from '../lib/interactionTargets';
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { v4 as uuid } from 'uuid';
-import { loadPdfPlanSource, type PdfPlanSource } from '../lib/planSource';
+import { isViewerRenderCancelled } from '../lib/pdfViewerSource';
+import { initialPdfScale } from '../lib/pdfRenderBudget';
+import { useMainPdfSource } from '../hooks/useMainPdfSource';
+import { usePdfDetail } from '../hooks/usePdfDetail';
 import { useAppStore } from '../store/appStore';
 import { notePlanRendered, trackError } from '../lib/analytics';
 import type { ExportRegion, Markup, Point } from '../types';
@@ -40,7 +43,6 @@ import DimensionShape from './DimensionShape';
 import TextNoteShape from './TextNoteShape';
 import TextNoteDialog from './TextNoteDialog';
 import { useCanvasTransform } from '../hooks/useCanvasTransform';
-import { loadPdfBlob } from '../db/database';
 import { useLanguage, useT } from '../i18n';
 import { labelDirection } from '../lib/textDirection';
 import { computeGrid } from '../lib/grid';
@@ -65,7 +67,6 @@ const VERTEX_HIT_RADIUS_SCREEN = 9;
 const MASK_COLOR = '#ffffff';
 /** Detection suggestions are drawn in one neutral colour — they are not rooms and have no room colour yet. */
 const CANDIDATE_COLOR = '#0ea5e9';
-const RENDER_SCALE = Math.min(4, Math.max(2, (window.devicePixelRatio || 1) * 2));
 
 function pointInPolygon(pt: Point, poly: Point[]): boolean {
   let inside = false;
@@ -252,11 +253,12 @@ export default function PdfViewer() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
-  const [planSource, setPlanSource] = useState<PdfPlanSource | null>(null);
-  const [sourceKey, setSourceKey] = useState('');
+  const { planSource, sourceKey, loadError, setLoadError } = useMainPdfSource(
+    project?.id, project?.pdfFileName, currentPage, setNumPages, t('viewer.pdfLoadError'),
+  );
+  const baseRasterScaleRef = useRef(0);
   const [renderedKey, setRenderedKey] = useState('');
   const focusRequest = usePlanFocusStore((s) => s.request);
-  const [loadError, setLoadError] = useState<string | null>(null);
 
   const structuralDrag = useRef<{
     kind: AreaGeometryKind; id: string; placementId?: string; start: Point; points: Point[]; offset: Point; drawnBars?: DrawnStraightBar[]; handleIndex?: number; previewPoints?: Point[];
@@ -317,53 +319,43 @@ export default function PdfViewer() {
   );
   const handleDrag = useRef<{ id: string; index: number } | null>(null);
 
-  // Load PDF page
+  // Density affects only the raster; SVG and saved coordinates remain native scale 1.
   useEffect(() => {
-    if (!project) return;
-    let cancelled = false;
-    setLoadError(null);
-    loadPdfPlanSource(project.id, () => loadPdfBlob(project.id), currentPage)
-      .then(({ source, numPages }) => {
-        if (cancelled) return;
-        setNumPages(numPages);
-        setSourceKey(`${project.id}:${currentPage}`);
-        setPlanSource(source);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setLoadError(err.message || t('viewer.pdfLoadError'));
-        trackError('pdf_load', err);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // Depend on project.id (not the whole project object, which gets a new reference on every
-    // edit — rooms, measurements, markups) so this doesn't reload the page and reset the zoom/pan
-    // on every unrelated change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project?.id, currentPage, setNumPages]);
-
-  // Render page to canvas whenever the plan source changes
-  useEffect(() => {
+    setRenderedKey('');
+    baseRasterScaleRef.current = 0;
     if (!planSource || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const { width, height } = planSource.getNativeSize();
     setPageSize({ width, height });
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
-    const handle = planSource.render(canvas, RENDER_SCALE);
+    const scale = initialPdfScale(width, height);
+    const handle = planSource.render(canvas, scale);
     let cancelled = false;
-    // The plan counts as opened once a page has actually been drawn (the render promise settles
-    // on cancel too, hence the flag). The analytics side fires only once per load of the plan.
     void handle.promise.then(() => {
+      if (cancelled) return;
+      baseRasterScaleRef.current = scale;
+      setRenderedKey(sourceKey);
       const { project, numPages } = useAppStore.getState();
-      if (!cancelled && project) { setRenderedKey(sourceKey); notePlanRendered(project, numPages); }
+      if (project) notePlanRendered(project, numPages);
+    }, (error: unknown) => {
+      if (cancelled || isViewerRenderCancelled(error)) return;
+      setLoadError(error instanceof Error ? error.message : t('viewer.pdfLoadError'));
+      trackError('pdf_load', error);
     });
-    return () => {
-      cancelled = true;
-      handle.cancel();
-    };
-  }, [planSource, sourceKey]);
+    return () => { cancelled = true; handle.cancel(); };
+    // UI language does not change PDF pixels or its native coordinate system.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planSource, sourceKey, setLoadError]);
+
+  const detailHostRef = usePdfDetail(
+    planSource, sourceKey, renderedKey === sourceKey, containerRef, baseRasterScaleRef,
+    { zoom, pan }, transform.getView,
+  );
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    return () => { if (canvas) canvas.width = canvas.height = 0; };
+  }, [planSource]);
 
   // Fit to container on first load / page size change
   useEffect(() => {
@@ -1111,8 +1103,12 @@ export default function PdfViewer() {
         className="pdf-content"
         style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, width: pageSize.width, height: pageSize.height }}
       >
-        {/* Pinned to the Hebrew RTL context: pdf.js lays the plan's text out with the canvas's direction and language, and the plan must look the same in every UI language. */}
-        <canvas ref={canvasRef} dir="rtl" lang="he" />
+        {/* Retain the Hebrew canvas context for the internal PDF.js fallback. */}
+        <canvas ref={canvasRef} dir="rtl" lang="he"
+          style={{ visibility: planSource && renderedKey === sourceKey ? 'visible' : 'hidden' }} />
+        <div ref={detailHostRef} aria-hidden="true" dir="rtl" lang="he"
+          style={{ position: 'absolute', left: 0, top: 0, width: pageSize.width, height: pageSize.height,
+            overflow: 'hidden', pointerEvents: 'none' }} />
         {pageSize.width > 0 && (
           // Pinned to RTL rather than inherited from the page: the plan's labels keep the layout they
           // were drawn with (and that the export rasterizers reproduce) whatever the UI direction.

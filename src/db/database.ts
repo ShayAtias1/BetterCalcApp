@@ -1,3 +1,4 @@
+import { notifyPdfBlobChanged } from '../lib/pdfBlobEvents';
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { v4 as uuid } from 'uuid';
 import type { Plan, Project } from '../types';
@@ -90,6 +91,7 @@ export async function savePlan(plan: Plan): Promise<void> {
 export async function savePdfBlob(planId: string, blob: Blob): Promise<void> {
   const db = await getDb();
   await db.put('pdfFiles', blob, planId);
+  notifyPdfBlobChanged(planId);
 }
 
 export async function loadPdfBlob(planId: string): Promise<Blob | undefined> {
