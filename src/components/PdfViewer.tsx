@@ -43,6 +43,9 @@ import { concreteOf, rebarOf } from '../lib/structuralPlan';
 import { updateConcreteElement, updateRebarItem } from '../lib/structuralMutations';
 import type { DrawnStraightBar } from '../types/structural';
 import { hitStraightBar, translateBar } from '../lib/straightBarsGeometry';
+import { reshapeArea, translateArea, type AreaGeometryKind } from '../lib/areaGeometryEditing';
+import AreaGeometryHandles from './AreaGeometryHandles';
+import { CONCRETE_COLOR, REBAR_COLOR } from '../lib/structuralOverlay';
 import { useMeshLayoutView } from '../store/meshLayoutPreviewStore';
 
 const VERTEX_HIT_RADIUS_SCREEN = 9;
@@ -176,6 +179,7 @@ export default function PdfViewer() {
   const selectedRebarId = useAppStore((s) => s.selectedRebarId);
   const setSelectedRebarId = useAppStore((s) => s.setSelectedRebarId);
   const moveStructuralZone = useAppStore((s) => s.moveStructuralZone);
+  const editAreaGeometry = useAppStore((s) => s.editAreaGeometry);
   const meshLayoutView = useMeshLayoutView(project?.id ?? '', selectedRebarId ?? '');
   const gridEnabled = useGridStore((s) => s.enabled);
   const gridSpacingM = useGridStore((s) => s.spacingM);
@@ -193,9 +197,7 @@ export default function PdfViewer() {
   const finishDrawing = useAppStore((s) => s.finishDrawing);
   const finishRectangle = useAppStore((s) => s.finishRectangle);
   const clearDrawingPoints = useAppStore((s) => s.clearDrawingPoints);
-  const moveRoomPoint = useAppStore((s) => s.moveRoomPoint);
   const deleteRoomPoint = useAppStore((s) => s.deleteRoomPoint);
-  const persist = useAppStore((s) => s.persist);
   const measureTool = useAppStore((s) => s.measureTool);
   const measurePoints = useAppStore((s) => s.measurePoints);
   const areaShape = useAppStore((s) => s.areaShape);
@@ -233,12 +235,11 @@ export default function PdfViewer() {
   const [planSource, setPlanSource] = useState<PdfPlanSource | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const vertexDrag = useRef<{ pointIndex: number } | null>(null);
   const structuralDrag = useRef<{
-    kind: 'concrete' | 'mesh' | 'bars'; id: string; start: Point; points: Point[]; offset: Point; drawnBars?: DrawnStraightBar[];
+    kind: AreaGeometryKind; id: string; start: Point; points: Point[]; offset: Point; drawnBars?: DrawnStraightBar[]; handleIndex?: number; previewPoints?: Point[];
   } | null>(null);
   const [structuralPreview, setStructuralPreview] = useState<{
-    kind: 'concrete' | 'mesh' | 'bars'; id: string; points: Point[]; drawnBars?: DrawnStraightBar[];
+    kind: AreaGeometryKind; id: string; points: Point[]; drawnBars?: DrawnStraightBar[];
   } | null>(null);
   const barDrag = useRef<{ itemId: string; bar: DrawnStraightBar; start: Point; endpoint: 'start' | 'end' | null; preview: DrawnStraightBar | null } | null>(null);
   const [barPreview, setBarPreview] = useState<{ itemId: string; bar: DrawnStraightBar } | null>(null);
@@ -252,6 +253,8 @@ export default function PdfViewer() {
       });
     }
     if (!structuralPreview) return project;
+    if (structuralPreview.kind === 'room') return { ...project, rooms: project.rooms.map((room) =>
+      room.id === structuralPreview.id ? { ...room, points: structuralPreview.points } : room) };
     return structuralPreview.kind === 'concrete'
       ? updateConcreteElement(project, structuralPreview.id, { points: structuralPreview.points })
       : (() => {
@@ -269,8 +272,8 @@ export default function PdfViewer() {
     barDrag.current = null;
     setBarPreview(null);
     setStructuralPreview(null);
-  }, [project, currentPage, toolMode, drawTarget, selectedConcreteId, selectedRebarId, selectedDrawnBarId,
-    overlayVisible.concrete, overlayVisible.rebar, meshLayoutView.editing]);
+  }, [project, currentPage, toolMode, drawTarget, selectedRoomId, selectedConcreteId, selectedRebarId, selectedDrawnBarId,
+    overlayVisible.finishes, overlayVisible.concrete, overlayVisible.rebar, meshLayoutView.editing]);
 
   const spaceHeld = useRef(false);
   const isPanning = useRef(false);
@@ -339,6 +342,26 @@ export default function PdfViewer() {
   }, [pageSize]);
 
   const room = project?.rooms.find((r) => r.id === selectedRoomId) ?? null;
+  const areaPlan = structuralPlan ?? project;
+  const selectedArea = (() => {
+    if (!areaPlan || toolMode !== 'select') return null;
+    if (drawTarget === 'room' && overlayVisible.finishes) {
+      const item = areaPlan.rooms.find((r) => r.id === selectedRoomId && r.pageNumber === currentPage);
+      return item ? { kind: 'room' as const, id: item.id, points: item.points, color: item.color } : null;
+    }
+    if (drawTarget === 'concrete' && overlayVisible.concrete) {
+      const item = concreteOf(areaPlan).find((el) => el.id === selectedConcreteId && el.pageNumber === currentPage);
+      return item ? { kind: 'concrete' as const, id: item.id, points: item.points, color: CONCRETE_COLOR } : null;
+    }
+    if (drawTarget === 'rebar' && overlayVisible.rebar) {
+      const item = rebarOf(areaPlan).find((i) => i.id === selectedRebarId && i.pageNumber === currentPage);
+      if (item?.kind === 'mesh' && !(meshLayoutView.enabled && meshLayoutView.editing))
+        return { kind: 'mesh' as const, id: item.id, points: item.points, color: REBAR_COLOR };
+      if (item?.kind === 'bars' && item.barsZone && item.drawnBars === undefined)
+        return { kind: 'bars' as const, id: item.id, points: item.barsZone.points, color: REBAR_COLOR };
+    }
+    return null;
+  })();
   const metersPerPixel = project?.pages[currentPage]?.calibration?.metersPerPixel ?? 0;
   // A tool that yields real-world numbers is active on a page with no scale.
   const grid = computeGrid(metersPerPixel, gridSpacingM, zoom);
@@ -560,6 +583,16 @@ export default function PdfViewer() {
       return;
     }
     suppressStructuralClick.current = false;
+    if (e.button === 0 && selectedArea) {
+      const native = screenToNative(e.clientX, e.clientY);
+      const handleIndex = nearestPointIndex(selectedArea.points, native, VERTEX_HIT_RADIUS_SCREEN / zoom);
+      const markupTarget = drawTarget === 'room' && (e.target as Element).closest?.('[data-markup-id], [data-handle-markup-id]');
+      if (handleIndex >= 0 || (!markupTarget && pointInPolygon(native, selectedArea.points))) {
+        structuralDrag.current = { kind: selectedArea.kind, id: selectedArea.id, start: native,
+          points: selectedArea.points, offset: { x: 0, y: 0 }, ...(handleIndex >= 0 ? { handleIndex } : {}) };
+        return;
+      }
+    }
     if (toolMode === 'select' && e.button === 0 && project && (drawTarget === 'concrete' || drawTarget === 'rebar')) {
       // Physical-sheet editing owns Mesh gestures while Edit Layout is active.
       if (drawTarget === 'rebar' && meshLayoutView.enabled && meshLayoutView.editing) return;
@@ -580,22 +613,7 @@ export default function PdfViewer() {
         }
         return;
       }
-      const points = selected && ('points' in selected ? selected.points : selected.kind === 'bars' ? selected.barsZone?.points : undefined);
-      if (selected && points && selected.pageNumber === currentPage && pointInPolygon(native, points)) {
-        structuralDrag.current = {
-          kind: drawTarget === 'concrete' ? 'concrete' : selected.kind === 'bars' ? 'bars' : 'mesh', id: selected.id,
-          start: native, points, offset: { x: 0, y: 0 },
-        };
-      }
       return;
-    }
-    if (toolMode === 'select' && room) {
-      const native = screenToNative(e.clientX, e.clientY);
-      const idx = nearestPointIndex(room.points, native, VERTEX_HIT_RADIUS_SCREEN / zoom);
-      if (idx >= 0) {
-        vertexDrag.current = { pointIndex: idx };
-        return;
-      }
     }
     if (toolMode === 'select') {
       const handleTarget = (e.target as Element).closest?.('[data-handle-markup-id]');
@@ -649,16 +667,14 @@ export default function PdfViewer() {
       if (!suppressStructuralClick.current && Math.hypot(offset.x, offset.y) * zoom < 3) return;
       suppressStructuralClick.current = true;
       drag.offset = offset;
+      const points = drag.handleIndex === undefined ? translateArea(drag.points, offset) : reshapeArea(drag.points, drag.handleIndex, native);
+      if (!points) return;
+      drag.previewPoints = points;
       setStructuralPreview({
         kind: drag.kind, id: drag.id,
         ...(drag.drawnBars ? { drawnBars: drag.drawnBars.map((bar) => translateBar(bar, offset)) } : {}),
-        points: drag.points.map((point) => ({ ...point, x: point.x + offset.x, y: point.y + offset.y })),
+        points,
       });
-      return;
-    }
-    if (vertexDrag.current && room) {
-      const native = screenToNative(e.clientX, e.clientY);
-      moveRoomPoint(room.id, vertexDrag.current.pointIndex, native);
       return;
     }
     if (handleDrag.current) {
@@ -718,16 +734,15 @@ export default function PdfViewer() {
       const drag = structuralDrag.current;
       structuralDrag.current = null;
       setStructuralPreview(null);
-      moveStructuralZone(drag.kind, drag.id, drag.offset);
+      // A click on a selected handle must keep its area selected, even without a drag.
+      if (drag.handleIndex !== undefined) suppressStructuralClick.current = true;
+      if (drag.drawnBars && drag.kind === 'bars') moveStructuralZone('bars', drag.id, drag.offset);
+      else if (drag.previewPoints) editAreaGeometry(drag.kind, drag.id, drag.previewPoints);
       return;
     }
     if (isPanning.current) {
       isPanning.current = false;
       endPanDrag();
-    }
-    if (vertexDrag.current) {
-      vertexDrag.current = null;
-      void persist();
     }
     if (handleDrag.current) {
       // Reshaping a dimension changes what it measures, so its labels are recomputed.
@@ -752,7 +767,7 @@ export default function PdfViewer() {
   };
 
   const handleDoubleClick = (e: MouseEvent) => {
-    if (toolMode !== 'select' || drawTarget === 'rebar' || drawTarget === 'concrete') return;
+    if (toolMode !== 'select' || drawTarget !== 'room' || !overlayVisible.finishes || room?.pageNumber !== currentPage) return;
     // Double-clicking a text note reopens it for editing.
     const bodyTarget = (e.target as Element).closest?.('[data-markup-id]');
     const noteId = bodyTarget?.getAttribute('data-markup-id');
@@ -776,7 +791,7 @@ export default function PdfViewer() {
       suppressStructuralClick.current = false;
       return;
     }
-    if (isPanning.current || vertexDrag.current) return;
+    if (isPanning.current || structuralDrag.current) return;
     const native = screenToNative(e.clientX, e.clientY);
 
     if (toolMode === 'calibrate') {
@@ -957,7 +972,7 @@ export default function PdfViewer() {
                 one over the page's own scale and does not depend on zoom or UI direction. */}
             {gridEnabled && grid && <GridLayer grid={grid} width={pageSize.width} height={pageSize.height} zoom={zoom} opacity={gridOpacity} />}
             {overlayVisible.finishes &&
-              project.rooms
+              (structuralPlan ?? project).rooms
                 .filter((r) => r.pageNumber === currentPage)
                 .map((r) => {
                 const isSelected = r.id === selectedRoomId;
@@ -971,10 +986,6 @@ export default function PdfViewer() {
                       stroke={r.color}
                       strokeWidth={isSelected ? strokeW * 1.5 : strokeW}
                     />
-                    {isSelected &&
-                      r.points.map((p, i) => (
-                        <circle key={i} cx={p.x} cy={p.y} r={vertexR} fill="#fff" stroke={r.color} strokeWidth={strokeW} />
-                      ))}
                     {isSelected &&
                       (() => {
                         const c = polygonCentroid(r.points);
@@ -1040,6 +1051,11 @@ export default function PdfViewer() {
             {toolMode === 'draw' && barsDrawing === 'line' && drawingPoints.length === 1 && hoverPoint && <line
               x1={drawingPoints[0].x} y1={drawingPoints[0].y} x2={hoverPoint.x} y2={hoverPoint.y}
               stroke="#c2410c" strokeWidth={strokeW} strokeDasharray={`${4 / zoom} ${4 / zoom}`} />}
+            {selectedArea && selectedArea.points.length >= 3 && <g>
+              <polygon points={selectedArea.points.map((point) => `${point.x},${point.y}`).join(' ')} fill="transparent"
+                pointerEvents="all" style={{ cursor: structuralDrag.current ? 'grabbing' : 'grab' }} />
+              <AreaGeometryHandles points={selectedArea.points} color={selectedArea.color} zoom={zoom} />
+            </g>}
             {/* In-progress polygon drawing */}
             {toolMode === 'draw' && drawingPoints.length > 0 && (
               <g>

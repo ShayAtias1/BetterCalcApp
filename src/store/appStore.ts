@@ -47,6 +47,7 @@ import { polygonAreaPx } from '../lib/geometry';
 import { isRectangle } from '../lib/zoneGeometry';
 import { resolveStraightBars } from '../lib/rebar';
 import { resizeStraightBar, translateBar } from '../lib/straightBarsGeometry';
+import type { AreaGeometryKind } from '../lib/areaGeometryEditing';
 import { overlayForTool, readOverlayVisibility, OVERLAY_STORAGE_KEY, type OverlayKey, type OverlayVisibility } from '../lib/overlayVisibility';
 import { createHistoryTracker } from '../lib/undoHistory';
 import { loadPdfPlanSource } from '../lib/planSource';
@@ -362,6 +363,7 @@ interface AppState {
   deleteDrawnBar: (itemId: string, barId: string) => void;
   removeBarsZone: (id: string) => void;
   moveStructuralZone: (kind: 'concrete' | 'mesh' | 'bars', id: string, offset: Point) => void;
+  editAreaGeometry: (kind: AreaGeometryKind, id: string, points: Point[]) => void;
   duplicateConcreteElement: (id: string) => void;
   deleteConcreteElement: (id: string) => void;
   /**
@@ -1173,6 +1175,26 @@ export const useAppStore = create<AppState>((set, get) => ({
     historyTracker.push(get, set, project);
     set({ project: { ...updateRebar(project, id, { barsZone: undefined, lengthM: resolved.effectiveLengthM ?? item.lengthM }), updatedAt: Date.now() },
       barsDrawing: null, drawingPoints: [], toolMode: 'select' });
+    scheduleSave(get, set);
+  },
+  editAreaGeometry: (kind, id, points) => {
+    const { project } = get();
+    if (!project || points.length < 3 || !points.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y)) || polygonAreaPx(points) <= 1e-9) return;
+    const source = kind === 'room' ? project.rooms.find((room) => room.id === id)
+      : kind === 'concrete' ? concreteOf(project).find((element) => element.id === id)
+      : rebarOf(project).find((item) => item.id === id && item.kind === (kind === 'bars' ? 'bars' : 'mesh'));
+    if (!source) return;
+    const previous = 'points' in source ? source.points : 'kind' in source && source.kind === 'bars' ? source.barsZone?.points : undefined;
+    if (!previous || (kind === 'bars' && !isRectangle(points))) return;
+    if (previous.length === points.length && previous.every((point, index) => point.x === points[index].x && point.y === points[index].y)) return;
+    const geometry = structuredClone(points);
+    const next = kind === 'room' ? { ...project, rooms: project.rooms.map((room) => room.id === id ? { ...room, points: geometry } : room) }
+      : kind === 'concrete' ? updateConcrete(project, id, { points: geometry })
+      : 'kind' in source && source.kind === 'bars' && source.barsZone
+        ? updateRebar(project, id, { barsZone: { ...source.barsZone, points: geometry } })
+        : updateRebar(project, id, { points: geometry });
+    historyTracker.push(get, set, project);
+    set({ project: { ...next, updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
   moveStructuralZone: (kind, id, offset) => {
