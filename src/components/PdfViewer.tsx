@@ -40,6 +40,8 @@ import ConcreteZones from './ConcreteZones';
 import RebarZones from './RebarZones';
 import { MeshLayoutOverlay } from './MeshLayoutPreview';
 import { concreteOf, rebarOf } from '../lib/structuralPlan';
+import { updateConcreteElement, updateRebarItem } from '../lib/structuralMutations';
+import { useMeshLayoutView } from '../store/meshLayoutPreviewStore';
 
 const VERTEX_HIT_RADIUS_SCREEN = 9;
 /** New masks start opaque white, the colour of the paper they hide. */
@@ -166,6 +168,8 @@ export default function PdfViewer() {
   const setSelectedConcreteId = useAppStore((s) => s.setSelectedConcreteId);
   const selectedRebarId = useAppStore((s) => s.selectedRebarId);
   const setSelectedRebarId = useAppStore((s) => s.setSelectedRebarId);
+  const moveStructuralZone = useAppStore((s) => s.moveStructuralZone);
+  const meshLayoutView = useMeshLayoutView(project?.id ?? '', selectedRebarId ?? '');
   const gridEnabled = useGridStore((s) => s.enabled);
   const gridSpacingM = useGridStore((s) => s.spacingM);
   const gridOpacity = useGridStore((s) => s.opacity);
@@ -223,6 +227,27 @@ export default function PdfViewer() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const vertexDrag = useRef<{ pointIndex: number } | null>(null);
+  const structuralDrag = useRef<{
+    kind: 'concrete' | 'mesh'; id: string; start: Point; points: Point[]; offset: Point;
+  } | null>(null);
+  const [structuralPreview, setStructuralPreview] = useState<{
+    kind: 'concrete' | 'mesh'; id: string; points: Point[];
+  } | null>(null);
+  const suppressStructuralClick = useRef(false);
+  const structuralPlan = useMemo(() => {
+    if (!project || !structuralPreview) return project;
+    return structuralPreview.kind === 'concrete'
+      ? updateConcreteElement(project, structuralPreview.id, { points: structuralPreview.points })
+      : updateRebarItem(project, structuralPreview.id, { points: structuralPreview.points });
+  }, [project, structuralPreview]);
+
+  // Changing selection, page or editing context cancels an uncommitted whole-zone drag.
+  useEffect(() => {
+    structuralDrag.current = null;
+    setStructuralPreview(null);
+  }, [project, currentPage, toolMode, drawTarget, selectedConcreteId, selectedRebarId,
+    overlayVisible.concrete, overlayVisible.rebar, meshLayoutView.editing]);
+
   const spaceHeld = useRef(false);
   const isPanning = useRef(false);
   const [hoverPoint, setHoverPoint] = useState<Point | null>(null);
@@ -499,6 +524,22 @@ export default function PdfViewer() {
       beginPanDrag(e.clientX, e.clientY);
       return;
     }
+    suppressStructuralClick.current = false;
+    if (toolMode === 'select' && e.button === 0 && project && (drawTarget === 'concrete' || drawTarget === 'rebar')) {
+      // Physical-sheet editing owns Mesh gestures while Edit Layout is active.
+      if (drawTarget === 'rebar' && meshLayoutView.enabled && meshLayoutView.editing) return;
+      const native = screenToNative(e.clientX, e.clientY);
+      const selected = drawTarget === 'concrete'
+        ? overlayVisible.concrete && concreteOf(project).find((item) => item.id === selectedConcreteId)
+        : overlayVisible.rebar && rebarOf(project).find((item) => item.id === selectedRebarId && item.kind === 'mesh');
+      if (selected && 'points' in selected && selected.pageNumber === currentPage && pointInPolygon(native, selected.points)) {
+        structuralDrag.current = {
+          kind: drawTarget === 'concrete' ? 'concrete' : 'mesh', id: selected.id,
+          start: native, points: selected.points, offset: { x: 0, y: 0 },
+        };
+      }
+      return;
+    }
     if (toolMode === 'select' && room) {
       const native = screenToNative(e.clientX, e.clientY);
       const idx = nearestPointIndex(room.points, native, VERTEX_HIT_RADIUS_SCREEN / zoom);
@@ -540,6 +581,19 @@ export default function PdfViewer() {
 
   const handleMouseMove = (e: MouseEvent) => {
     if (isPanning.current && updatePanDrag(e.clientX, e.clientY)) {
+      return;
+    }
+    if (structuralDrag.current) {
+      const drag = structuralDrag.current;
+      const native = screenToNative(e.clientX, e.clientY);
+      const offset = { x: native.x - drag.start.x, y: native.y - drag.start.y };
+      if (!suppressStructuralClick.current && Math.hypot(offset.x, offset.y) * zoom < 3) return;
+      suppressStructuralClick.current = true;
+      drag.offset = offset;
+      setStructuralPreview({
+        kind: drag.kind, id: drag.id,
+        points: drag.points.map((point) => ({ ...point, x: point.x + offset.x, y: point.y + offset.y })),
+      });
       return;
     }
     if (vertexDrag.current && room) {
@@ -593,6 +647,13 @@ export default function PdfViewer() {
   };
 
   const handleMouseUp = () => {
+    if (structuralDrag.current) {
+      const drag = structuralDrag.current;
+      structuralDrag.current = null;
+      setStructuralPreview(null);
+      moveStructuralZone(drag.kind, drag.id, drag.offset);
+      return;
+    }
     if (isPanning.current) {
       isPanning.current = false;
       endPanDrag();
@@ -644,6 +705,10 @@ export default function PdfViewer() {
   };
 
   const handleClick = (e: MouseEvent) => {
+    if (suppressStructuralClick.current) {
+      suppressStructuralClick.current = false;
+      return;
+    }
     if (isPanning.current || vertexDrag.current) return;
     const native = screenToNative(e.clientX, e.clientY);
 
@@ -840,15 +905,15 @@ export default function PdfViewer() {
                 not selectable (see handleClick). */}
             {overlayVisible.concrete && (
               <ConcreteZones
-                elements={concreteOf(project).filter((z) => z.pageNumber === currentPage)}
+                elements={concreteOf(structuralPlan ?? project).filter((z) => z.pageNumber === currentPage)}
                 selectedId={selectedConcreteId}
                 strokeW={strokeW}
                 zoom={zoom}
               />
             )}
-            <MeshLayoutOverlay plan={project} pageNumber={currentPage} selectedId={selectedRebarId} zoom={zoom} visible={overlayVisible.rebar} screenToNative={screenToNative} interactionAllowed={toolMode === 'select'} />
+            <MeshLayoutOverlay plan={structuralPlan ?? project} pageNumber={currentPage} selectedId={selectedRebarId} zoom={zoom} visible={overlayVisible.rebar} screenToNative={screenToNative} interactionAllowed={toolMode === 'select'} />
             {overlayVisible.rebar && (
-              <RebarZones items={rebarOf(project).filter((m) => m.pageNumber === currentPage)} selectedId={selectedRebarId} strokeW={strokeW} zoom={zoom} />
+              <RebarZones items={rebarOf(structuralPlan ?? project).filter((m) => m.pageNumber === currentPage)} selectedId={selectedRebarId} strokeW={strokeW} zoom={zoom} />
             )}
 
             {/* Detection suggestions: dashed, faint and unselectable, so they never read as rooms

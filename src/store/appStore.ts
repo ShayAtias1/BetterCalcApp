@@ -69,6 +69,13 @@ const historyTracker = createHistoryTracker<Plan>();
 /** How far a duplicated room is shifted from its source, in native page px, so the copy is visible. */
 const ROOM_DUPLICATE_OFFSET = 30;
 
+/** Whole structural copies shift by 25 cm on calibrated pages, otherwise by the room convention. */
+function structuralDuplicatePoints(plan: Plan, pageNumber: number, points: Point[]): Point[] {
+  const scale = plan.pages[pageNumber]?.calibration?.metersPerPixel;
+  const offset = scale && Number.isFinite(scale) && scale > 0 ? 0.25 / scale : ROOM_DUPLICATE_OFFSET;
+  return points.map((point) => ({ ...point, x: point.x + offset, y: point.y + offset }));
+}
+
 const ROOM_COLORS = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#9333ea', '#0891b2', '#c026d3', '#65a30d'];
 
 function nextColor(existing: number): string {
@@ -338,6 +345,8 @@ interface AppState {
   updateConcreteElement: (id: string, patch: Partial<Omit<ConcreteElement, 'id'>>) => void;
   /** Changes the kind of an existing zone (mark renumbered if still automatic). One undo step. */
   changeConcreteElementKind: (id: string, kind: ConcreteKind) => void;
+  /** Translate a whole zone in one undo/autosave action; manual sheet coordinates stay local. */
+  moveStructuralZone: (kind: 'concrete' | 'mesh', id: string, offset: Point) => void;
   duplicateConcreteElement: (id: string) => void;
   deleteConcreteElement: (id: string) => void;
   /**
@@ -1023,11 +1032,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ project: { ...updateConcrete(project, id, patch), updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
+  moveStructuralZone: (kind, id, offset) => {
+    const { project } = get();
+    if (!project || (!offset.x && !offset.y) || !Number.isFinite(offset.x) || !Number.isFinite(offset.y)) return;
+    const source = kind === 'concrete'
+      ? concreteOf(project).find((element) => element.id === id)
+      : rebarOf(project).find((item) => item.id === id && item.kind === 'mesh');
+    if (!source || !('points' in source)) return;
+    const points = source.points.map((point) => ({ ...point, x: point.x + offset.x, y: point.y + offset.y }));
+    const next = kind === 'concrete' ? updateConcrete(project, id, { points }) : updateRebar(project, id, { points });
+    historyTracker.push(get, set, project);
+    set({ project: { ...next, updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
   duplicateConcreteElement: (id) => {
     const { project } = get();
     const source = project && concreteOf(project).find((element) => element.id === id);
     if (!project || !source) return;
-    const copy = { ...structuredClone(source), id: uuid() };
+    const copy = { ...structuredClone(source), id: uuid(), points: structuralDuplicatePoints(project, source.pageNumber, source.points) };
     if (!hasManualMark(copy)) copy.autoNumber = nextAutoNumber(concreteOf(project), copy.kind);
     historyTracker.push(get, set, project);
     set({ project: { ...addConcreteElement(project, copy), updatedAt: Date.now() }, selectedConcreteId: copy.id });
@@ -1088,7 +1110,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { project } = get();
     const source = project && rebarOf(project).find((item) => item.id === id);
     if (!project || !source || source.kind !== 'mesh') return;
-    const copy = { ...renewManualMeshSheetIds(withRenewedLayerIds(structuredClone(source)), uuid), id: uuid() };
+    const copy = {
+      ...renewManualMeshSheetIds(withRenewedLayerIds(structuredClone(source)), uuid),
+      id: uuid(),
+      points: structuralDuplicatePoints(project, source.pageNumber, source.points),
+    };
     historyTracker.push(get, set, project);
     set({ project: { ...addRebarItem(project, copy), updatedAt: Date.now() }, selectedRebarId: copy.id });
     scheduleSave(get, set);
