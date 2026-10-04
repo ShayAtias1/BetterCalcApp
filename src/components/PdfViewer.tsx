@@ -985,7 +985,7 @@ export default function PdfViewer() {
             )}
             <MeshLayoutOverlay plan={structuralPlan ?? project} pageNumber={currentPage} selectedId={selectedRebarId} zoom={zoom} visible={overlayVisible.rebar} screenToNative={screenToNative} interactionAllowed={toolMode === 'select'} />
             {overlayVisible.rebar && (
-              <RebarZones selectedBarId={selectedDrawnBarId} calibration={project.pages[currentPage]?.calibration ?? null} items={rebarOf(structuralPlan ?? project).filter((m) => m.pageNumber === currentPage)} selectedId={selectedRebarId} strokeW={strokeW} zoom={zoom} />
+              <RebarZones pageNumber={currentPage} pages={project.pages} selectedBarId={selectedDrawnBarId} calibration={project.pages[currentPage]?.calibration ?? null} items={rebarOf(structuralPlan ?? project).filter((m) => m.pageNumber === currentPage)} selectedId={selectedRebarId} strokeW={strokeW} zoom={zoom} />
             )}
 
             {/* Detection suggestions: dashed, faint and unselectable, so they never read as rooms

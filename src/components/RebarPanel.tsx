@@ -36,10 +36,11 @@ function meshNotation(mesh: RebarMesh, t: T): string {
 }
 
 /** What a list row says about an item: its notation (mesh) or its bars (manual). Notation is never translated. */
-function itemSummary(item: RebarItem, t: T): string {
+function itemSummary(item: RebarItem, t: T, resolved?: ReturnType<typeof resolveStraightBars>): string {
   if (item.kind === 'mesh') return meshNotation(item, t) || t('rebar.mesh');
   const parts = [item.diameterMm > 0 ? `Ø${item.diameterMm}` : t('rebar.bars')];
-  if (item.count > 0 && item.lengthM > 0) parts.push(`${item.count} × ${formatNumber(item.lengthM)}`);
+  if (resolved?.count !== null && resolved?.count !== undefined) parts.push(t('rebar.spatial.count', { count: resolved.count }));
+  if (resolved?.effectiveLengthM != null) parts.push(`${formatNumber(round(resolved.effectiveLengthM, 2))} ${t('units.m')}`);
   return parts.join(' · ');
 }
 
@@ -145,12 +146,12 @@ export default function RebarPanel() {
         )}
         <ul>
           {items.map((item) => {
-            const calc = calculateRebar(item, project.pages[item.pageNumber]?.calibration ?? null);
+            const calc = calculateRebar(item, project.pages[item.pageNumber]?.calibration ?? null, project.pages);
             return (
               <li key={item.id} onClick={() => select(item)}>
                 <span className="color-dot" style={{ background: REBAR_COLOR }} />
                 <span className="room-list-name" dir="auto">
-                  {markLabel(item, t)} · <span dir="ltr">{itemSummary(item, t)}</span>
+                  {markLabel(item, t)} · <span dir="ltr">{itemSummary(item, t, item.kind === 'bars' ? resolveStraightBars(item, project.pages[item.pageNumber]?.calibration ?? null, project.pages) : undefined)}</span>
                 </span>
                 {item.pageNumber !== currentPage && <span className="room-list-page">{t('concrete.page', { page: item.pageNumber })}</span>}
                 <span className="room-list-apt">{calc.weightKg === null ? '-' : `${calc.estimated ? '≈ ' : ''}${kg(calc.weightKg, t)}`}</span>
@@ -502,7 +503,7 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
   const deleteBar = useAppStore((s) => s.deleteDrawnBar);
   const selectedBar = bars.drawnBars?.find((bar) => bar.id === selectedBarId);
   const calibration = plan?.pages[bars.pageNumber]?.calibration ?? null;
-  const calc = resolveStraightBars(bars, calibration);
+  const calc = resolveStraightBars(bars, calibration, plan?.pages);
   const zone = bars.barsZone;
 
   return (

@@ -4,6 +4,7 @@
  * export context, like every other export text.
  */
 
+import { round } from './geometry';
 import type { ConcreteStatus } from './concrete';
 import type { RebarStatus } from './rebar';
 import type { RebarBasis, RebarItemRow, RebarLevelRow } from './structuralQuantities';
@@ -98,4 +99,16 @@ export function levelQuantity(d: RebarLevelRow, { t }: ExportContext): string {
 /** Exact / Estimate for a calculated level, otherwise the short reason it has no quantity. */
 export function levelStatus(d: RebarLevelRow, x: ExportContext): string {
   return d.status === 'ok' ? basisText(d.estimated ? 'estimated' : 'exact', x) : rebarStatusText(d.status, x);
+}
+
+/** Length details added inside existing report cells; no new table/export model. */
+export function barsLengthDescription(d: RebarLevelRow, x: ExportContext): string {
+  const part = d.parts[0];
+  const length = (value: number | null) => value === null ? '-' : `${x.number(round(value, 2))} ${x.t('units.m')}`;
+  return `${x.t('rebar.barLength')}: ${length(part.barLengthM)} · ${x.t('rebar.totalLength')}: ${length(part.netLengthM)}`;
+}
+
+export function levelReportSpecification(d: RebarLevelRow, x: ExportContext): string {
+  const specification = levelSpecification(d, x);
+  return d.kind === 'bars' ? `${specification}\n${barsLengthDescription(d, x)}` : specification;
 }

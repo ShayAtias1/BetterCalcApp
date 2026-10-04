@@ -4,7 +4,7 @@ import { labelDirection } from '../lib/textDirection';
 import { markLabel } from '../lib/structuralMarks';
 import { REBAR_COLOR, rebarZoneRows } from '../lib/structuralOverlay';
 import { formatNumber, useLanguage, useT } from '../i18n';
-import type { Calibration } from '../types';
+import type { Calibration, Plan } from '../types';
 import { prepareStraightBarsOverlay } from '../lib/straightBarsOverlay';
 
 export { REBAR_COLOR };
@@ -23,6 +23,8 @@ export default function RebarZones({
   zoom,
   calibration,
   selectedBarId,
+  pageNumber,
+  pages,
 }: {
   items: RebarItem[];
   selectedId: string | null;
@@ -30,6 +32,8 @@ export default function RebarZones({
   zoom: number;
   calibration: Calibration | null;
   selectedBarId: string | null;
+  pageNumber: number;
+  pages: Plan['pages'];
 }) {
   const t = useT();
   const language = useLanguage();
@@ -40,15 +44,14 @@ export default function RebarZones({
     <g className="rebar-zones" pointerEvents="none">
       {bars.map((item) => {
         if (item.kind !== 'bars') return null;
-        const overlay = prepareStraightBarsOverlay(item, calibration, t, formatNumber);
+        const overlay = prepareStraightBarsOverlay(item, calibration, t, formatNumber, pageNumber, pages);
         const selected = item.id === selectedId;
         return <g key={item.id}>
           {overlay.points.length >= 3 && <polygon points={overlay.points.map((p) => `${p.x},${p.y}`).join(' ')} fill={REBAR_COLOR} fillOpacity={selected ? 0.09 : 0.03}
             stroke={REBAR_COLOR} strokeWidth={strokeW} strokeDasharray={`${3 / zoom} ${3 / zoom}`} />}
           {overlay.lines.map((line, index) => {
-            const physical = item.drawnBars?.[index];
-            const active = selected && physical?.id === selectedBarId;
-            return <g key={physical?.id ?? index}>
+            const active = selected && line.physicalId !== null && line.physicalId === selectedBarId;
+            return <g key={line.physicalId ?? index}>
               <line x1={line.start.x} y1={line.start.y} x2={line.end.x} y2={line.end.y}
                 stroke={REBAR_COLOR} strokeWidth={active ? strokeW * 2 : selected ? strokeW * 1.5 : strokeW} />
               {active && [line.start, line.end].map((p, end) => <circle key={end} cx={p.x} cy={p.y} r={4 / zoom}

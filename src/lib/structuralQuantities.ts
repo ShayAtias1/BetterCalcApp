@@ -15,7 +15,7 @@
 import type { Plan } from '../types';
 import type { ConcreteKind, RebarLevel } from '../types/structural';
 import { calculateConcrete, type ConcreteStatus } from './concrete';
-import { calculateRebar, incompleteSpecCount, type RebarLayerCalc, type RebarStatus } from './rebar';
+import { calculateRebar, resolveStraightBars, incompleteSpecCount, type RebarLayerCalc, type RebarStatus } from './rebar';
 import { resolveMeshProcurement, type MeshProcurementResult, type ResolvedSheetSettings } from './meshSheets';
 import { round } from './geometry';
 import { CONCRETE_KINDS } from './structuralMutations';
@@ -180,7 +180,7 @@ export function buildRebarSummary(plan: Plan, onlyPages?: ReadonlySet<number>): 
       perPage.set(item.pageNumber, page);
     }
 
-    const calc = calculateRebar(item, plan.pages[item.pageNumber]?.calibration ?? null);
+    const calc = calculateRebar(item, plan.pages[item.pageNumber]?.calibration ?? null, plan.pages);
     const procurement = item.kind === 'mesh' ? resolveMeshProcurement(item, plan.pages[item.pageNumber]?.calibration ?? null) : null;
     if (procurement?.procurementWeightKg === null) total.orderMissing = true;
     if (calc.status !== 'ok') {
@@ -350,7 +350,7 @@ export function buildRebarItems(plan: Plan, pages?: ReadonlySet<number>): RebarI
     .sort((a, b) => a.item.pageNumber - b.item.pageNumber || a.index - b.index);
 
   for (const { item } of ordered) {
-    const calc = calculateRebar(item, plan.pages[item.pageNumber]?.calibration ?? null);
+    const calc = calculateRebar(item, plan.pages[item.pageNumber]?.calibration ?? null, plan.pages);
     const procurement = item.kind === 'mesh' ? resolveMeshProcurement(item, plan.pages[item.pageNumber]?.calibration ?? null) : null;
     const ok = calc.status === 'ok';
     const factor = 1 + calc.wastePercent / 100;
@@ -358,6 +358,7 @@ export function buildRebarItems(plan: Plan, pages?: ReadonlySet<number>): RebarI
     const none = { level: null, diameterMm: null, spacingCm: null, direction: null, barCount: null, barLengthM: null, netLengthM: null, netWeightKg: null, orderLengthM: null, orderWeightKg: null, estimated: false };
 
     if (item.kind === 'bars') {
+      const resolved = resolveStraightBars(item, plan.pages[item.pageNumber]?.calibration ?? null, plan.pages);
       const l = calc.layers[0];
       rows.push({
         ...base,
@@ -365,7 +366,7 @@ export function buildRebarItems(plan: Plan, pages?: ReadonlySet<number>): RebarI
         diameterMm: positiveOrNull(item.diameterMm),
         spacingCm: null,
         direction: null,
-        barCount: ok ? l.barCount : null,
+        barCount: resolved.mode === 'legacy' ? ok ? l.barCount : null : resolved.count,
         barLengthM: ok ? l.cutLengthM : null,
         netLengthM: ok ? l.totalLengthM : null,
         netWeightKg: ok ? l.weightKg : null,

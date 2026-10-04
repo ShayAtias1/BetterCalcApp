@@ -67,8 +67,8 @@ export function drawStructuralOverlays(
     if (elements.length > 0) drawConcreteZonesOnCanvas(ctx, elements, mult, headerH, exportContext(language));
   }
   if (overlays.rebar) {
-    const meshes = rebarOf(project).filter((i): i is Extract<typeof i, { kind: 'mesh' }> => i.kind === 'mesh' && i.pageNumber === pageNumber);
-    if (meshes.length > 0) drawRebarZonesOnCanvas(ctx, meshes, mult, headerH, exportContext(language));
+    const items = rebarOf(project).filter((i) => i.pageNumber === pageNumber);
+    if (items.length > 0) drawRebarZonesOnCanvas(ctx, items, mult, headerH, exportContext(language), project.pages[pageNumber]?.calibration ?? null, pageNumber, project.pages);
   }
 }
 

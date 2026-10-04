@@ -6,7 +6,9 @@
  * the plan, `mult` the export scale.
  */
 
-import type { ConcreteElement, RebarMesh } from '../types/structural';
+import type { ConcreteElement, RebarItem } from '../types/structural';
+import type { Calibration, Plan } from '../types';
+import { prepareStraightBarsOverlay } from './straightBarsOverlay';
 import type { ExportContext } from './exportLanguage';
 import { polygonCentroid } from './geometry';
 import { labelDirection } from './textDirection';
@@ -84,8 +86,35 @@ export function drawConcreteZonesOnCanvas(ctx: CanvasRenderingContext2D, element
   }
 }
 
-export function drawRebarZonesOnCanvas(ctx: CanvasRenderingContext2D, meshes: RebarMesh[], mult: number, offsetY: number, x: ExportContext) {
-  for (const m of meshes) {
+export function drawRebarZonesOnCanvas(ctx: CanvasRenderingContext2D, items: RebarItem[], mult: number, offsetY: number, x: ExportContext, calibration: Calibration | null = null, pageNumber?: number, pages?: Plan['pages']) {
+  for (const m of items) {
+    if (m.kind === 'bars') {
+      const overlay = prepareStraightBarsOverlay(m, calibration, x.t, x.number, pageNumber ?? m.pageNumber, pages);
+      if (!overlay.center) continue;
+      ctx.save();
+      ctx.strokeStyle = REBAR_COLOR;
+      ctx.lineWidth = 2 * mult;
+      if (overlay.points.length >= 3) {
+        tracePath(ctx, overlay.points, mult, offsetY);
+        ctx.globalAlpha = 0.03;
+        ctx.fillStyle = REBAR_COLOR;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.setLineDash([3 * mult, 3 * mult]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      for (const line of overlay.lines) {
+        ctx.beginPath();
+        ctx.moveTo(line.start.x * mult, line.start.y * mult + offsetY);
+        ctx.lineTo(line.end.x * mult, line.end.y * mult + offsetY);
+        ctx.stroke();
+      }
+      overlay.rows.forEach((row, index) => haloText(ctx, row, overlay.center!.x * mult,
+        (overlay.center!.y + index * 12) * mult + offsetY, 10.5 * mult, REBAR_COLOR, index === 0 ? 600 : 500, labelDirection(row, x.language)));
+      ctx.restore();
+      continue;
+    }
     if (m.points.length < 3) continue;
     ctx.save();
     tracePath(ctx, m.points, mult, offsetY);

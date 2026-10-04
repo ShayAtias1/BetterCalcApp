@@ -164,7 +164,12 @@ export function RebarQuantityTable({ plan }: { plan: Plan }) {
                   <td dir="auto">{markLabel(d, t)}</td>
                   <td>{d.level === null ? <span className="qty-none">{DASH}</span> : t(d.level === 'bottom' ? 'rebar.levelBottom' : 'rebar.levelTop')}</td>
                   <td className="qty-spec">{specification(d)}</td>
-                  <td className="num">{quantity(d)}</td>
+                  <td className="num">{quantity(d)}
+                    {d.kind === 'bars' && <>
+                      <span className="qty-sub">{t('rebar.barLength')}: <span dir="ltr">{d.parts[0].barLengthM === null ? DASH : `${formatNumber(round(d.parts[0].barLengthM, 2))} ${t('units.m')}`}</span></span>
+                      <span className="qty-sub">{t('rebar.totalLength')}: <span dir="ltr">{d.parts[0].netLengthM === null ? DASH : `${formatNumber(round(d.parts[0].netLengthM, 2))} ${t('units.m')}`}</span></span>
+                    </>}
+                  </td>
                   <td className="num group-edge">{weight(d.netWeightKg, d.estimated)}</td>
                   <td className="num order">{weight(d.orderWeightKg, false)}</td>
                   <td className="group-edge">{statusCell(d)}</td>

@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import { columnWidths, type ExportContext } from './exportLanguage';
 import { markLabel } from './structuralMarks';
-import { basisText, concreteStatusText, levelSpecification, levelQuantity, levelStatus, levelText, overlapCm, sheetSizeText } from './structuralExportText';
+import { basisText, concreteStatusText, levelReportSpecification, levelQuantity, levelStatus, levelText, overlapCm, sheetSizeText } from './structuralExportText';
 import type { ConcreteItemRow, ProjectConcrete, ProjectRebar, RebarBasis, RebarLevelRow, StructuralReport } from './structuralQuantities';
 
 /*
@@ -231,7 +231,7 @@ function addRebarSheet(
       t(d.kind === 'mesh' ? 'rebar.mesh' : 'rebar.bars'),
       markLabel(d, t),
       levelText(d.level, x) || DASH,
-      levelSpecification(d, x),
+      levelReportSpecification(d, x),
       levelQuantity(d, x),
       counted ? sheetSizeText(d.sheets!.settings, x) : DASH,
       counted ? overlapCm(d.sheets!.settings) : DASH,
@@ -247,6 +247,7 @@ function addRebarSheet(
     row.getCell(col(10)).numFmt = PCT_FMT;
     row.getCell(col(11)).numFmt = NUM_FMT;
     styleRow(row, i % 2 === 0 ? C_ZEBRA_A : C_ZEBRA_B);
+    if (d.kind === 'bars') row.getCell(col(5)).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
   });
   const last = sheet.rowCount;
 

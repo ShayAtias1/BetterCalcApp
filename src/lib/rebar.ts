@@ -42,7 +42,7 @@
  * Values are unrounded; rounding is the summaries' job.
  */
 
-import type { Calibration } from '../types';
+import type { Calibration, Plan } from '../types';
 import type { RebarBars, RebarItem, RebarLayer, RebarLayerDirection, RebarLevel, RebarMesh } from '../types/structural';
 import { distancePx, pxToMeters } from './geometry';
 import { meshLayers, normalizeMesh } from './rebarMesh';
@@ -189,17 +189,21 @@ export interface StraightBarsResult extends RebarCalc {
 }
 
 /** Single quantity source for numerical Bars and spatial Bars Zones. No persisted derived lengths. */
-export function resolveStraightBars(item: RebarBars, calibration: Calibration | null): StraightBarsResult {
+export function resolveStraightBars(item: RebarBars, calibration: Calibration | null, pages?: Plan['pages']): StraightBarsResult {
   const wastePercent = finiteNonNegative(item.wastePercent, 0);
   const diameterMm = finitePositive(item.diameterMm);
   if (item.drawnBars !== undefined) {
     const count = item.drawnBars.length;
-    const scale = finitePositive(calibration?.metersPerPixel);
-    const lengths = scale ? item.drawnBars.map((bar) => pxToMeters(distancePx(bar.start, bar.end), scale)) : [];
+    const measured = item.drawnBars.map((bar) => {
+      const scale = finitePositive(pages ? pages[bar.pageNumber]?.calibration?.metersPerPixel : calibration?.metersPerPixel);
+      return scale ? pxToMeters(distancePx(bar.start, bar.end), scale) : null;
+    });
+    const missingScale = measured.some((length) => length === null);
+    const lengths = measured.filter((length): length is number => length !== null);
     const valid = lengths.every((length) => Number.isFinite(length) && length > 0);
-    const status: RebarStatus = !scale && count > 0 ? 'no-scale' : !valid || diameterMm === null ? 'invalid-input' : 'ok';
+    const status: RebarStatus = missingScale ? 'no-scale' : !valid || diameterMm === null ? 'invalid-input' : 'ok';
     const total = lengths.reduce((sum, length) => sum + length, 0);
-    const uniform = lengths.length > 0 && lengths.every((length) => Math.abs(length - lengths[0]) < 1e-8) ? lengths[0] : null;
+    const uniform = !missingScale && valid && lengths.length > 0 && lengths.every((length) => Math.abs(length - lengths[0]) < 1e-8) ? lengths[0] : null;
     const calc = status === 'ok'
       ? finish('ok', [layerResult(item.id, diameterMm!, null, count, uniform, total, false)], wastePercent)
       : finish(status, [emptyLayer(item.id, false, diameterMm)], wastePercent);
@@ -218,6 +222,6 @@ export function resolveStraightBars(item: RebarBars, calibration: Calibration | 
   return { ...calc, mode: zone ? 'zone' : 'legacy', count, effectiveLengthM: lengthM, automaticLengthM };
 }
 
-export function calculateRebar(item: RebarItem, calibration: Calibration | null): RebarCalc {
-  return item.kind === 'mesh' ? calculateMesh(item, calibration) : resolveStraightBars(item, calibration);
+export function calculateRebar(item: RebarItem, calibration: Calibration | null, pages?: Plan['pages']): RebarCalc {
+  return item.kind === 'mesh' ? calculateMesh(item, calibration) : resolveStraightBars(item, calibration, pages);
 }

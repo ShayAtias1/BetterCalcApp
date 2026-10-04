@@ -10,7 +10,7 @@ import { round } from './geometry';
 import type { Plan } from '../types';
 import { markLabel } from './structuralMarks';
 import type { ExportContext } from './exportLanguage';
-import { basisText, concreteStatusText, levelQuantity, levelSpecification, levelStatus, levelText, sheetConfigText } from './structuralExportText';
+import { basisText, concreteStatusText, levelQuantity, levelReportSpecification, levelSpecification, levelStatus, levelText, sheetConfigText } from './structuralExportText';
 import { buildRebarLevelRows, type ProjectStructural, type RebarLevelRow, type StructuralReport } from './structuralQuantities';
 
 export interface PdfTableRow {
@@ -144,7 +144,7 @@ function rebarBlocks(rebar: NonNullable<StructuralReport['rebar']>, x: ExportCon
             t(d.kind === 'mesh' ? 'rebar.mesh' : 'rebar.bars'),
             markLabel(d, t),
             levelText(d.level, x) || DASH,
-            levelSpecification(d, x),
+            levelReportSpecification(d, x),
             levelQuantity(d, x),
             // Only a counted mesh needs its sheet size to be read.
             d.sheets && d.sheets.count !== null ? sheetConfigText(d.sheets.settings, x) : DASH,
