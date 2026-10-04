@@ -77,7 +77,11 @@ export function sheetConfigText(settings: SheetSettings, x: ExportContext): stri
 export function levelSpecification(d: RebarLevelRow, x: ExportContext): string {
   const { t } = x;
   const notation = (r: RebarItemRow) => (r.diameterMm === null ? null : r.spacingCm === null ? `Ø${r.diameterMm}` : `Ø${r.diameterMm} @ ${x.number(r.spacingCm)}`);
-  if (d.kind !== 'mesh') return notation(d.parts[0]) ?? '-';
+  if (d.kind === 'stirrup') {
+    const shape = d.parts[0].stirrup?.shape;
+    return `${notation(d.parts[0]) ?? '-'} · ${shape ? t(`rebar.stirrup.templates.${shape.template}`) : '-'}`;
+  }
+  if (d.kind === 'bars') return notation(d.parts[0]) ?? '-';
   const first = d.parts[0];
   if (first.level === null) return '-';
   if (first.direction === 'both') {
@@ -105,10 +109,10 @@ export function levelStatus(d: RebarLevelRow, x: ExportContext): string {
 export function barsLengthDescription(d: RebarLevelRow, x: ExportContext): string {
   const part = d.parts[0];
   const length = (value: number | null) => value === null ? '-' : `${x.number(round(value, 2))} ${x.t('units.m')}`;
-  return `${x.t('rebar.barLength')}: ${length(part.barLengthM)} · ${x.t('rebar.totalLength')}: ${length(part.netLengthM)}`;
+  return `${x.t(d.kind === 'stirrup' ? 'rebar.stirrup.lengthUsed' : 'rebar.barLength')}: ${length(part.barLengthM)} · ${x.t('rebar.totalLength')}: ${length(part.netLengthM)}`;
 }
 
 export function levelReportSpecification(d: RebarLevelRow, x: ExportContext): string {
   const specification = levelSpecification(d, x);
-  return d.kind === 'bars' ? `${specification} · ${barsLengthDescription(d, x)}` : specification;
+  return d.kind !== 'mesh' ? `${specification} · ${barsLengthDescription(d, x)}` : specification;
 }

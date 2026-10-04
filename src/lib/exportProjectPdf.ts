@@ -6,7 +6,7 @@ import type { Language } from '../i18n';
 import { exportContext, type ExportContext } from './exportLanguage';
 import { buildProjectQuantities, planStatusLabel, roomCategoryQuantity, type CategoryAmount } from './projectQuantities';
 import { buildProjectStructural, finishesSummaryMode } from './structuralQuantities';
-import { buildProjectStructuralPdfLayout, writeBlocks } from './structuralPdfLayout';
+import { buildProjectStructuralPdfLayout, writeBlocks, type StirrupShapeCard } from './structuralPdfLayout';
 import { type ExportContent } from './exportContent';
 
 /*
@@ -106,6 +106,30 @@ export class ReportWriter {
       this.drawCells(row.cells, widths, row.bg ?? (i % 2 === 0 ? C_ZEBRA_A : C_ZEBRA_B), '#1e293b', !!row.bold);
     });
     this.y += ROW_H * 0.5;
+  }
+
+  shapeCard(card: StirrupShapeCard) {
+    this.ensure(8);
+    const top = this.y;
+    this.pt.strokeRect(MARGIN, top, PAGE_W - MARGIN * 2, 225, C_BORDER);
+    this.pt.fillText(card.title, this.startX + this.sign * 10, top + 23, { size: 15, bold: true, maxWidth: PAGE_W - MARGIN * 2 - 24 });
+    const diagramX = MARGIN + 12, diagramY = top + 38, scale = 1.6;
+    for (const segment of card.shape.segments) {
+      this.pt.line(diagramX + segment.normalizedStart.x * scale, diagramY + segment.normalizedStart.y * scale,
+        diagramX + segment.normalizedEnd.x * scale, diagramY + segment.normalizedEnd.y * scale, '#c2410c', 2);
+    }
+    // Numeric segment dimensions are in cm; cap annotation density, never the actual geometry.
+    card.shape.segments.slice(0, 12).forEach((segment) => {
+      this.pt.fillText(this.x.number(Math.round(segment.lengthM * 1000) / 10),
+        diagramX + (segment.normalizedStart.x + segment.normalizedEnd.x) * scale / 2 + 5,
+        diagramY + (segment.normalizedStart.y + segment.normalizedEnd.y) * scale / 2 - 6,
+        { size: 9, direction: 'ltr', align: 'center', color: '#78716c' });
+    });
+    this.pt.fillText(this.x.t('units.cm'), diagramX + 80, top + 217, { size: 10, direction: 'ltr', align: 'center' });
+    const textX = this.x.rtl ? PAGE_W - MARGIN - 14 : MARGIN + 225;
+    card.details.forEach((detail, index) => this.pt.fillText(detail, textX, top + 58 + index * 29,
+      { size: 12, maxWidth: PAGE_W - MARGIN * 2 - 250 }));
+    this.y += 240;
   }
 
   note(text: string) {

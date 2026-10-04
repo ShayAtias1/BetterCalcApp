@@ -76,7 +76,7 @@ export function addStructuralSheets(workbook: ExcelJS.Workbook, report: Structur
   }
   if (report.rebar) {
     const { levels, summary } = report.rebar;
-    addRebarSheet(workbook, levels.map((row) => ({ row })), summary, summary.missingItemCount, false, x);
+    addRebarAndStirrupSheets(workbook, levels.map((row) => ({ row })), summary, summary.missingItemCount, false, x);
   }
 }
 
@@ -103,7 +103,7 @@ export function addProjectStructuralSheets(
   }
   if (project.rebar) {
     const r = project.rebar;
-    addRebarSheet(workbook, sources.flatMap((s) => (s.report.rebar?.levels ?? []).map((row) => ({ planName: s.planName, row }))), r, r.missingItemCount, true, x);
+    addRebarAndStirrupSheets(workbook, sources.flatMap((s) => (s.report.rebar?.levels ?? []).map((row) => ({ planName: s.planName, row }))), r, r.missingItemCount, true, x);
   }
 }
 
@@ -261,5 +261,64 @@ function addRebarSheet(
     total.getCell(col(c)).numFmt = c === 11 ? NUM_FMT : totalFmt;
   }
   total.getCell(col(12)).value = [totals.basis ? basisText(totals.basis, x) : '', missingItemCount > 0 ? t('exports.structural.missingShort', { count: missingItemCount }) : ''].filter(Boolean).join(' · ') || DASH;
+  styleRow(total, C_GRAND, true);
+}
+
+/** Stirrups have a numerical execution sheet; existing Mesh/Bars spreadsheets keep their columns. */
+function addRebarAndStirrupSheets(workbook: ExcelJS.Workbook, rows: { planName?: string; row: RebarLevelRow }[], totals: RebarTotals, missing: number, withPlan: boolean, x: ExportContext) {
+  const stirrups = rows.filter(({ row }) => row.kind === 'stirrup');
+  const regular = rows.filter(({ row }) => row.kind !== 'stirrup');
+  if (regular.length) {
+    const calculated = regular.filter(({ row }) => row.netWeightKg !== null);
+    const estimated = calculated.filter(({ row }) => row.estimated).length;
+    const separated: RebarTotals = { weightKg: calculated.reduce((sum, { row }) => sum + row.netWeightKg!, 0),
+      orderWeightKg: regular.some(({ row }) => row.orderWeightKg === null) ? null : regular.reduce((sum, { row }) => sum + row.orderWeightKg!, 0),
+      basis: !calculated.length ? null : !estimated ? 'exact' : estimated === calculated.length ? 'estimated' : 'mixed' };
+    addRebarSheet(workbook, regular, stirrups.length ? separated : totals,
+      stirrups.length ? new Set(regular.filter(({ row }) => row.status !== 'ok').map(({ planName, row }) => `${planName}|${row.itemId}`)).size : missing, withPlan, x);
+  }
+  if (stirrups.length) addStirrupSheet(workbook, stirrups, withPlan, x);
+}
+
+function addStirrupSheet(workbook: ExcelJS.Workbook, rows: { planName?: string; row: RebarLevelRow }[], withPlan: boolean, x: ExportContext) {
+  const { t } = x;
+  const sheet = workbook.addWorksheet(t('rebar.stirrup.excelSheet'), { views: [{ rightToLeft: x.rtl }] });
+  const headers = [t('exports.structural.headers.page'), t('concrete.mark'), t('rebar.stirrup.shape'), t('rebar.diameter'),
+    `${t('rebar.stirrup.geometricLength')} (${t('units.m')})`, `${t('rebar.stirrup.lengthUsed')} (${t('units.m')})`,
+    t('rebar.stirrup.lengthSource'), t('rebar.stirrup.quantity'), `${t('rebar.totalLength')} (${t('units.m')})`,
+    `${t('quantitiesPanel.cols.netWeight')} (${t('units.kg')})`, `${t('quantitiesPanel.cols.orderWeight')} (${t('units.kg')})`, t('exports.structural.headers.status')];
+  if (withPlan) headers.unshift(t('exports.common.plan'));
+  const widths = [12, 20, 40, 12, 18, 18, 20, 12, 18, 18, 18, 24];
+  if (withPlan) widths.unshift(PLAN_WIDTH);
+  columnWidths(widths, headers, x.language, 2).forEach((width, index) => sheet.getColumn(index + 1).width = width);
+  headerRow(sheet, headers);
+  const offset = withPlan ? 1 : 0;
+  const first = sheet.rowCount + 1;
+  rows.forEach(({ planName, row: d }, index) => {
+    const part = d.parts[0], data = part.stirrup;
+    const shape = data?.shape;
+    const pages = data ? [...new Set(data.placements.map((p) => p.placement.pageNumber))].join(', ') : String(d.pageNumber);
+    const description = shape ? `${t(`rebar.stirrup.templates.${shape.template}`)} · ${x.number(Math.round(shape.widthM * 1000) / 10)} × ${x.number(Math.round(shape.heightM * 1000) / 10)} ${t('units.cm')}` : DASH;
+    const cells = [pages, markLabel(d, t), description, num(part.diameterMm), num(data?.geometricLengthM ?? null), num(part.barLengthM),
+      t(data?.lengthSource === 'manual' ? 'rebar.stirrup.manualLength' : 'rebar.stirrup.geometricLength'), num(part.barCount), num(part.netLengthM),
+      num(d.netWeightKg), num(d.orderWeightKg), levelStatus(d, x)];
+    const row = sheet.addRow(withPlan ? [planName ?? '', ...cells] : cells);
+    styleRow(row, index % 2 ? C_ZEBRA_B : C_ZEBRA_A);
+    row.getCell(3 + offset).alignment = { horizontal: 'center', wrapText: true };
+    [4, 5, 6, 8, 9, 10, 11].forEach((column) => row.getCell(column + offset).numFmt = column === 4 || column === 8 ? PCT_FMT : NUM_FMT);
+  });
+  const last = sheet.rowCount;
+  const total = sheet.addRow(new Array(headers.length).fill(''));
+  total.getCell(2 + offset).value = t('rebar.summary.total');
+  for (const column of [8, 9, 10, 11]) {
+    const values = rows.map(({ row }) => column === 8 ? row.parts[0].barCount : column === 9 ? row.parts[0].netLengthM : column === 10 ? row.netWeightKg : row.orderWeightKg);
+    const letter = colLetter(column + offset);
+    total.getCell(column + offset).value = values.some((v) => v === null) ? DASH : {
+      formula: `ROUND(SUM(${letter}${first}:${letter}${last}),2)`, result: values.reduce<number>((sum, value) => sum + (value ?? 0), 0),
+    };
+    total.getCell(column + offset).numFmt = column === 8 ? PCT_FMT : NUM_FMT;
+  }
+  const missing = rows.filter(({ row }) => row.status !== 'ok').length;
+  if (missing) total.getCell(12 + offset).value = t('exports.structural.missingShort', { count: missing });
   styleRow(total, C_GRAND, true);
 }

@@ -876,6 +876,11 @@ export const he = {
   rebar: {
     stirrupName: 'חישוק',
     stirrup: {
+      dimensions: 'מידות',
+      distributionSize: 'גודל פריסה',
+      excelSheet: 'חישוקים',
+      lengthSource: 'מקור האורך',
+
       addItem: 'הוסף חישוק',
       duplicateItem: 'שכפל חישוק',
       duplicatePlacement: 'שכפל פריסה',
