@@ -1003,6 +1003,11 @@ export const he = {
     copyBottomToTop: 'העתק מתחתון לעליון',
     copyBottomToTopHint: 'מתחיל את העליון מאותם ערכים - כל מפלס נשאר ניתן לעריכה בנפרד',
     duplicate: 'שכפל רשת',
+    requiredWeight: 'משקל נדרש',
+    requiredWeightShort: 'נדרש',
+    purchaseWeightShort: 'לרכישה',
+    requiredWeightHeader: 'נדרש ({unit})',
+    purchaseWeightHeader: 'לרכישה ({unit})',
     purchaseWeight: 'משקל לרכישה',
     layout: {
       add: 'הוסף רשת',

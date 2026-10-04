@@ -157,10 +157,10 @@ export default function RebarPanel() {
             return (
               <li key={item.id} onClick={() => select(item)}>
                 <span className="color-dot" style={{ background: REBAR_COLOR }} />
-                {item.kind === 'stirrup' && <StirrupShapeThumbnail item={item} />}
                 <span className="room-list-name" dir="auto">
                   {markLabel(item, t)} · <span dir="ltr">{itemSummary(item, t, item.kind === 'bars' ? resolveStraightBars(item, project.pages[item.pageNumber]?.calibration ?? null, project.pages) : undefined)}</span>
                 </span>
+                {item.kind === 'stirrup' && <StirrupShapeThumbnail item={item} />}
                 {item.pageNumber !== currentPage && <span className="room-list-page">{t('concrete.page', { page: item.pageNumber })}</span>}
                 <span className="room-list-apt">{calc.weightKg === null ? '-' : `${calc.estimated ? '≈ ' : ''}${kg(calc.weightKg, t)}`}</span>
               </li>
@@ -224,7 +224,7 @@ function Results({ calc, showLength, purchaseWeight }: { calc: RebarCalc; showLe
           <span className={`metric-value ${ok ? '' : 'cal-missing'}`}>{ok ? `${calc.estimated ? '≈ ' : ''}${metres(calc.totalLengthM!, t)}` : na}</span>
         </div>}
         <div>
-          <span className="metric-label">{t(showLength ? 'rebar.totalWeight' : 'quantitiesPanel.cols.netWeight')}</span>
+          <span className="metric-label">{t(showLength ? 'rebar.totalWeight' : 'rebar.requiredWeight')}</span>
           <span className={`metric-value ${ok ? '' : 'cal-missing'}`}>{ok ? `${calc.estimated ? '≈ ' : ''}${kg(calc.weightKg!, t)}` : na}</span>
         </div>
         <div>

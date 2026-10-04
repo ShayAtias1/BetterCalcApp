@@ -133,6 +133,7 @@ function rebarBlocks(rebar: NonNullable<StructuralReport['rebar']>, x: ExportCon
   const { t } = x;
   const kg = t('units.kg');
   const { levels, summary } = rebar;
+  const meshOnly = levels.length > 0 && levels.every((row) => row.kind === 'mesh');
   const fmt = (v: number | null, estimated = false) => (v === null ? DASH : `${estimated ? ESTIMATE_PREFIX : ''}${x.number(round(v, 2))}`);
   return [
     { type: 'section', title: t('exports.structural.rebar') },
@@ -146,8 +147,8 @@ function rebarBlocks(rebar: NonNullable<StructuralReport['rebar']>, x: ExportCon
         t('exports.structural.headers.specification'),
         t('exports.structural.headers.quantity'),
         t('exports.structural.headers.sheetSize'),
-        t('exports.structural.headers.netWeight', { unit: kg }),
-        t('exports.projectPdf.orderUnit', { unit: kg }),
+        t(meshOnly ? 'rebar.requiredWeightHeader' : 'exports.structural.headers.netWeight', { unit: kg }),
+        t(meshOnly ? 'rebar.purchaseWeightHeader' : 'exports.projectPdf.orderUnit', { unit: kg }),
         t('exports.structural.headers.status'),
       ],
       weights: [5, 7, 11, 8, 20, 10, 15, 9, 9, 12],
@@ -162,8 +163,8 @@ function rebarBlocks(rebar: NonNullable<StructuralReport['rebar']>, x: ExportCon
             levelQuantity(d, x),
             // Only a counted mesh needs its sheet size to be read.
             d.sheets && d.sheets.count !== null ? sheetConfigText(d.sheets.settings, x) : DASH,
-            fmt(d.netWeightKg, d.estimated),
-            fmt(d.orderWeightKg),
+            `${!meshOnly && d.kind === 'mesh' ? `${t('rebar.requiredWeightShort')}: ` : ''}${fmt(d.netWeightKg, d.estimated)}`,
+            `${!meshOnly && d.kind === 'mesh' ? `${t('rebar.purchaseWeightShort')}: ` : ''}${fmt(d.orderWeightKg)}`,
             levelStatus(d, x),
           ],
         })),
@@ -247,7 +248,7 @@ function projectRebarBlocks(plans: Plan[], x: ExportContext): PdfBlock[] {
       ...commonHeaders,
       ...(mesh ? [t('exports.structural.headers.levelShort'), t('exports.structural.headers.specification'), t('exports.structural.headers.sheetsCount'), t('exports.structural.headers.sheetSize')]
         : [t('exports.structural.headers.diameter'), t(kind === 'stirrup' ? 'rebar.stirrup.quantity' : 'rebar.barCount'), `${t(kind === 'stirrup' ? 'rebar.stirrup.lengthUsed' : 'rebar.barLength')} (${m})`, `${t('rebar.totalLength')} (${m})`]),
-      t('exports.structural.headers.netWeight', { unit: kg }), t('exports.projectPdf.orderUnit', { unit: kg }), t('exports.structural.headers.status'),
+      t(mesh ? 'rebar.requiredWeightHeader' : 'exports.structural.headers.netWeight', { unit: kg }), t(mesh ? 'rebar.purchaseWeightHeader' : 'exports.projectPdf.orderUnit', { unit: kg }), t('exports.structural.headers.status'),
     ];
     const calculated = items.filter(({ row }) => row.netWeightKg !== null);
     const estimatedCount = calculated.filter(({ row }) => row.estimated).length;

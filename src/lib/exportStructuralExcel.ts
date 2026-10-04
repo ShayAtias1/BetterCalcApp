@@ -198,6 +198,7 @@ function addRebarSheet(
   x: ExportContext
 ) {
   const { t } = x;
+  const meshOnly = rows.length > 0 && rows.every(({ row }) => row.kind === 'mesh');
   const o = withPlan ? 1 : 0;
   const sheet = workbook.addWorksheet(t('exports.excel.sheets.rebar'), { views: [{ rightToLeft: x.rtl }] });
   const kg = t('units.kg');
@@ -210,9 +211,9 @@ function addRebarSheet(
     t('exports.structural.headers.quantity'),
     t('exports.structural.headers.sheetSizeOnly'),
     t('exports.structural.headers.overlap', { unit: t('units.cm') }),
-    t('exports.structural.headers.netWeight', { unit: kg }),
+    t(meshOnly ? 'rebar.requiredWeightHeader' : 'exports.structural.headers.netWeight', { unit: kg }),
     t('exports.structural.headers.waste'),
-    t('exports.projectPdf.orderUnit', { unit: kg }),
+    t(meshOnly ? 'rebar.purchaseWeightHeader' : 'exports.projectPdf.orderUnit', { unit: kg }),
     t('exports.structural.headers.status'),
   ];
   const headers = withPlan ? [t('exports.common.plan'), ...base] : base;
@@ -246,6 +247,11 @@ function addRebarSheet(
     row.getCell(col(9)).numFmt = qty;
     row.getCell(col(10)).numFmt = PCT_FMT;
     row.getCell(col(11)).numFmt = NUM_FMT;
+    if (!meshOnly && d.kind === 'mesh') {
+      // Presentation prefixes keep the underlying Excel cells numeric.
+      row.getCell(col(9)).numFmt = `"${t('rebar.requiredWeightShort').replace(/"/g, '""')}: "${qty}`;
+      row.getCell(col(11)).numFmt = `"${t('rebar.purchaseWeightShort').replace(/"/g, '""')}: "${NUM_FMT}`;
+    }
     styleRow(row, i % 2 === 0 ? C_ZEBRA_A : C_ZEBRA_B);
     if (d.kind === 'bars') row.getCell(col(5)).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
   });

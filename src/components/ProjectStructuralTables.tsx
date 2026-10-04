@@ -69,6 +69,7 @@ export function ProjectRebarTable({ rebar, plans }: { rebar: ProjectRebar; plans
   const t = useT();
   const x = exportContext(useLanguage());
   const details = useMemo(() => plans.flatMap((plan) => buildRebarLevelRows(plan).map((row) => ({ planId: plan.id, planName: plan.name, row }))), [plans]);
+  const meshOnly = details.length > 0 && details.every(({ row }) => row.kind === 'mesh');
   const weight = (v: number | null, estimated: boolean) => v === null ? DASH : num(v, estimated ? 'estimated' : 'exact');
   const length = (v: number | null) => v === null ? DASH : `${formatNumber(round(v, 2))} ${t('units.m')}`;
   const status = (basis: RebarBasis | null) =>
@@ -86,8 +87,8 @@ export function ProjectRebarTable({ rebar, plans }: { rebar: ProjectRebar; plans
               <th>{t('quantitiesPanel.cols.level')}</th>
               <th>{t('quantitiesPanel.cols.specification')}</th>
               <th className="num">{t('quantitiesPanel.cols.quantity')}</th>
-              <th className="num group-edge">{t('quantitiesPanel.cols.netWeight')} <span className="qty-group-unit">({t('units.kg')})</span></th>
-              <th className="num">{t('quantitiesPanel.cols.orderWeight')} <span className="qty-group-unit">({t('units.kg')})</span></th>
+              <th className="num group-edge">{t(meshOnly ? 'rebar.requiredWeightShort' : 'quantitiesPanel.cols.netWeight')} <span className="qty-group-unit">({t('units.kg')})</span></th>
+              <th className="num">{t(meshOnly ? 'rebar.purchaseWeightShort' : 'quantitiesPanel.cols.orderWeight')} <span className="qty-group-unit">({t('units.kg')})</span></th>
               <th className="group-edge">{t('quantitiesPanel.cols.status')}</th>
             </tr>
           </thead>
@@ -107,8 +108,8 @@ export function ProjectRebarTable({ rebar, plans }: { rebar: ProjectRebar; plans
                     <span className="qty-sub">{t('rebar.totalLength')}: <span dir="ltr">{length(d.parts[0].netLengthM)}</span></span>
                   </>}
                 </td>
-                <td className="num group-edge" dir="ltr">{weight(d.netWeightKg, d.estimated)}</td>
-                <td className="num order" dir="ltr">{weight(d.orderWeightKg, false)}</td>
+                <td className="num group-edge" dir="ltr">{weight(d.netWeightKg, d.estimated)}{!meshOnly && d.kind === 'mesh' && <span className="qty-sub">{t('rebar.requiredWeightShort')}</span>}</td>
+                <td className="num order" dir="ltr">{weight(d.orderWeightKg, false)}{!meshOnly && d.kind === 'mesh' && <span className="qty-sub">{t('rebar.purchaseWeightShort')}</span>}</td>
                 <td className="group-edge"><span className={d.status !== 'ok' ? 'cal-missing' : `qty-status ${d.estimated ? 'estimate' : ''}`}>{levelStatus(d, x)}</span></td>
               </tr>
             ))}

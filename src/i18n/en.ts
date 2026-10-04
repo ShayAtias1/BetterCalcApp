@@ -999,6 +999,11 @@ export const en: Dictionary = {
     copyBottomToTop: 'Copy Bottom to Top',
     copyBottomToTopHint: 'Starts Top from the same values - each level stays editable on its own',
     duplicate: 'Duplicate mesh',
+    requiredWeight: 'Required weight',
+    requiredWeightShort: 'Required',
+    purchaseWeightShort: 'Purchase',
+    requiredWeightHeader: 'Required ({unit})',
+    purchaseWeightHeader: 'Purchase ({unit})',
     purchaseWeight: 'Purchase weight',
     layout: {
       add: 'Add sheet',
