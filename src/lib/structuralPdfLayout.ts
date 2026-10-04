@@ -24,6 +24,7 @@ export interface StirrupShapeCard {
   title: string;
   shape: ReturnType<typeof prepareStirrupShape>;
   details: string[];
+  note?: string;
 }
 
 export type PdfBlock =
@@ -294,11 +295,11 @@ function stirrupShapeBlocks(rows: { planName?: string; row: RebarLevelRow }[], x
         `Ø${part.diameterMm ?? '-'} · ${x.t(`rebar.stirrup.templates.${data.shape.template}`)}`,
         `${x.t('rebar.stirrup.dimensions')}: ${fmt(data.shape.widthM * 100)} × ${fmt(data.shape.heightM * 100)} ${x.t('units.cm')}`,
         `${x.t('rebar.stirrup.geometricLength')}: ${fmt(data.geometricLengthM)} ${x.t('units.m')}`,
-        `${x.t('rebar.stirrup.lengthUsed')}: ${fmt(part.barLengthM)} ${x.t('units.m')} · ${x.t(data.lengthSource === 'manual' ? 'rebar.stirrup.manualLength' : 'rebar.stirrup.geometricLength')}`,
-        x.t('rebar.stirrup.geometricHint'),
+        `${x.t('rebar.stirrup.lengthUsed')}: ${fmt(part.barLengthM)} ${x.t('units.m')}${data.lengthSource === 'manual' ? ` · ${x.t('rebar.stirrup.manualLength')}` : ''}`,
       ],
+      note: x.t('rebar.stirrup.geometricHint'),
     } });
-    if (data.placements.length) blocks.push({ type: 'table', headers: [x.t('rebar.stirrup.placements'), x.t('concrete.page', { page: '' }),
+    if (data.placements.length) blocks.push({ type: 'table', headers: [x.t('exports.structural.headers.type'), x.t('exports.structural.headers.page'),
       x.t('rebar.stirrup.distributionSize'), x.t('rebar.stirrup.spacing'), x.t('rebar.stirrup.quantity'), x.t('exports.structural.headers.status')],
       weights: [12, 7, 18, 18, 12, 23], rows: data.placements.map((result) => {
         const p = result.placement;

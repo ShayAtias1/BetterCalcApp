@@ -109,27 +109,50 @@ export class ReportWriter {
   }
 
   shapeCard(card: StirrupShapeCard) {
-    this.ensure(8);
+    const height = 108;
+    // Keep the compact card with the following placement header and first row.
+    this.ensure((height + 4 + ROW_H * 2) / ROW_H);
     const top = this.y;
-    this.pt.strokeRect(MARGIN, top, PAGE_W - MARGIN * 2, 225, C_BORDER);
-    this.pt.fillText(card.title, this.startX + this.sign * 10, top + 23, { size: 15, bold: true, maxWidth: PAGE_W - MARGIN * 2 - 24 });
-    const diagramX = MARGIN + 12, diagramY = top + 38, scale = 1.6;
+    const width = Math.min(PAGE_W - MARGIN * 2, 780);
+    const left = this.x.rtl ? PAGE_W - MARGIN - width : MARGIN;
+    const diagramX = this.x.rtl ? left + width - 112 : left + 8;
+    this.pt.strokeRect(left, top, width, height, C_BORDER);
+    const points = card.shape.points;
+    const minX = points.length ? Math.min(...points.map((point) => point.x)) : 0;
+    const maxX = points.length ? Math.max(...points.map((point) => point.x)) : 0;
+    const minY = points.length ? Math.min(...points.map((point) => point.y)) : 0;
+    const maxY = points.length ? Math.max(...points.map((point) => point.y)) : 0;
+    const scale = 64 / Math.max(maxX - minX, maxY - minY, 1);
+    // A fixed visual area, centred without ever mirroring the saved geometry in RTL.
+    const screenX = (x: number) => diagramX + 52 + (x - (minX + maxX) / 2) * scale;
+    const screenY = (y: number) => top + 47 + (y - (minY + maxY) / 2) * scale;
     for (const segment of card.shape.segments) {
-      this.pt.line(diagramX + segment.normalizedStart.x * scale, diagramY + segment.normalizedStart.y * scale,
-        diagramX + segment.normalizedEnd.x * scale, diagramY + segment.normalizedEnd.y * scale, '#c2410c', 2);
+      this.pt.line(screenX(segment.normalizedStart.x), screenY(segment.normalizedStart.y),
+        screenX(segment.normalizedEnd.x), screenY(segment.normalizedEnd.y), '#c2410c', 1.5);
     }
-    // Numeric segment dimensions are in cm; cap annotation density, never the actual geometry.
-    card.shape.segments.slice(0, 12).forEach((segment) => {
+    // Main leg dimensions only; the complete true vector remains visible for custom shapes.
+    card.shape.segments.slice(0, 6).forEach((segment) => {
+      const midX = (segment.normalizedStart.x + segment.normalizedEnd.x) / 2;
+      const midY = (segment.normalizedStart.y + segment.normalizedEnd.y) / 2;
+      const vertical = Math.abs(segment.normalizedEnd.y - segment.normalizedStart.y)
+        > Math.abs(segment.normalizedEnd.x - segment.normalizedStart.x);
       this.pt.fillText(this.x.number(Math.round(segment.lengthM * 1000) / 10),
-        diagramX + (segment.normalizedStart.x + segment.normalizedEnd.x) * scale / 2 + 5,
-        diagramY + (segment.normalizedStart.y + segment.normalizedEnd.y) * scale / 2 - 6,
-        { size: 9, direction: 'ltr', align: 'center', color: '#78716c' });
+        screenX(midX) + (vertical ? (midX < (minX + maxX) / 2 ? -7 : 7) : 0),
+        screenY(midY) + (vertical ? 3 : (midY < (minY + maxY) / 2 ? -5 : 10)),
+        { size: 8, direction: 'ltr', align: vertical ? (midX < (minX + maxX) / 2 ? 'right' : 'left') : 'center', color: '#78716c' });
     });
-    this.pt.fillText(this.x.t('units.cm'), diagramX + 80, top + 217, { size: 10, direction: 'ltr', align: 'center' });
-    const textX = this.x.rtl ? PAGE_W - MARGIN - 14 : MARGIN + 225;
-    card.details.forEach((detail, index) => this.pt.fillText(detail, textX, top + 58 + index * 29,
-      { size: 12, maxWidth: PAGE_W - MARGIN * 2 - 250 }));
-    this.y += 240;
+    this.pt.fillText(this.x.t('units.cm'), diagramX + 52, top + 101,
+      { size: 8, direction: 'ltr', align: 'center', color: '#78716c' });
+    const textWidth = width - 140;
+    const textX = this.x.rtl ? diagramX - 12 : left + 128;
+    this.pt.fillText(card.title, textX, top + 21, { size: 14, bold: true, maxWidth: textWidth });
+    const columnWidth = textWidth / 2;
+    card.details.forEach((detail, index) => this.pt.fillText(detail,
+      textX + this.sign * (index % 2) * columnWidth, top + 44 + Math.floor(index / 2) * 22,
+      { size: 11, maxWidth: columnWidth - 12 }));
+    if (card.note) this.pt.fillText(card.note, textX, top + 94,
+      { size: 8, color: '#78716c', maxWidth: textWidth });
+    this.y += height + 4;
   }
 
   note(text: string) {

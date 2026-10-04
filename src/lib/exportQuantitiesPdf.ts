@@ -686,7 +686,7 @@ export async function exportQuantitiesToPdf(
   }
 
   // A selection that matches nothing on the chosen pages would save an empty file.
-  if (pdfDoc.getPageCount() === 0) throw new Error('The selected content has nothing to export on the selected pages.');
+  if (pdfDoc.getPageCount() === 0) throw new Error('The selected content has nothing to export on the selected sheets.');
 
   const bytes = await pdfDoc.save();
   const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], {

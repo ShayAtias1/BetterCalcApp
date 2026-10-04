@@ -233,7 +233,7 @@ export async function exportQuantitiesToExcel(
   // being exported (withStructuralPages), as it limits the summaries and the area measurements.
   const workbook = buildQuantitiesWorkbook(summaries, areaMeasurements, language, selectStructural(buildStructuralReport(project), content));
   // A selection with nothing to write (no finishes, no structural items on those pages) has no sheet to save.
-  if (workbook.worksheets.length === 0) throw new Error('The selected content has nothing to export on the selected pages.');
+  if (workbook.worksheets.length === 0) throw new Error('The selected content has nothing to export on the selected sheets.');
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/octet-stream' });
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, '_');
