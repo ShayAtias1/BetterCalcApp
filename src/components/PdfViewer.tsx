@@ -45,6 +45,7 @@ import type { DrawnStraightBar } from '../types/structural';
 import { hitStraightBar, translateBar } from '../lib/straightBarsGeometry';
 import { reshapeArea, translateArea, type AreaGeometryKind } from '../lib/areaGeometryEditing';
 import AreaGeometryHandles from './AreaGeometryHandles';
+import StirrupOverlay from './StirrupOverlay';
 import { CONCRETE_COLOR, REBAR_COLOR } from '../lib/structuralOverlay';
 import { useMeshLayoutView } from '../store/meshLayoutPreviewStore';
 
@@ -170,6 +171,11 @@ export default function PdfViewer() {
   const overlayVisible = useAppStore((s) => s.overlayVisible);
   const drawTarget = useAppStore((s) => s.drawTarget);
   const barsDrawing = useAppStore((s) => s.barsDrawing);
+  const stirrupDrawing = useAppStore((s) => s.stirrupDrawing);
+  const selectedStirrupPlacementId = useAppStore((s) => s.selectedStirrupPlacementId);
+  const finishStirrupLine = useAppStore((s) => s.finishStirrupLine);
+  const selectStirrupPlacement = useAppStore((s) => s.selectStirrupPlacement);
+  const editStirrupPlacement = useAppStore((s) => s.editStirrupPlacement);
   const finishDrawnBar = useAppStore((s) => s.finishDrawnBar);
   const selectedDrawnBarId = useAppStore((s) => s.selectedDrawnBarId);
   const setSelectedDrawnBarId = useAppStore((s) => s.setSelectedDrawnBarId);
@@ -241,13 +247,14 @@ export default function PdfViewer() {
   const [structuralPreview, setStructuralPreview] = useState<{
     kind: AreaGeometryKind; id: string; points: Point[]; drawnBars?: DrawnStraightBar[];
   } | null>(null);
-  const barDrag = useRef<{ itemId: string; bar: DrawnStraightBar; start: Point; endpoint: 'start' | 'end' | null; preview: DrawnStraightBar | null } | null>(null);
-  const [barPreview, setBarPreview] = useState<{ itemId: string; bar: DrawnStraightBar } | null>(null);
+  const barDrag = useRef<{ itemId: string; bar: DrawnStraightBar; start: Point; endpoint: 'start' | 'end' | null; preview: DrawnStraightBar | null; stirrup?: boolean } | null>(null);
+  const [barPreview, setBarPreview] = useState<{ itemId: string; bar: DrawnStraightBar; stirrup?: boolean } | null>(null);
   const suppressStructuralClick = useRef(false);
   const structuralPlan = useMemo(() => {
     if (!project) return project;
     if (barPreview) {
       const item = rebarOf(project).find((i) => i.id === barPreview.itemId);
+      if (item?.kind === 'stirrup' && barPreview.stirrup) return updateRebarItem(project, item.id, { placements: item.placements.map((p) => p.id === barPreview.bar.id && p.kind === 'line' ? { ...p, start: barPreview.bar.start, end: barPreview.bar.end } : p) });
       if (item?.kind === 'bars' && item.drawnBars) return updateRebarItem(project, item.id, {
         drawnBars: item.drawnBars.map((bar) => bar.id === barPreview.bar.id ? barPreview.bar : bar),
       });
@@ -272,7 +279,7 @@ export default function PdfViewer() {
     barDrag.current = null;
     setBarPreview(null);
     setStructuralPreview(null);
-  }, [project, currentPage, toolMode, drawTarget, selectedRoomId, selectedConcreteId, selectedRebarId, selectedDrawnBarId,
+  }, [project, currentPage, toolMode, drawTarget, selectedRoomId, selectedConcreteId, selectedRebarId, selectedDrawnBarId, selectedStirrupPlacementId,
     overlayVisible.finishes, overlayVisible.concrete, overlayVisible.rebar, meshLayoutView.editing]);
 
   const spaceHeld = useRef(false);
@@ -600,7 +607,17 @@ export default function PdfViewer() {
       const selected = drawTarget === 'concrete'
         ? overlayVisible.concrete && concreteOf(project).find((item) => item.id === selectedConcreteId)
         : overlayVisible.rebar && rebarOf(project).find((item) => item.id === selectedRebarId);
-      if (selected && selected.kind === 'bars' && selected.drawnBars && overlayVisible.rebar) {
+      if (selected?.kind === 'stirrup' && overlayVisible.rebar) {
+        const placement = selected.placements.find((p) => p.id === selectedStirrupPlacementId && p.pageNumber === currentPage);
+        if (placement?.kind === 'line') {
+          const endpoint = nearestPointIndex([placement.start, placement.end], native, VERTEX_HIT_RADIUS_SCREEN / zoom);
+          if (endpoint >= 0 || hitStraightBar(native, placement, 6 / zoom)) barDrag.current = {
+            itemId: selected.id, bar: placement, start: native, endpoint: endpoint === 0 ? 'start' : endpoint === 1 ? 'end' : null, preview: null, stirrup: true,
+          };
+        }
+        return;
+      }
+      if (selected && selected.kind === 'bars'  && selected.drawnBars && overlayVisible.rebar) {
         const bar = selected.drawnBars.find((b) => b.id === selectedDrawnBarId && b.pageNumber === currentPage);
         if (bar) {
           const endpointIndex = nearestPointIndex([bar.start, bar.end], native, VERTEX_HIT_RADIUS_SCREEN / zoom);
@@ -657,7 +674,7 @@ export default function PdfViewer() {
       if (!suppressStructuralClick.current && Math.hypot(offset.x, offset.y) * zoom < 3) return;
       suppressStructuralClick.current = true;
       drag.preview = drag.endpoint ? { ...drag.bar, [drag.endpoint]: native } : translateBar(drag.bar, offset);
-      setBarPreview({ itemId: drag.itemId, bar: drag.preview });
+      setBarPreview({ itemId: drag.itemId, bar: drag.preview, stirrup: drag.stirrup });
       return;
     }
     if (structuralDrag.current) {
@@ -727,7 +744,11 @@ export default function PdfViewer() {
       const drag = barDrag.current;
       barDrag.current = null;
       setBarPreview(null);
-      if (drag.preview) editDrawnBar(drag.itemId, drag.preview);
+      if (drag.preview && drag.stirrup && project) {
+        const item = rebarOf(project).find((i) => i.id === drag.itemId);
+        const placement = item?.kind === 'stirrup' ? item.placements.find((p) => p.id === drag.bar.id) : undefined;
+        if (placement?.kind === 'line') editStirrupPlacement(item!.id, { ...placement, start: drag.preview.start, end: drag.preview.end });
+      } else if (drag.preview) editDrawnBar(drag.itemId, drag.preview);
       return;
     }
     if (structuralDrag.current) {
@@ -799,6 +820,11 @@ export default function PdfViewer() {
       return;
     }
 
+    if (toolMode === 'draw' && stirrupDrawing === 'line') {
+      if (drawingPoints.length === 0) addDrawingPoint(native);
+      else finishStirrupLine(drawingPoints[0], orthoSnap ? snapOrtho(drawingPoints[0], native) : native);
+      return;
+    }
     if (toolMode === 'draw' && barsDrawing === 'line') {
       if (drawingPoints.length === 0) addDrawingPoint(native);
       else finishDrawnBar(drawingPoints[0], orthoSnap ? snapOrtho(drawingPoints[0], native) : native);
@@ -909,6 +935,11 @@ export default function PdfViewer() {
       if (drawTarget === 'rebar') {
         if (overlayVisible.rebar) {
           for (const item of [...rebarOf(project)].reverse()) {
+            if (item.kind === 'stirrup') {
+              const hit = [...item.placements].reverse().find((p) => p.pageNumber === currentPage && p.kind === 'line' && hitStraightBar(native, p, 6 / zoom));
+              if (hit) { selectStirrupPlacement(item.id, hit.id); return; }
+              continue;
+            }
             if (item.kind !== 'bars' || !item.drawnBars) continue;
             const bar = [...item.drawnBars].reverse().find((b) => b.pageNumber === currentPage && hitStraightBar(native, b, 6 / zoom));
             if (bar) {
@@ -921,7 +952,7 @@ export default function PdfViewer() {
         const mesh = !overlayVisible.rebar
           ? undefined
           : [...rebarOf(project)].reverse().find((m) => {
-            const points = m.kind === 'mesh' ? m.points : m.barsZone?.points;
+            const points = m.kind === 'mesh' ? m.points : m.kind === 'bars' ? m.barsZone?.points : undefined;
             return m.pageNumber === currentPage && points && polygonAreaPx(points) > 0 && pointInPolygon(native, points);
           });
         setSelectedRebarId(mesh ? mesh.id : null);
@@ -999,6 +1030,8 @@ export default function PdfViewer() {
                 );
               })}
 
+            {overlayVisible.rebar && <StirrupOverlay plan={structuralPlan ?? project} pageNumber={currentPage} selectedItemId={selectedRebarId} selectedPlacementId={selectedStirrupPlacementId} zoom={zoom} />}
+
             {/* Concrete and rebar zones each follow their own View switch: hidden means not drawn here and
                 not selectable (see handleClick). */}
             {overlayVisible.concrete && (
@@ -1048,7 +1081,7 @@ export default function PdfViewer() {
                 );
               })}
 
-            {toolMode === 'draw' && barsDrawing === 'line' && drawingPoints.length === 1 && hoverPoint && <line
+            {toolMode === 'draw' && (barsDrawing === 'line' || stirrupDrawing === 'line') && drawingPoints.length === 1 && hoverPoint && <line
               x1={drawingPoints[0].x} y1={drawingPoints[0].y} x2={hoverPoint.x} y2={hoverPoint.y}
               stroke="#c2410c" strokeWidth={strokeW} strokeDasharray={`${4 / zoom} ${4 / zoom}`} />}
             {selectedArea && selectedArea.points.length >= 3 && <g>

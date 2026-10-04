@@ -23,7 +23,7 @@ import {
 import { clonePlanForDuplicate } from '../lib/planDuplication';
 import { createEmptyComparison, useCompareStore } from './compareStore';
 import type { Comparison } from '../types/compare';
-import type { ConcreteElement, ConcreteKind, DrawnStraightBar, MeshReinforcement, RebarLevel } from '../types/structural';
+import type { ConcreteElement, ConcreteKind, DrawnStraightBar, MeshReinforcement, RebarLevel, StirrupPlacement } from '../types/structural';
 import {
   addConcreteElement,
   addConcreteFromRooms,
@@ -238,6 +238,8 @@ interface AppState {
    */
   drawTarget: DrawTarget;
   barsDrawing: 'zone' | 'line' | null;
+  stirrupDrawing: 'line' | 'area' | null;
+  selectedStirrupPlacementId: string | null;
   /** The concrete zone open in the Concrete tab's form. Session UI state, like `selectedRoomId`: not persisted and cleared by undo, redo, page changes and plan switches. */
   selectedConcreteId: string | null;
   /** The rebar item open in the Rebar tab's form. Session UI state, cleared like `selectedConcreteId`. */
@@ -380,6 +382,11 @@ interface AppState {
   editMeshLayout: (id: string, level: RebarLevel, edit: ManualMeshEdit) => void;
   /** Adds a manual-bars row on the current page and selects it. */
   addRebarBars: () => void;
+  startStirrupPlacement: (id: string, kind: 'line' | 'area') => void;
+  finishStirrupLine: (start: Point, end: Point) => void;
+  editStirrupPlacement: (id: string, placement: StirrupPlacement, debounced?: boolean) => void;
+  deleteStirrupPlacement: (id: string, placementId: string) => void;
+  selectStirrupPlacement: (id: string, placementId: string) => void;
   duplicateRebarMesh: (id: string) => void;
   duplicateStraightBars: (id: string) => void;
   removeDrawnBarsLayout: (id: string) => void;
@@ -532,7 +539,7 @@ function commitStructuralZone(get: () => AppState, set: (patch: Partial<AppState
     const barsZone = { ...item.barsZone, pageNumber: currentPage, points: structuredClone(points),
       direction: item.barsZone?.direction ?? 'long' as const, lengthMode: item.barsZone?.lengthMode ?? 'automatic' as const };
     set({ project: { ...updateRebar(project, item.id, { barsZone, pageNumber: currentPage }), updatedAt: Date.now() },
-      drawingPoints: [], barsDrawing: null, toolMode: 'select' });
+      drawingPoints: [], barsDrawing: null, stirrupDrawing: null, toolMode: 'select' });
     scheduleSave(get, set);
     return;
   }
@@ -621,9 +628,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   calibrationPoints: [],
   drawingPoints: [],
   drawTarget: 'room',
-  barsDrawing: null,
+  barsDrawing: null, stirrupDrawing: null,
   selectedConcreteId: null,
-  selectedRebarId: null, selectedDrawnBarId: null,
+  selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null,
   concreteKind: 'slab',
   measureTool: null,
   measurePoints: [],
@@ -686,9 +693,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedRoomId: null,
       selectedMarkupId: null,
       selectedConcreteId: null,
-      selectedRebarId: null, selectedDrawnBarId: null,
+      selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null,
       drawTarget: 'room',
-      barsDrawing: null,
+      barsDrawing: null, stirrupDrawing: null,
       exportRegions: {},
       activeApartmentNumber: '',
       history: [],
@@ -975,7 +982,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { project, history, future } = get();
     if (!project || history.length === 0) return;
     const previous = history[history.length - 1];
-    set({ project: previous, history: history.slice(0, -1), future: [project, ...future], selectedRoomId: null, selectedConcreteId: null, selectedRebarId: null, selectedDrawnBarId: null });
+    set({ project: previous, history: history.slice(0, -1), future: [project, ...future], selectedRoomId: null, selectedConcreteId: null, selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null });
     scheduleSave(get, set);
   },
   redo: () => {
@@ -986,7 +993,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { project, history, future } = get();
     if (!project || future.length === 0) return;
     const next = future[0];
-    set({ project: next, history: [...history, project], future: future.slice(1), selectedRoomId: null, selectedConcreteId: null, selectedRebarId: null, selectedDrawnBarId: null });
+    set({ project: next, history: [...history, project], future: future.slice(1), selectedRoomId: null, selectedConcreteId: null, selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null });
     scheduleSave(get, set);
   },
   setCurrentPage: (n) => {
@@ -1000,8 +1007,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedRoomId: null,
       selectedMarkupId: null,
       selectedConcreteId: null,
-      selectedRebarId: null, selectedDrawnBarId: null,
-      barsDrawing: null,
+      selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null,
+      barsDrawing: null, stirrupDrawing: null,
       drawingPoints: [],
       calibrationPoints: [],
       measurePoints: [],
@@ -1012,7 +1019,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setToolMode: (m) => {
     set({
       toolMode: m,
-      barsDrawing: null,
+      barsDrawing: null, stirrupDrawing: null,
       calibrationPoints: [],
       drawingPoints: [],
       measurePoints: [],
@@ -1054,7 +1061,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Changing the target drops a shape in progress: it was started for the previous target.
   setDrawTarget: (target) => {
     if (get().drawTarget === target) return;
-    set({ drawTarget: target, drawingPoints: [], barsDrawing: null });
+    set({ drawTarget: target, drawingPoints: [], barsDrawing: null, stirrupDrawing: null });
     ensureOverlayVisible(overlayForTool(get().toolMode, target), get, set);
   },
   setSelectedConcreteId: (id) => set({ selectedConcreteId: id }),
@@ -1065,6 +1072,50 @@ export const useAppStore = create<AppState>((set, get) => ({
     historyTracker.pushDebounced(get, set, project);
     set({ project: { ...updateConcrete(project, id, patch), updatedAt: Date.now() } });
     scheduleSave(get, set);
+  },
+  startStirrupPlacement: (id, kind) => {
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    if (!item || item.kind !== 'stirrup') return;
+    ensureOverlayVisible('rebar', get, set);
+    set({ selectedRebarId: id, selectedStirrupPlacementId: null, selectedDrawnBarId: null,
+      drawTarget: 'rebar', barsDrawing: null, stirrupDrawing: kind, toolMode: kind === 'line' ? 'draw' : 'draw-rect', drawingPoints: [] });
+  },
+  finishStirrupLine: (start, end) => {
+    const { project, selectedRebarId, currentPage, stirrupDrawing } = get();
+    const item = project && rebarOf(project).find((i) => i.id === selectedRebarId);
+    if (!project || !item || item.kind !== 'stirrup' || stirrupDrawing !== 'line' || Math.hypot(end.x - start.x, end.y - start.y) < 1e-9) return;
+    const placement: StirrupPlacement = { id: uuid(), kind: 'line', pageNumber: currentPage, start: { ...start }, end: { ...end }, spacingM: 0.2, quantityMode: 'automatic' };
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, item.id, { placements: [...item.placements, placement] }), updatedAt: Date.now() },
+      selectedStirrupPlacementId: placement.id, stirrupDrawing: null, drawingPoints: [], toolMode: 'select' });
+    scheduleSave(get, set);
+  },
+  editStirrupPlacement: (id, placement, debounced = false) => {
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    if (!project || !item || item.kind !== 'stirrup' || !item.placements.some((p) => p.id === placement.id && p.kind === placement.kind)) return;
+    if (debounced) historyTracker.pushDebounced(get, set, project);
+    else historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, id, { placements: item.placements.map((p) => p.id === placement.id ? structuredClone(placement) : p) }), updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
+  deleteStirrupPlacement: (id, placementId) => {
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    if (!project || !item || item.kind !== 'stirrup' || !item.placements.some((p) => p.id === placementId)) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, id, { placements: item.placements.filter((p) => p.id !== placementId) }), updatedAt: Date.now() },
+      selectedStirrupPlacementId: get().selectedStirrupPlacementId === placementId ? null : get().selectedStirrupPlacementId });
+    scheduleSave(get, set);
+  },
+  selectStirrupPlacement: (id, placementId) => {
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    const placement = item?.kind === 'stirrup' ? item.placements.find((p) => p.id === placementId) : undefined;
+    if (!placement) return;
+    get().setCurrentPage(placement.pageNumber);
+    set({ selectedRebarId: id, selectedStirrupPlacementId: placementId, drawTarget: 'rebar', toolMode: 'select' });
   },
   setSelectedDrawnBarId: (id) => set({ selectedDrawnBarId: id }),
   editDrawnBar: (itemId, bar) => {
@@ -1113,7 +1164,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const item = project && rebarOf(project).find((i) => i.id === id);
     if (!project || !item || item.kind !== 'bars' || item.barsZone || item.drawnBars !== undefined) return;
     historyTracker.push(get, set, project);
-    set({ project: { ...updateRebar(project, id, { drawnBars: [] }), updatedAt: Date.now() }, drawingPoints: [], barsDrawing: null });
+    set({ project: { ...updateRebar(project, id, { drawnBars: [] }), updatedAt: Date.now() }, drawingPoints: [], barsDrawing: null, stirrupDrawing: null });
     scheduleSave(get, set);
   },
   startDrawingBar: (id) => {
@@ -1123,7 +1174,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().setBarsIndividualMode(id);
     get().setCurrentPage(item.pageNumber);
     ensureOverlayVisible('rebar', get, set);
-    set({ selectedRebarId: id, selectedDrawnBarId: null, drawTarget: 'rebar', barsDrawing: 'line', toolMode: 'draw', drawingPoints: [] });
+    set({ selectedRebarId: id, selectedDrawnBarId: null, selectedStirrupPlacementId: null, drawTarget: 'rebar', barsDrawing: 'line', toolMode: 'draw', drawingPoints: [] });
   },
   finishDrawnBar: (start, end) => {
     const { project, selectedRebarId, currentPage, barsDrawing } = get();
@@ -1141,7 +1192,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!project || !item || item.kind !== 'bars' || item.drawnBars === undefined) return;
     historyTracker.push(get, set, project);
     set({ project: { ...updateRebar(project, id, { drawnBars: undefined, count: 0, lengthM: 0 }), updatedAt: Date.now() },
-      selectedDrawnBarId: null, barsDrawing: null, drawingPoints: [], toolMode: 'select' });
+      selectedDrawnBarId: null, selectedStirrupPlacementId: null, barsDrawing: null, stirrupDrawing: null, drawingPoints: [], toolMode: 'select' });
     scheduleSave(get, set);
   },
   duplicateStraightBars: (id) => {
@@ -1157,7 +1208,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     historyTracker.push(get, set, project);
     set({ project: { ...addRebarItem(project, copy), updatedAt: Date.now() }, selectedRebarId: copy.id,
-      selectedDrawnBarId: null, barsDrawing: null, drawingPoints: [], toolMode: 'select' });
+      selectedDrawnBarId: null, selectedStirrupPlacementId: null, barsDrawing: null, stirrupDrawing: null, drawingPoints: [], toolMode: 'select' });
     scheduleSave(get, set);
   },
   startBarsZone: (id) => {
@@ -1165,7 +1216,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const item = project && rebarOf(project).find((i) => i.id === id);
     if (!item || item.kind !== 'bars' || item.drawnBars !== undefined) return;
     ensureOverlayVisible('rebar', get, set);
-    set({ selectedRebarId: id, selectedDrawnBarId: null, drawTarget: 'rebar', barsDrawing: 'zone', toolMode: 'draw-rect', drawingPoints: [] });
+    set({ selectedRebarId: id, selectedDrawnBarId: null, selectedStirrupPlacementId: null, drawTarget: 'rebar', barsDrawing: 'zone', toolMode: 'draw-rect', drawingPoints: [] });
   },
   removeBarsZone: (id) => {
     const { project } = get();
@@ -1174,7 +1225,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const resolved = resolveStraightBars(item, project.pages[item.pageNumber]?.calibration ?? null);
     historyTracker.push(get, set, project);
     set({ project: { ...updateRebar(project, id, { barsZone: undefined, lengthM: resolved.effectiveLengthM ?? item.lengthM }), updatedAt: Date.now() },
-      barsDrawing: null, drawingPoints: [], toolMode: 'select' });
+      barsDrawing: null, stirrupDrawing: null, drawingPoints: [], toolMode: 'select' });
     scheduleSave(get, set);
   },
   editAreaGeometry: (kind, id, points) => {
@@ -1250,7 +1301,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
     return created.length;
   },
-  setSelectedRebarId: (id) => set({ selectedRebarId: id, selectedDrawnBarId: null, barsDrawing: null, drawingPoints: [] }),
+  setSelectedRebarId: (id) => set({ selectedRebarId: id, selectedDrawnBarId: null, selectedStirrupPlacementId: null, barsDrawing: null, stirrupDrawing: null, drawingPoints: [] }),
   editMeshLayout: (id, level, edit) => {
     const { project } = get();
     const mesh = project && rebarOf(project).find((i) => i.id === id && i.kind === 'mesh');
@@ -1273,7 +1324,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!project) return;
     historyTracker.push(get, set, project);
     const bars = newRebarBars(project, currentPage);
-    set({ project: { ...addRebarItem(project, bars), updatedAt: Date.now() }, selectedRebarId: bars.id, selectedDrawnBarId: null, barsDrawing: null, drawingPoints: [], toolMode: 'select' });
+    set({ project: { ...addRebarItem(project, bars), updatedAt: Date.now() }, selectedRebarId: bars.id, selectedDrawnBarId: null, selectedStirrupPlacementId: null, barsDrawing: null, stirrupDrawing: null, drawingPoints: [], toolMode: 'select' });
     scheduleSave(get, set);
   },
   duplicateRebarMesh: (id) => {
@@ -1294,7 +1345,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!project) return;
     historyTracker.push(get, set, project);
     set({ project: { ...removeRebarItem(project, id), updatedAt: Date.now() }, selectedRebarId: selectedRebarId === id ? null : selectedRebarId,
-      ...(selectedRebarId === id ? { selectedDrawnBarId: null, barsDrawing: null, drawingPoints: [] } : {}) });
+      ...(selectedRebarId === id ? { selectedDrawnBarId: null, selectedStirrupPlacementId: null, barsDrawing: null, stirrupDrawing: null, drawingPoints: [] } : {}) });
     scheduleSave(get, set);
   },
   setRebarMeshLevels: (id, choice) => {
@@ -1351,7 +1402,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   finishDrawing: () => {
-    if (get().barsDrawing === 'line') return;
+    if (get().barsDrawing === 'line' || get().stirrupDrawing === 'line') return;
     if (get().drawTarget !== 'room') return commitStructuralZone(get, set, get().drawingPoints);
     const { project, drawingPoints, currentPage, activeApartmentNumber } = get();
     if (!project || drawingPoints.length < 3) {

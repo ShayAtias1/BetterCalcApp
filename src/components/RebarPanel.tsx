@@ -17,6 +17,7 @@ import { MeshLayoutControl } from './MeshLayoutPreview';
 import NumberField from './NumberField';
 import Icon from './Icon';
 import StirrupShapeBuilder from './StirrupShapeBuilder';
+import StirrupPlacements from './StirrupPlacements';
 import { drawnBarLength } from '../lib/straightBarsGeometry';
 
 type T = ReturnType<typeof useT>;
@@ -94,7 +95,7 @@ export default function RebarPanel() {
         </div>
         {selected.kind === 'mesh' ? (
           <MeshDetail key={selected.id} mesh={selected} calibration={project.pages[selected.pageNumber]?.calibration ?? null} />
-        ) : selected.kind === 'stirrup' ? <StirrupShapeBuilder item={selected} /> : (
+        ) : selected.kind === 'stirrup' ? <><StirrupShapeBuilder item={selected} /><StirrupPlacements item={selected} /></> : (
           <BarsDetail key={selected.id} bars={selected} />
         )}
       </div>
