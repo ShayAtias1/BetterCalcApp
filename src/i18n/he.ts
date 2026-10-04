@@ -931,6 +931,18 @@ export const he = {
       manualLength: 'אורך ידני לחישוב',
       lengthUsed: 'אורך בשימוש',
       geometricHint: 'מקטעים גאומטריים בלבד; ללא תוספת כיפוף או ווים אוטומטיים.',
+      report: {
+        diameter: 'קוטר',
+        mm: 'מ"מ',
+        length: 'אורך',
+        segments: 'צלעות',
+        templates: {
+          rectangle: 'מלבן סגור',
+          u: 'U פתוח',
+          l: 'L',
+          custom: 'צורה מותאמת',
+        },
+      },
       templates: {
         rectangle: 'מלבן סגור',
         u: 'צורת U',

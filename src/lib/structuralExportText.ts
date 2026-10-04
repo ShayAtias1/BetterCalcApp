@@ -112,7 +112,21 @@ export function barsLengthDescription(d: RebarLevelRow, x: ExportContext): strin
   return `${x.t(d.kind === 'stirrup' ? 'rebar.stirrup.lengthUsed' : 'rebar.barLength')}: ${length(part.barLengthM)} · ${x.t('rebar.totalLength')}: ${length(part.netLengthM)}`;
 }
 
+export function stirrupDiameterText(d: RebarLevelRow, x: ExportContext): string {
+  return `${x.t('rebar.stirrup.report.diameter')}: Ø${d.parts[0].diameterMm ?? '-'} ${x.t('rebar.stirrup.report.mm')}`;
+}
+
+export function stirrupShapeText(d: RebarLevelRow, x: ExportContext): string {
+  const shape = d.parts[0].stirrup?.shape;
+  return `${x.t('rebar.stirrup.shape')}: ${shape ? x.t(`rebar.stirrup.report.templates.${shape.template}`) : '-'}`;
+}
+
 export function levelReportSpecification(d: RebarLevelRow, x: ExportContext): string {
+  if (d.kind === 'stirrup') {
+    const unitLength = d.parts[0].barLengthM;
+    const length = unitLength === null ? '-' : x.number(round(unitLength, 2));
+    return `${stirrupDiameterText(d, x)} · ${stirrupShapeText(d, x)} · ${x.t('rebar.stirrup.report.length')}: ${length} ${x.t('units.m')}`;
+  }
   const specification = levelSpecification(d, x);
   return d.kind !== 'mesh' ? `${specification} · ${barsLengthDescription(d, x)}` : specification;
 }

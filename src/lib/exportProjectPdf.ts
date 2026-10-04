@@ -109,7 +109,7 @@ export class ReportWriter {
   }
 
   shapeCard(card: StirrupShapeCard) {
-    const height = 108;
+    const height = Math.max(108, 44 + (Math.ceil(card.details.length / 2) - 1) * 22 + 32);
     // Keep the compact card with the following placement header and first row.
     this.ensure((height + 4 + ROW_H * 2) / ROW_H);
     const top = this.y;
@@ -125,7 +125,7 @@ export class ReportWriter {
     const scale = 64 / Math.max(maxX - minX, maxY - minY, 1);
     // A fixed visual area, centred without ever mirroring the saved geometry in RTL.
     const screenX = (x: number) => diagramX + 52 + (x - (minX + maxX) / 2) * scale;
-    const screenY = (y: number) => top + 47 + (y - (minY + maxY) / 2) * scale;
+    const screenY = (y: number) => top + (height - 14) / 2 + (y - (minY + maxY) / 2) * scale;
     for (const segment of card.shape.segments) {
       this.pt.line(screenX(segment.normalizedStart.x), screenY(segment.normalizedStart.y),
         screenX(segment.normalizedEnd.x), screenY(segment.normalizedEnd.y), '#c2410c', 1.5);
@@ -141,7 +141,7 @@ export class ReportWriter {
         screenY(midY) + (vertical ? 3 : (midY < (minY + maxY) / 2 ? -5 : 10)),
         { size: 8, direction: 'ltr', align: vertical ? (midX < (minX + maxX) / 2 ? 'right' : 'left') : 'center', color: '#78716c' });
     });
-    this.pt.fillText(this.x.t('units.cm'), diagramX + 52, top + 101,
+    this.pt.fillText(this.x.t('units.cm'), diagramX + 52, top + height - 7,
       { size: 8, direction: 'ltr', align: 'center', color: '#78716c' });
     const textWidth = width - 140;
     const textX = this.x.rtl ? diagramX - 12 : left + 128;
@@ -150,7 +150,7 @@ export class ReportWriter {
     card.details.forEach((detail, index) => this.pt.fillText(detail,
       textX + this.sign * (index % 2) * columnWidth, top + 44 + Math.floor(index / 2) * 22,
       { size: 11, maxWidth: columnWidth - 12 }));
-    if (card.note) this.pt.fillText(card.note, textX, top + 94,
+    if (card.note) this.pt.fillText(card.note, textX, top + height - 14,
       { size: 8, color: '#78716c', maxWidth: textWidth });
     this.y += height + 4;
   }

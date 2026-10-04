@@ -11,7 +11,7 @@ import { round } from './geometry';
 import type { Plan } from '../types';
 import { markLabel } from './structuralMarks';
 import type { ExportContext } from './exportLanguage';
-import { basisText, concreteStatusText, levelQuantity, levelReportSpecification, levelSpecification, levelStatus, levelText, sheetConfigText } from './structuralExportText';
+import { basisText, concreteStatusText, levelQuantity, levelReportSpecification, levelSpecification, levelStatus, levelText, sheetConfigText, stirrupDiameterText, stirrupShapeText } from './structuralExportText';
 import { buildRebarLevelRows, type ProjectStructural, type RebarLevelRow, type StructuralReport } from './structuralQuantities';
 
 export interface PdfTableRow {
@@ -290,13 +290,27 @@ function stirrupShapeBlocks(rows: { planName?: string; row: RebarLevelRow }[], x
     const data = row.parts[0].stirrup;
     if (row.kind !== 'stirrup' || !data) continue;
     const part = row.parts[0];
+    const segmentDimension = (label: string, index: number) => {
+      const segment = data.shape.segments[index];
+      return `${x.t(`rebar.stirrup.${label}`)}: ${segment ? fmt(segment.lengthM * 100) : '-'} ${x.t('units.cm')}`;
+    };
+    const dimensions = data.shape.template === 'u'
+      ? [segmentDimension('leftLeg', 0), segmentDimension('base', 1), segmentDimension('rightLeg', 2)]
+      : data.shape.template === 'rectangle'
+        ? [segmentDimension('shapeWidth', 1), segmentDimension('shapeHeight', 0)]
+        : data.shape.template === 'l'
+          ? [segmentDimension('horizontalLeg', 1), segmentDimension('verticalLeg', 0)]
+          : [`${x.t('rebar.stirrup.report.segments')}: ${data.shape.segments.map((segment) => fmt(segment.lengthM * 100)).join(' / ')} ${x.t('units.cm')}`];
+    const showUsedLength = data.lengthSource === 'manual' || (part.barLengthM !== null &&
+      (data.geometricLengthM === null || Math.abs(part.barLengthM - data.geometricLengthM) > 1e-9));
     blocks.push({ type: 'shape', card: {
       title: [planName, markLabel(row, x.t)].filter(Boolean).join(' · '), shape: data.shape,
       details: [
-        `Ø${part.diameterMm ?? '-'} · ${x.t(`rebar.stirrup.templates.${data.shape.template}`)}`,
-        `${x.t('rebar.stirrup.dimensions')}: ${fmt(data.shape.widthM * 100)} × ${fmt(data.shape.heightM * 100)} ${x.t('units.cm')}`,
+        stirrupDiameterText(row, x),
+        stirrupShapeText(row, x),
+        ...dimensions,
         `${x.t('rebar.stirrup.geometricLength')}: ${fmt(data.geometricLengthM)} ${x.t('units.m')}`,
-        `${x.t('rebar.stirrup.lengthUsed')}: ${fmt(part.barLengthM)} ${x.t('units.m')}${data.lengthSource === 'manual' ? ` · ${x.t('rebar.stirrup.manualLength')}` : ''}`,
+        ...(showUsedLength ? [`${x.t('rebar.stirrup.lengthUsed')}: ${fmt(part.barLengthM)} ${x.t('units.m')}`] : []),
       ],
       note: x.t('rebar.stirrup.geometricHint'),
     } });

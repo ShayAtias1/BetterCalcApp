@@ -927,6 +927,18 @@ export const en: Dictionary = {
       manualLength: 'Manual length override',
       lengthUsed: 'Length used',
       geometricHint: 'Geometric segments only; no bend allowance or automatic hooks.',
+      report: {
+        diameter: 'Diameter',
+        mm: 'mm',
+        length: 'Length',
+        segments: 'Segments',
+        templates: {
+          rectangle: 'Closed rectangle',
+          u: 'Open U',
+          l: 'L',
+          custom: 'Custom shape',
+        },
+      },
       templates: {
         rectangle: 'Closed rectangle',
         u: 'U shape',
