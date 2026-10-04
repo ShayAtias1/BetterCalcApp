@@ -1,7 +1,7 @@
 import { formatNumber, useT } from '../i18n';
 import { useAppStore } from '../store/appStore';
 import type { Calibration } from '../types';
-import type { BarSpec, MeshReinforcement, RebarBars, RebarItem, RebarLayerDirection, RebarLevel, RebarMesh } from '../types/structural';
+import type { BarSpec, MeshReinforcement, RebarBars, RebarItem, RebarLayerDirection, RebarLevel, RebarMesh, RebarStirrup } from '../types/structural';
 import { REBAR_DIAMETERS_MM, calculateRebar, resolveStraightBars, type RebarCalc } from '../lib/rebar';
 import { resolveMeshProcurement, type MeshProcurementResult } from '../lib/meshSheets';
 import { levelChoice, meshLevels, specNotation, withDirection, withMode, withoutDirection, withoutExtra, withSpec } from '../lib/rebarMesh';
@@ -18,6 +18,7 @@ import NumberField from './NumberField';
 import Icon from './Icon';
 import StirrupShapeBuilder from './StirrupShapeBuilder';
 import StirrupPlacements from './StirrupPlacements';
+import { resolveStirrupItem } from '../lib/stirrup';
 import { drawnBarLength } from '../lib/straightBarsGeometry';
 
 type T = ReturnType<typeof useT>;
@@ -40,6 +41,7 @@ function meshNotation(mesh: RebarMesh, t: T): string {
 /** What a list row says about an item: its notation (mesh) or its bars (manual). Notation is never translated. */
 function itemSummary(item: RebarItem, t: T, resolved?: ReturnType<typeof resolveStraightBars>): string {
   if (item.kind === 'mesh') return meshNotation(item, t) || t('rebar.mesh');
+  if (item.kind === 'stirrup') return `Ø${item.diameterMm} · ${t(`rebar.stirrup.templates.${item.shape.template}`)}`;
   const parts = [item.diameterMm > 0 ? `Ø${item.diameterMm}` : t('rebar.bars')];
   if (resolved?.count !== null && resolved?.count !== undefined) parts.push(t('rebar.spatial.count', { count: resolved.count }));
   if (resolved?.effectiveLengthM != null) parts.push(`${formatNumber(round(resolved.effectiveLengthM, 2))} ${t('units.m')}`);
@@ -56,10 +58,12 @@ export default function RebarPanel() {
   const selectedId = useAppStore((s) => s.selectedRebarId);
   const setSelectedId = useAppStore((s) => s.setSelectedRebarId);
   const addBars = useAppStore((s) => s.addRebarBars);
+  const addStirrup = useAppStore((s) => s.addRebarStirrup);
   const copyRoomsToRebar = useAppStore((s) => s.copyRoomsToRebar);
   const deleteItem = useAppStore((s) => s.deleteRebarItem);
   const duplicateMesh = useAppStore((s) => s.duplicateRebarMesh);
   const duplicateBars = useAppStore((s) => s.duplicateStraightBars);
+  const duplicateStirrup = useAppStore((s) => s.duplicateStirrupItem);
 
   if (!project) return null;
   const items = rebarOf(project);
@@ -78,9 +82,9 @@ export default function RebarPanel() {
           <span className="color-dot" style={{ background: REBAR_COLOR }} />
           <span className="detail-header-text">
             <span className="detail-title" dir="auto">{markLabel(selected, t)}</span>
-            <span className="detail-subtitle">{t(selected.kind === 'mesh' ? 'rebar.meshZone' : selected.kind === 'bars' && selected.barsZone ? 'rebar.bars' : selected.kind === 'bars' && selected.drawnBars !== undefined ? 'rebar.spatial.individual' : 'rebar.manualBars')}</span>
+            <span className="detail-subtitle">{t(selected.kind === 'mesh' ? 'rebar.meshZone' : selected.kind === 'stirrup' ? 'rebar.stirrupName' : selected.kind === 'bars' && selected.barsZone ? 'rebar.bars' : selected.kind === 'bars' && selected.drawnBars !== undefined ? 'rebar.spatial.individual' : 'rebar.manualBars')}</span>
           </span>
-          <button className="icon-btn" title={t(selected.kind === 'mesh' ? 'rebar.duplicate' : 'rebar.spatial.duplicateItem')} aria-label={t(selected.kind === 'mesh' ? 'rebar.duplicate' : 'rebar.spatial.duplicateItem')} onClick={() => selected.kind === 'mesh' ? duplicateMesh(selected.id) : duplicateBars(selected.id)}>
+          <button className="icon-btn" title={t(selected.kind === 'mesh' ? 'rebar.duplicate' : selected.kind === 'stirrup' ? 'rebar.stirrup.duplicateItem' : 'rebar.spatial.duplicateItem')} aria-label={t(selected.kind === 'mesh' ? 'rebar.duplicate' : selected.kind === 'stirrup' ? 'rebar.stirrup.duplicateItem' : 'rebar.spatial.duplicateItem')} onClick={() => selected.kind === 'mesh' ? duplicateMesh(selected.id) : selected.kind === 'stirrup' ? duplicateStirrup(selected.id) : duplicateBars(selected.id)}>
             <Icon name="copy" />
           </button>
           <button
@@ -95,7 +99,7 @@ export default function RebarPanel() {
         </div>
         {selected.kind === 'mesh' ? (
           <MeshDetail key={selected.id} mesh={selected} calibration={project.pages[selected.pageNumber]?.calibration ?? null} />
-        ) : selected.kind === 'stirrup' ? <><StirrupShapeBuilder item={selected} /><StirrupPlacements item={selected} /></> : (
+        ) : selected.kind === 'stirrup' ? <StirrupDetail item={selected} /> : (
           <BarsDetail key={selected.id} bars={selected} />
         )}
       </div>
@@ -135,6 +139,7 @@ export default function RebarPanel() {
           <Icon name="plus" size={13} />
           {t('rebar.addBars')}
         </button>
+        <button className="btn-ghost small" onClick={() => addStirrup()}><Icon name="plus" size={13} />{t('rebar.stirrup.addItem')}</button>
       </div>
 
       <div className="room-list">
@@ -591,4 +596,25 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
       <p className="muted">{t('concrete.page', { page: bars.pageNumber })}</p>
     </div>
   );
+}
+
+function StirrupDetail({ item }: { item: RebarStirrup }) {
+  const t = useT();
+  const plan = useAppStore((s) => s.project);
+  const update = useAppStore((s) => s.updateRebarItem);
+  if (!plan) return null;
+  const resolved = resolveStirrupItem(item, plan.pages);
+  return <div className="room-detail">
+    <div className="form-grid">
+      <div className="form-row"><label>{t('concrete.mark')}</label>
+        <input dir="auto" value={item.mark} placeholder={markLabel(item, t)} onChange={(e) => update(item.id, markPatch(rebarOf(plan), item, e.target.value))} /></div>
+      <div className="form-row"><label>{t('rebar.diameter')}</label><DiameterSelect value={item.diameterMm} onChange={(mm) => update(item.id, { diameterMm: mm })} /></div>
+      <div className="form-row"><label>{t('concrete.waste')}</label><NumberField value={item.wastePercent} step="1" onChange={(v) => update(item.id, { wastePercent: v ?? 0 })} /></div>
+    </div>
+    <StirrupShapeBuilder item={item} />
+    <StirrupPlacements item={item} />
+    <p>{t('rebar.stirrup.quantity')}: {resolved.totalCount ?? '-'}</p>
+    <Results calc={resolved} showLength />
+    {item.placements.length === 0 ? <p className="muted">{t('rebar.stirrup.noPlacements')}</p> : resolved.status !== 'ok' && <p className="cal-missing">{statusMessage(resolved, t)}</p>}
+  </div>;
 }

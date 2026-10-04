@@ -228,7 +228,7 @@ function addRebarSheet(
     const counted = d.sheets !== null && d.sheets.count !== null;
     const row = rowFor(planName, [
       d.pageNumber,
-      t(d.kind === 'mesh' ? 'rebar.mesh' : 'rebar.bars'),
+      t(d.kind === 'mesh' ? 'rebar.mesh' : d.kind === 'stirrup' ? 'rebar.stirrupName' : 'rebar.bars'),
       markLabel(d, t),
       levelText(d.level, x) || DASH,
       levelReportSpecification(d, x),

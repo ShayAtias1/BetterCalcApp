@@ -77,7 +77,7 @@ export function sheetConfigText(settings: SheetSettings, x: ExportContext): stri
 export function levelSpecification(d: RebarLevelRow, x: ExportContext): string {
   const { t } = x;
   const notation = (r: RebarItemRow) => (r.diameterMm === null ? null : r.spacingCm === null ? `Ø${r.diameterMm}` : `Ø${r.diameterMm} @ ${x.number(r.spacingCm)}`);
-  if (d.kind === 'bars') return notation(d.parts[0]) ?? '-';
+  if (d.kind !== 'mesh') return notation(d.parts[0]) ?? '-';
   const first = d.parts[0];
   if (first.level === null) return '-';
   if (first.direction === 'both') {
@@ -89,9 +89,9 @@ export function levelSpecification(d: RebarLevelRow, x: ExportContext): string {
 
 /** `2 sheets` for a counted mesh level, `10 bars` for manual bars, a dash when there is no count (no layout, no bars). */
 export function levelQuantity(d: RebarLevelRow, { t }: ExportContext): string {
-  if (d.kind === 'bars') {
+  if (d.kind !== 'mesh') {
     const count = d.parts[0].barCount;
-    return count === null ? '-' : t('exports.structural.barsQty', { count });
+    return count === null ? '-' : t(d.kind === 'stirrup' ? 'rebar.stirrup.pieces' : 'exports.structural.barsQty', { count });
   }
   return d.sheets?.count == null ? '-' : t('exports.structural.sheetsQty', { count: d.sheets.count });
 }

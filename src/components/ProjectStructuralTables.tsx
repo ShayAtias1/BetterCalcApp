@@ -96,14 +96,14 @@ export function ProjectRebarTable({ rebar, plans }: { rebar: ProjectRebar; plans
               <tr key={`${planId}|${d.key}`}>
                 <td dir="auto">{planName}</td>
                 <td className="col-page">{d.pageNumber}</td>
-                <td className="qty-id">{t(d.kind === 'mesh' ? 'rebar.mesh' : 'rebar.bars')}</td>
+                <td className="qty-id">{t(d.kind === 'mesh' ? 'rebar.mesh' : d.kind === 'stirrup' ? 'rebar.stirrupName' : 'rebar.bars')}</td>
                 <td dir="auto">{markLabel(d, t)}</td>
                 <td>{levelText(d.level, x) || DASH}</td>
                 <td className="qty-spec" dir="auto">{levelSpecification(d, x)}</td>
                 <td className="num">
                   {levelQuantity(d, x)}
-                  {d.kind === 'bars' && <>
-                    <span className="qty-sub">{t('rebar.barLength')}: <span dir="ltr">{length(d.parts[0].barLengthM)}</span></span>
+                  {d.kind !== 'mesh' && <>
+                    <span className="qty-sub">{t(d.kind === 'stirrup' ? 'rebar.stirrup.lengthUsed' : 'rebar.barLength')}: <span dir="ltr">{length(d.parts[0].barLengthM)}</span></span>
                     <span className="qty-sub">{t('rebar.totalLength')}: <span dir="ltr">{length(d.parts[0].netLengthM)}</span></span>
                   </>}
                 </td>

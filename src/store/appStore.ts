@@ -33,6 +33,7 @@ import {
   changeConcreteKind as changeKind,
   newConcreteElement,
   newRebarBars,
+  newRebarStirrup,
   newRebarMesh,
   removeConcreteElement,
   removeRebarItem,
@@ -382,6 +383,9 @@ interface AppState {
   editMeshLayout: (id: string, level: RebarLevel, edit: ManualMeshEdit) => void;
   /** Adds a manual-bars row on the current page and selects it. */
   addRebarBars: () => void;
+  addRebarStirrup: () => void;
+  duplicateStirrupItem: (id: string) => void;
+  duplicateStirrupPlacement: (id: string, placementId: string) => void;
   startStirrupPlacement: (id: string, kind: 'line' | 'area') => void;
   finishStirrupLine: (start: Point, end: Point) => void;
   editStirrupPlacement: (id: string, placement: StirrupPlacement, debounced?: boolean) => void;
@@ -1081,6 +1085,49 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
     set({ project: { ...updateConcrete(project, id, patch), updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
+  addRebarStirrup: () => {
+    const { project, currentPage } = get();
+    if (!project) return;
+    const item = newRebarStirrup(project, currentPage);
+    ensureOverlayVisible('rebar', get, set);
+    historyTracker.push(get, set, project);
+    set({ project: { ...addRebarItem(project, item), updatedAt: Date.now() }, selectedRebarId: item.id,
+      selectedDrawnBarId: null, selectedStirrupPlacementId: null, barsDrawing: null, stirrupDrawing: null, drawingPoints: [], toolMode: 'select' });
+    scheduleSave(get, set);
+  },
+  duplicateStirrupItem: (id) => {
+    const { project } = get();
+    const source = project && rebarOf(project).find((i) => i.id === id);
+    if (!project || !source || source.kind !== 'stirrup') return;
+    const copy = { ...structuredClone(source), id: uuid() };
+    if (!hasManualMark(copy)) copy.autoNumber = nextAutoNumber(rebarOf(project), 'stirrup');
+    copy.placements = copy.placements.map((p) => {
+      if (p.kind === 'area') return { ...p, id: uuid(), points: structuralDuplicatePoints(project, p.pageNumber, p.points) };
+      const [start, end] = structuralDuplicatePoints(project, p.pageNumber, [p.start, p.end]);
+      return { ...p, id: uuid(), start, end };
+    });
+    historyTracker.push(get, set, project);
+    set({ project: { ...addRebarItem(project, copy), updatedAt: Date.now() }, selectedRebarId: copy.id,
+      selectedStirrupPlacementId: null, selectedDrawnBarId: null, barsDrawing: null, stirrupDrawing: null, drawingPoints: [], toolMode: 'select' });
+    scheduleSave(get, set);
+  },
+  duplicateStirrupPlacement: (id, placementId) => {
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    const source = item?.kind === 'stirrup' ? item.placements.find((p) => p.id === placementId) : undefined;
+    if (!project || !item || item.kind !== 'stirrup' || !source) return;
+    const copied = structuredClone(source);
+    let placement: StirrupPlacement;
+    if (copied.kind === 'area') placement = { ...copied, id: uuid(), points: structuralDuplicatePoints(project, copied.pageNumber, copied.points) };
+    else {
+      const [start, end] = structuralDuplicatePoints(project, copied.pageNumber, [copied.start, copied.end]);
+      placement = { ...copied, id: uuid(), start, end };
+    }
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, id, { placements: [...item.placements, placement] }), updatedAt: Date.now() } });
+    get().selectStirrupPlacement(id, placement.id);
     scheduleSave(get, set);
   },
   startStirrupPlacement: (id, kind) => {

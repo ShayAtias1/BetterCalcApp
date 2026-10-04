@@ -112,7 +112,7 @@ export function RebarQuantityTable({ plan }: { plan: Plan }) {
   const weight = (v: number | null, estimated: boolean) => (v === null ? DASH : <span dir="ltr">{`${estimated ? '≈ ' : ''}${formatNumber(round(v, 2))}`}</span>);
   const notation = (r: RebarItemRow) => (r.diameterMm === null ? null : r.spacingCm === null ? `Ø${r.diameterMm}` : `Ø${r.diameterMm} @ ${r.spacingCm}`);
   const specification = (d: RebarLevelRow) => {
-    if (d.kind === 'bars') return notation(d.parts[0]) ?? DASH;
+    if (d.kind !== 'mesh') return notation(d.parts[0]) ?? DASH;
     const first = d.parts[0];
     if (first.level === null) return DASH;
     if (first.direction === 'both') {
@@ -122,9 +122,9 @@ export function RebarQuantityTable({ plan }: { plan: Plan }) {
     return d.parts.map((p) => `${t(p.direction === 'short' ? 'rebar.overlay.short' : 'rebar.overlay.long')} ${notation(p) ?? DASH}`).join(' | ');
   };
   const quantity = (d: RebarLevelRow) => {
-    if (d.kind === 'bars') {
+    if (d.kind !== 'mesh') {
       const count = d.parts[0].barCount;
-      return count === null ? DASH : t('quantitiesPanel.barsQty', { count });
+      return count === null ? DASH : t(d.kind === 'stirrup' ? 'rebar.stirrup.pieces' : 'quantitiesPanel.barsQty', { count });
     }
     const n = d.sheets?.count;
     return n === null || n === undefined ? DASH : t('quantitiesPanel.sheetsQty', { count: n });
@@ -160,13 +160,13 @@ export function RebarQuantityTable({ plan }: { plan: Plan }) {
               return (
                 <tr key={d.key} className={firstOfPage && i > 0 ? 'qty-page-start' : undefined}>
                   <td className="col-page">{pageCell(firstOfPage, d.pageNumber)}</td>
-                  <td className="qty-id">{t(d.kind === 'mesh' ? 'rebar.mesh' : 'rebar.bars')}</td>
+                  <td className="qty-id">{t(d.kind === 'mesh' ? 'rebar.mesh' : d.kind === 'stirrup' ? 'rebar.stirrupName' : 'rebar.bars')}</td>
                   <td dir="auto">{markLabel(d, t)}</td>
                   <td>{d.level === null ? <span className="qty-none">{DASH}</span> : t(d.level === 'bottom' ? 'rebar.levelBottom' : 'rebar.levelTop')}</td>
                   <td className="qty-spec">{specification(d)}</td>
                   <td className="num">{quantity(d)}
-                    {d.kind === 'bars' && <>
-                      <span className="qty-sub">{t('rebar.barLength')}: <span dir="ltr">{d.parts[0].barLengthM === null ? DASH : `${formatNumber(round(d.parts[0].barLengthM, 2))} ${t('units.m')}`}</span></span>
+                    {d.kind !== 'mesh' && <>
+                      <span className="qty-sub">{t(d.kind === 'stirrup' ? 'rebar.stirrup.lengthUsed' : 'rebar.barLength')}: <span dir="ltr">{d.parts[0].barLengthM === null ? DASH : `${formatNumber(round(d.parts[0].barLengthM, 2))} ${t('units.m')}`}</span></span>
                       <span className="qty-sub">{t('rebar.totalLength')}: <span dir="ltr">{d.parts[0].netLengthM === null ? DASH : `${formatNumber(round(d.parts[0].netLengthM, 2))} ${t('units.m')}`}</span></span>
                     </>}
                   </td>

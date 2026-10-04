@@ -5,6 +5,7 @@ import { resolveStirrupPlacement } from '../lib/stirrupPlacements';
 import { round } from '../lib/geometry';
 import { cmToMeters, metersToCm } from '../lib/structuralUnits';
 import NumberField from './NumberField';
+import Icon from './Icon';
 
 export default function StirrupPlacements({ item }: { item: RebarStirrup }) {
   const t = useT();
@@ -12,6 +13,7 @@ export default function StirrupPlacements({ item }: { item: RebarStirrup }) {
   const start = useAppStore((s) => s.startStirrupPlacement);
   const edit = useAppStore((s) => s.editStirrupPlacement);
   const remove = useAppStore((s) => s.deleteStirrupPlacement);
+  const duplicate = useAppStore((s) => s.duplicateStirrupPlacement);
   const select = useAppStore((s) => s.selectStirrupPlacement);
   const selected = useAppStore((s) => s.selectedStirrupPlacementId);
   if (!plan) return null;
@@ -24,7 +26,8 @@ export default function StirrupPlacements({ item }: { item: RebarStirrup }) {
       return <div className={`rebar-direction ${selected === placement.id ? 'active' : ''}`} key={placement.id}>
         <div className="rebar-direction-head">
           <button className="btn-ghost small" onClick={() => select(item.id, placement.id)}>{t(placement.kind === 'line' ? 'rebar.stirrup.line' : 'rebar.stirrup.area')} {index + 1} · {t('concrete.page', { page: placement.pageNumber })}</button>
-          <button className="btn-ghost small danger" onClick={() => remove(item.id, placement.id)}>{t('rebar.stirrup.deletePlacement')}</button>
+          <button className="icon-btn" title={t('rebar.stirrup.duplicatePlacement')} aria-label={t('rebar.stirrup.duplicatePlacement')} onClick={() => duplicate(item.id, placement.id)}><Icon name="copy" /></button>
+          <button className="icon-btn danger" title={t('rebar.stirrup.deletePlacement')} aria-label={t('rebar.stirrup.deletePlacement')} onClick={() => remove(item.id, placement.id)}><Icon name="trash" /></button>
         </div>
         {placement.kind === 'line' && <div className="form-row"><label>{t('rebar.stirrup.spacing')} ({t('units.cm')})</label>
           <NumberField value={metersToCm(placement.spacingM) ?? undefined} onChange={(v) => edit(item.id, { ...placement, spacingM: cmToMeters(v) ?? 0 }, true)} /></div>}

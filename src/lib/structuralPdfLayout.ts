@@ -141,7 +141,7 @@ function rebarBlocks(rebar: NonNullable<StructuralReport['rebar']>, x: ExportCon
         ...levels.map((d, i) => ({
           cells: [
             i === 0 || levels[i - 1].pageNumber !== d.pageNumber ? `${d.pageNumber}` : '',
-            t(d.kind === 'mesh' ? 'rebar.mesh' : 'rebar.bars'),
+            t(d.kind === 'mesh' ? 'rebar.mesh' : d.kind === 'stirrup' ? 'rebar.stirrupName' : 'rebar.bars'),
             markLabel(d, t),
             levelText(d.level, x) || DASH,
             levelReportSpecification(d, x),

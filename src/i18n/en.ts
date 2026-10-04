@@ -872,6 +872,12 @@ export const en: Dictionary = {
   rebar: {
     stirrupName: 'Stirrup',
     stirrup: {
+      addItem: 'Add stirrup / tie',
+      duplicateItem: 'Duplicate stirrup',
+      duplicatePlacement: 'Duplicate placement',
+      pieces: '{count} stirrups',
+      noPlacements: 'Add a line or area placement to calculate quantity.',
+
       spacingX: 'Spacing X',
       spacingY: 'Spacing Y',
 

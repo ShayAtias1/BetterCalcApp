@@ -876,6 +876,12 @@ export const he = {
   rebar: {
     stirrupName: 'חישוק',
     stirrup: {
+      addItem: 'הוסף חישוק',
+      duplicateItem: 'שכפל חישוק',
+      duplicatePlacement: 'שכפל פריסה',
+      pieces: '{count} חישוקים',
+      noPlacements: 'הוסף פריסת קו או שטח לחישוב הכמות.',
+
       spacingX: 'מרווח X',
       spacingY: 'מרווח Y',
 

@@ -1,3 +1,4 @@
+import { stirrupTemplate } from './stirrupShape';
 import { resolveSheetSettings } from './meshSheets';
 /**
  * Plan → plan changes for concrete zones. Pure: the store wraps each in its history and autosave
@@ -202,4 +203,9 @@ export function addRebarMeshFromRooms(plan: Plan, rooms: Room[]): { plan: Plan; 
     next = addRebarItem(next, mesh);
   }
   return { plan: next, created };
+}
+
+export function newRebarStirrup(plan: Plan, pageNumber: number): RebarStirrup {
+  return { id: uuid(), kind: 'stirrup', pageNumber, mark: '', autoNumber: nextAutoNumber(rebarOf(plan), 'stirrup'),
+    diameterMm: 8, shape: stirrupTemplate('rectangle'), lengthMode: 'automatic', wastePercent: 0, placements: [] };
 }
