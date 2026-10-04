@@ -12,7 +12,7 @@ export function isViewerRenderCancelled(error:unknown): boolean {
 type Pending={resolve:(value:PdfiumResult)=>void;reject:(error:Error)=>void;timer:ReturnType<typeof setTimeout>};
 export type PdfiumRaster=Extract<PdfiumResult,{kind:'render'}>;
 
-/** One worker/WASM document per open main-viewer PDF. Cancel kills active WASM work,
+/** One worker/WASM document per open viewer PDF. Cancel kills active WASM work,
  * not just its eventual result. Bytes are retained only while the viewer session is open.
  */
 export class PdfiumDocument {

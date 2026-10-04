@@ -1,8 +1,14 @@
 import { usePlanNavigation } from '../../hooks/usePlanNavigation';
 import { useWorkspaceLayout } from '../../hooks/useWorkspaceLayout';
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { v4 as uuid } from 'uuid';
-import { loadPdfPlanSource, type PdfPlanSource } from '../../lib/planSource';
+import { loadPdfPlanSource } from '../../lib/planSource';
+import { isViewerRenderCancelled } from '../../lib/pdfViewerSource';
+import { initialPdfScale } from '../../lib/pdfRenderBudget';
+import { useViewerPdfSource } from '../../hooks/useViewerPdfSource';
+import { usePdfDetail } from '../../hooks/usePdfDetail';
+import type { CanvasView } from '../../hooks/useCanvasTransform';
+import type { PdfMatrix } from '../../lib/pdfium/protocol';
 import { loadComparePdfBlob } from '../../db/database';
 import { noteAlignment, trackError } from '../../lib/analytics';
 import { useCompareStore } from '../../store/compareStore';
@@ -26,7 +32,6 @@ import { useLanguage, useT, type Language } from '../../i18n';
 import { exportContext } from '../../lib/exportLanguage';
 import { labelDirection } from '../../lib/textDirection';
 
-const RENDER_SCALE = Math.min(4, Math.max(2, (window.devicePixelRatio || 1) * 2));
 /** New masks start opaque white, the colour of the paper they hide. */
 const MASK_COLOR = '#ffffff';
 
@@ -127,60 +132,64 @@ function MarkupShape({ markup, strokeW, draggable }: { markup: Markup; strokeW: 
 function useLayerRender(
   comparisonId: string | undefined,
   layer: string,
+  fileName: string | undefined,
   pageNumber: number,
   tint: string,
   useSourceColors: boolean,
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
+  containerRef: React.RefObject<HTMLDivElement | null>,
+  view: CanvasView,
+  getView: () => CanvasView,
   onSize: (size: { width: number; height: number }) => void,
   onNumPages: (n: number) => void,
-  /** Called with `${layer}:${pageNumber}` once this layer's raster has actually been painted. */
-  onRendered?: (key: string) => void
-): PdfPlanSource | null {
-  const [source, setSource] = useState<PdfPlanSource | null>(null);
+  onRendered: (key: string) => void,
+  nativeToPage?: PdfMatrix,
+) {
+  const loadBlob = useCallback(() => comparisonId && layer
+    ? loadComparePdfBlob(comparisonId, layer) : Promise.resolve(undefined), [comparisonId, layer]);
+  const { planSource: source } = useViewerPdfSource(
+    comparisonId && layer ? `compare:${comparisonId}:${layer}` : undefined,
+    fileName, loadBlob, pageNumber, onNumPages, 'Compare PDF load failed',
+  );
+  const options = useMemo(() => useSourceColors ? {} : { transparent: true, tint }, [useSourceColors, tint]);
+  const baseScaleRef = useRef(0);
+  const [paintedSource, setPaintedSource] = useState<typeof source>(null);
+  const [detailReady, setDetailReady] = useState(false);
 
   useEffect(() => {
-    if (!comparisonId || !layer) return;
-    let cancelled = false;
-    loadPdfPlanSource(`${comparisonId}:${layer}`, () => loadComparePdfBlob(comparisonId, layer), pageNumber)
-      .then(({ source: s, numPages }) => {
-        if (cancelled) return;
-        onNumPages(numPages);
-        setSource(s);
-      })
-      .catch((err) => {
-        /* surfaced via layer staying blank; comparison-level error handling can be added later */
-        if (!cancelled) trackError('compare_pdf_load', err);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [comparisonId, layer, pageNumber]);
-
-  useEffect(() => {
+    onRendered('');
+    setPaintedSource(null);
+    setDetailReady(false);
+    baseScaleRef.current = 0;
     if (!source || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const size = source.getNativeSize();
     onSize(size);
     canvas.style.width = `${size.width}px`;
     canvas.style.height = `${size.height}px`;
-    const handle = useSourceColors ? source.render(canvas, RENDER_SCALE) : source.renderTinted(canvas, RENDER_SCALE, tint);
+    const scale = initialPdfScale(size.width, size.height);
+    const handle = source.render(canvas, scale, options);
     let cancelled = false;
-    handle.promise
-      .then(() => {
-        if (!cancelled) onRendered?.(`${layer}:${pageNumber}`);
-      })
-      .catch(() => {
-        /* a cancelled/failed render simply never reports ready */
-      });
-    return () => {
-      cancelled = true;
-      handle.cancel();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source, tint, useSourceColors]);
+    void handle.promise.then(() => {
+      if (cancelled) return;
+      baseScaleRef.current = scale;
+      setPaintedSource(source);
+      setDetailReady(true);
+      onRendered(`${layer}:${pageNumber}`);
+    }, (error: unknown) => {
+      if (!cancelled && !isViewerRenderCancelled(error)) trackError('compare_pdf_load', error);
+    });
+    return () => { cancelled = true; handle.cancel(); };
+  }, [source, options, canvasRef, layer, pageNumber, onSize, onRendered]);
 
-  return source;
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    return () => { if (canvas) canvas.width = canvas.height = 0; };
+  }, [source, canvasRef]);
+  const detailHostRef = usePdfDetail(source, `${comparisonId}:${layer}:${pageNumber}`,
+    detailReady, containerRef, baseScaleRef, view, getView,
+    { renderOptions: options, nativeToPage, baseCanvasRef: canvasRef });
+  return { detailHostRef, ready: !!source && paintedSource === source };
 }
 
 export interface CompareCanvasHandle {
@@ -321,27 +330,24 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
   const scale = resolveCompareScale(page, revisionPage);
   const metersPerPixel = scale.metersPerPixel;
 
-  useLayerRender(
-    comparison?.id,
-    'original',
-    originalPageNumber,
-    comparison?.originalColorTint ?? '#9ca3af',
-    comparison?.originalUseSourceColors ?? false,
-    originalCanvasRef,
-    setPageSize,
-    setOriginalNumPages,
-    setRenderedOriginalKey
+  // Reuse the exact existing alignment for density/crop selection only; CSS and saved data stay unchanged.
+  const revisedNativeToPage = useMemo<PdfMatrix>(() => {
+    const origin = applyAlignment({ x: 0, y: 0 }, alignment, pivot);
+    const x = applyAlignment({ x: 1, y: 0 }, alignment, pivot);
+    const y = applyAlignment({ x: 0, y: 1 }, alignment, pivot);
+    return [x.x-origin.x,x.y-origin.y,y.x-origin.x,y.y-origin.y,origin.x,origin.y];
+  }, [alignment.offsetX, alignment.offsetY, alignment.rotationDeg, alignment.scale, pivot.x, pivot.y]);
+  const originalRaster = useLayerRender(
+    comparison?.id, 'original', comparison?.originalFileName, originalPageNumber,
+    comparison?.originalColorTint ?? '#9ca3af', comparison?.originalUseSourceColors ?? false,
+    originalCanvasRef, containerRef, { zoom, pan }, transform.getView,
+    setPageSize, setOriginalNumPages, setRenderedOriginalKey,
   );
-  useLayerRender(
-    comparison?.id,
-    activeRevisionId ? `revision:${activeRevisionId}` : '',
-    revisedPageNumber,
-    activeRevision?.colorTint ?? '#ef4444',
-    activeRevision?.useSourceColors ?? false,
-    revisedCanvasRef,
-    setRevisedPageSize,
-    setRevisedNumPages,
-    setRenderedLayerKey
+  const revisedRaster = useLayerRender(
+    comparison?.id, activeRevisionId ? `revision:${activeRevisionId}` : '', activeRevision?.fileName,
+    revisedPageNumber, activeRevision?.colorTint ?? '#ef4444', activeRevision?.useSourceColors ?? false,
+    revisedCanvasRef, containerRef, { zoom, pan }, transform.getView,
+    setRevisedPageSize, setRevisedNumPages, setRenderedLayerKey, revisedNativeToPage,
   );
 
   useEffect(() => {
@@ -749,12 +755,12 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
     () => ({
       isReadyFor: (revisionId: string, sourcePageKey: number) => {
         if (currentPageKey !== sourcePageKey) return false;
-        if (renderedOriginalKey !== `original:${originalPageNumber}`) return false;
+        if (!originalRaster.ready || renderedOriginalKey !== `original:${originalPageNumber}`) return false;
         // No revision at all (source-only comparison): the source raster is the whole picture.
         if (!revisionId) return true;
         if (revisionId !== activeRevisionId) return false;
         if (revisedPageMissing) return true;
-        return renderedLayerKey === `revision:${revisionId}:${revisedPageNumber}`;
+        return revisedRaster.ready && renderedLayerKey === `revision:${revisionId}:${revisedPageNumber}`;
       },
       isRevisedPageMissing: () => revisedPageMissing,
       exportComposite: async (exportLanguage) => {
@@ -784,15 +790,28 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
         const bctx = bodyCanvas.getContext('2d');
         if (!bctx) return null;
 
-        const originalRaster = originalCanvasRef.current;
-        const revisedRaster = revisedCanvasRef.current;
+        // Export stays on the legacy PDF.js path; never capture PDFium viewer/detail canvases.
+        const exportRaster = async (layer: string, pageNumber: number, sourceColors: boolean, tint: string) => {
+          const { source } = await loadPdfPlanSource(`${comparison.id}:${layer}`,
+            () => loadComparePdfBlob(comparison.id, layer), pageNumber);
+          const raster = document.createElement('canvas'); raster.dir = 'rtl'; raster.lang = 'he';
+          const density = Math.min(4, Math.max(2, (window.devicePixelRatio || 1) * 2));
+          await (sourceColors ? source.render(raster, density) : source.renderTinted(raster, density, tint)).promise;
+          return raster;
+        };
+        const originalRaster = comparison.originalVisible
+          ? await exportRaster('original', originalPageNumber, comparison.originalUseSourceColors, comparison.originalColorTint)
+          : null;
+        const revisedRaster = activeRevision?.visible && !revisedPageMissing
+          ? await exportRaster(`revision:${activeRevisionId}`, revisedPageNumber, activeRevision.useSourceColors, activeRevision.colorTint)
+          : null;
         bctx.fillStyle = '#ffffff';
         bctx.fillRect(0, 0, fullW, fullH);
-        if (comparison.originalVisible) {
+        if (originalRaster) {
           bctx.globalAlpha = comparison.originalOpacity;
           bctx.drawImage(originalRaster, 0, 0, fullW, fullH);
         }
-        if (activeRevision?.visible) {
+        if (revisedRaster && activeRevision) {
           bctx.globalAlpha = activeRevision.opacity;
           bctx.save();
           const px = pivot.x * mult;
@@ -806,6 +825,8 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
           bctx.restore();
         }
         bctx.globalAlpha = 1;
+        if (originalRaster) originalRaster.width = originalRaster.height = 0;
+        if (revisedRaster) revisedRaster.width = revisedRaster.height = 0;
 
         if (svgRef.current) {
           // Rasterized as a standalone image, the overlay inherits nothing from the page — its
@@ -917,6 +938,8 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
       revisedPageMissing,
       renderedLayerKey,
       renderedOriginalKey,
+      originalRaster.ready,
+      revisedRaster.ready,
       currentPageKey,
       originalPageNumber,
       revisedPageNumber,
@@ -996,44 +1019,33 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
         className="pdf-content"
         style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, width: pageSize.width, height: pageSize.height }}
       >
-        {/* The plan's own raster must not depend on the UI language: pdf.js lays its text out with the canvas's
-            direction and language, so the canvases are pinned to the Hebrew RTL context production has always used. */}
-        <canvas
-          ref={originalCanvasRef}
-          dir="rtl"
-          lang="he"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            opacity: originalOpacity,
-            clipPath: originalClip,
-          }}
-        />
+        {/* Shared page coordinates and Compare compositing stay outside the PDF renderer. */}
+        <div style={{ position: 'absolute', top: 0, left: 0, width: pageSize.width, height: pageSize.height,
+          opacity: originalOpacity, clipPath: originalClip, background: 'white',
+          visibility: originalRaster.ready ? 'visible' : 'hidden' }}>
+          <canvas ref={originalCanvasRef} dir="rtl" lang="he"
+            style={{ position: 'absolute', top: 0, left: 0,
+              background: comparison.originalUseSourceColors ? 'white' : 'transparent' }} />
+          <div ref={originalRaster.detailHostRef} aria-hidden="true"
+            style={{ position: 'absolute', top: 0, left: 0, width: pageSize.width, height: pageSize.height,
+              overflow: 'hidden', pointerEvents: 'none' }} />
+        </div>
         <div
           style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: revisedPageSize.width,
-            height: revisedPageSize.height,
+            position: 'absolute', top: 0, left: 0,
+            width: revisedPageSize.width, height: revisedPageSize.height,
             transformOrigin: '50% 50%',
             transform: `translate(${alignment.offsetX}px, ${alignment.offsetY}px) rotate(${alignment.rotationDeg}deg) scale(${alignment.scale})`,
-            clipPath: revisedClip,
+            clipPath: revisedClip, opacity: revisedOpacity,
+            visibility: revisedRaster.ready ? 'visible' : 'hidden',
           }}
         >
-          <canvas
-            ref={revisedCanvasRef}
-            dir="rtl"
-            lang="he"
-            className="revised-sheet"
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              opacity: revisedOpacity,
-            }}
-          />
+          <canvas ref={revisedCanvasRef} dir="rtl" lang="he" className="revised-sheet"
+            style={{ position: 'absolute', top: 0, left: 0,
+              background: activeRevision?.useSourceColors ? 'white' : 'transparent' }} />
+          <div ref={revisedRaster.detailHostRef} aria-hidden="true"
+            style={{ position: 'absolute', top: 0, left: 0, width: revisedPageSize.width, height: revisedPageSize.height,
+              overflow: 'hidden', pointerEvents: 'none' }} />
         </div>
 
         {pageSize.width > 0 && (

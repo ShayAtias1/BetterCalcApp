@@ -1,9 +1,20 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 import type { CanvasView } from './useCanvasTransform';
 import type { PlanRenderHandle } from '../lib/planSource';
-import { isViewerRenderCancelled, type ViewerPageSource } from '../lib/pdfViewerSource';
+import { isViewerRenderCancelled, type ViewerRenderOptions, type ViewerPageSource } from '../lib/pdfViewerSource';
 import { boundedPdfScale, currentPdfDpr, PDF_RENDER_BUDGET } from '../lib/pdfRenderBudget';
 import { trackError } from '../lib/analytics';
+import { apply, inverse } from '../lib/pdfium/coordinates';
+import type { PdfMatrix } from '../lib/pdfium/protocol';
+
+const IDENTITY: PdfMatrix = [1,0,0,1,0,0];
+const DEFAULT_OPTIONS = {};
+export interface PdfDetailOptions {
+  renderOptions?: ViewerRenderOptions;
+  /** Existing layer-local -> shared page mapping; never changes saved alignment. */
+  nativeToPage?: PdfMatrix;
+  baseCanvasRef?: RefObject<HTMLCanvasElement | null>;
+}
 
 function releaseCanvas(canvas: HTMLCanvasElement) {
   canvas.remove();
@@ -19,7 +30,12 @@ export function usePdfDetail(
   baseScaleRef: RefObject<number>,
   view: CanvasView,
   getView: () => CanvasView,
+  options: PdfDetailOptions = DEFAULT_OPTIONS,
 ) {
+  const renderOptions = options.renderOptions;
+  const nativeToPage = options.nativeToPage ?? IDENTITY;
+  const matrixKey = nativeToPage.join(',');
+  const baseCanvasRef = options.baseCanvasRef;
   const detailHostRef = useRef<HTMLDivElement>(null);
   const pointers = useRef(new Set<number>());
   const generation = useRef(0);
@@ -31,9 +47,10 @@ export function usePdfDetail(
     return () => {
       generation.current++;
       interrupt.current?.();
+      if (baseCanvasRef?.current) baseCanvasRef.current.style.clipPath = '';
       if (host) for (const child of Array.from(host.children)) releaseCanvas(child as HTMLCanvasElement);
     };
-  }, [source, pageKey]);
+  }, [source, pageKey, renderOptions, baseCanvasRef]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -97,19 +114,27 @@ export function usePdfDetail(
         const id = ++generation.current;
         const snapshot = getView();
         const dpr = currentPdfDpr();
-        const desired = snapshot.zoom * dpr;
+        const desired = snapshot.zoom * dpr * Math.hypot(nativeToPage[0], nativeToPage[1]);
         if (desired <= baseScaleRef.current) {
           for (const child of Array.from(host.children)) releaseCanvas(child as HTMLCanvasElement);
+          if (baseCanvasRef?.current) baseCanvasRef.current.style.clipPath = '';
           return;
         }
         const size = source.getNativeSize();
         const bounds = container.getBoundingClientRect();
         if (!bounds.width || !bounds.height) return;
-        const margin = PDF_RENDER_BUDGET.detailMarginScreenPx / snapshot.zoom;
-        const x = Math.max(0, -snapshot.pan.x / snapshot.zoom - margin);
-        const y = Math.max(0, -snapshot.pan.y / snapshot.zoom - margin);
-        const right = Math.min(size.width, (bounds.width - snapshot.pan.x) / snapshot.zoom + margin);
-        const bottom = Math.min(size.height, (bounds.height - snapshot.pan.y) / snapshot.zoom + margin);
+        // Inverse-map all visible corners so rotated/scaled Compare layers refine in local coordinates.
+        if (desired <= 0 || !nativeToPage.every(Number.isFinite)) return;
+        let mapping: PdfMatrix;
+        try { mapping = inverse(nativeToPage); } catch { return; }
+        const overscan = PDF_RENDER_BUDGET.detailMarginScreenPx;
+        const corners = [[-overscan,-overscan],[bounds.width+overscan,-overscan],
+          [-overscan,bounds.height+overscan],[bounds.width+overscan,bounds.height+overscan]]
+          .map(([sx,sy]) => apply(mapping,(sx-snapshot.pan.x)/snapshot.zoom,(sy-snapshot.pan.y)/snapshot.zoom));
+        const x = Math.max(0,Math.min(...corners.map(p=>p[0])));
+        const y = Math.max(0,Math.min(...corners.map(p=>p[1])));
+        const right = Math.min(size.width,Math.max(...corners.map(p=>p[0])));
+        const bottom = Math.min(size.height,Math.max(...corners.map(p=>p[1])));
         if (right <= x || bottom <= y) return;
         const region = { x, y, width: right - x, height: bottom - y };
         const scale = boundedPdfScale(region.width, region.height, desired);
@@ -118,9 +143,10 @@ export function usePdfDetail(
         candidate.dir = 'rtl';
         candidate.lang = 'he';
         candidate.style.cssText = 'position:absolute;box-shadow:none;outline:none;pointer-events:none;';
+        candidate.style.background = renderOptions?.transparent ? 'transparent' : 'white';
         candidate.style.left = `${x}px`;
         candidate.style.top = `${y}px`;
-        const handle = source.renderRegion(candidate, scale, region);
+        const handle = source.renderRegion(candidate, scale, region, renderOptions);
         pending = handle;
         void handle.promise.then(() => {
           const latest = getView();
@@ -135,6 +161,13 @@ export function usePdfDetail(
           candidate.style.height = `${candidate.height / scale}px`;
           const previous = Array.from(host.children);
           host.replaceChildren(candidate);
+          if (baseCanvasRef?.current) {
+            // A transparent refinement must replace base ink, not darken it by double compositing.
+            const r = x + candidate.width / scale, b = y + candidate.height / scale;
+            baseCanvasRef.current.style.clipPath = renderOptions?.transparent
+              ? `polygon(evenodd, 0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, ${x}px ${y}px, ${x}px ${b}px, ${r}px ${b}px, ${r}px ${y}px, ${x}px ${y}px)`
+              : '';
+          }
           for (const child of previous) releaseCanvas(child as HTMLCanvasElement);
         }, (error: unknown) => {
           releaseCanvas(candidate);
@@ -153,7 +186,7 @@ export function usePdfDetail(
       if (request.current === schedule) request.current = null;
       if (interrupt.current === stop) interrupt.current = null;
     };
-  }, [source, pageKey, ready, view.zoom, view.pan.x, view.pan.y, containerRef, baseScaleRef, getView]);
+  }, [source, pageKey, ready, view.zoom, view.pan.x, view.pan.y, containerRef, baseScaleRef, getView, renderOptions, matrixKey, baseCanvasRef]);
 
   return detailHostRef;
 }

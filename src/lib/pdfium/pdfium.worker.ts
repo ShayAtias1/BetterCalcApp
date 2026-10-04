@@ -81,7 +81,7 @@ function render(data: PdfiumRasterRequest): Extract<PdfiumResult,{kind:'render'}
     if (!matrix || !clip) throw new Error('PDFium render allocation failed');
     transform.forEach((value,i)=>engine!.pdfium.setValue(matrix+i*4,value,'float'));
     [0,0,width,height].forEach((value,i)=>engine!.pdfium.setValue(clip+i*4,value,'float'));
-    engine.FPDFBitmap_FillRect(bitmap,0,0,width,height,0xffffffff);
+    engine.FPDFBitmap_FillRect(bitmap,0,0,width,height,data.transparent?0:0xffffffff);
     engine.FPDF_RenderPageBitmapWithMatrix(bitmap,page,matrix,clip,17);
     const ptr=engine.FPDFBitmap_GetBuffer(bitmap),stride=engine.FPDFBitmap_GetStride(bitmap);
     if (!ptr || stride<width*4) throw new Error('PDFium render buffer unavailable');

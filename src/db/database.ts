@@ -91,7 +91,7 @@ export async function savePlan(plan: Plan): Promise<void> {
 export async function savePdfBlob(planId: string, blob: Blob): Promise<void> {
   const db = await getDb();
   await db.put('pdfFiles', blob, planId);
-  notifyPdfBlobChanged(planId);
+  notifyPdfBlobChanged(`plan:${planId}`);
 }
 
 export async function loadPdfBlob(planId: string): Promise<Blob | undefined> {
@@ -445,6 +445,7 @@ export async function deleteComparison(id: string): Promise<void> {
 export async function saveComparePdfBlob(comparisonId: string, layer: string, blob: Blob): Promise<void> {
   const db = await getDb();
   await db.put('comparePdfFiles', blob, `${comparisonId}:${layer}`);
+  notifyPdfBlobChanged(`compare:${comparisonId}:${layer}`);
 }
 
 export async function loadComparePdfBlob(comparisonId: string, layer: string): Promise<Blob | undefined> {
@@ -455,4 +456,5 @@ export async function loadComparePdfBlob(comparisonId: string, layer: string): P
 export async function deleteComparePdfBlob(comparisonId: string, layer: string): Promise<void> {
   const db = await getDb();
   await db.delete('comparePdfFiles', `${comparisonId}:${layer}`);
+  notifyPdfBlobChanged(`compare:${comparisonId}:${layer}`);
 }

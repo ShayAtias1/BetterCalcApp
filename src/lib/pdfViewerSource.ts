@@ -7,11 +7,13 @@ import type { PdfMatrix, ViewerRegion } from './pdfium/protocol';
 import { trackError } from './analytics';
 
 export { isViewerRenderCancelled } from './pdfium/document';
-export interface ViewerPageSource extends Pick<PlanPageSource,'getNativeSize'|'render'|'getTextItems'> {
+export interface ViewerRenderOptions { transparent?:boolean; tint?:string }
+export interface ViewerPageSource extends Pick<PlanPageSource,'getNativeSize'|'getTextItems'> {
+  render(canvas:HTMLCanvasElement,scale:number,options?:ViewerRenderOptions):PlanRenderHandle;
   readonly pageNumber:number;
   readonly rotation:number;
   readonly numPages:number;
-  renderRegion(canvas:HTMLCanvasElement,scale:number,region:ViewerRegion):PlanRenderHandle;
+  renderRegion(canvas:HTMLCanvasElement,scale:number,region:ViewerRegion,options?:ViewerRenderOptions):PlanRenderHandle;
   release():void;
 }
 function canvasContext(canvas:HTMLCanvasElement,width:number,height:number){
@@ -22,7 +24,7 @@ function canvasContext(canvas:HTMLCanvasElement,width:number,height:number){
   return ctx;
 }
 
-/** Metadata/text remain on PDF.js. Only main-viewer pixels use PDFium. */
+/** Metadata/text remain on PDF.js. Main and Compare viewer pixels share PDFium. */
 export class ViewerPdfDocument {
   readonly numPages:number;
   private primary:PdfiumDocument | null;
@@ -67,7 +69,7 @@ export class ViewerPdfDocument {
   useFallback(error:unknown){
     if(!this.primary)return;
     this.fallbackReason=error instanceof Error?error.message:String(error);
-    console.warn('Main PDF viewer switching to PDF.js fallback',error);
+    console.warn('PDF viewer switching to PDF.js fallback',error);
     trackError('pdf_load',error);
     this.primary.dispose();this.primary=null;
   }
@@ -80,7 +82,7 @@ export class ViewerPdfDocument {
     this.disposed=true;
     for(const source of Array.from(this.sources))source.release();
     this.primary?.dispose();this.primary=null;
-    void this.metadata.loadingTask.destroy().catch(error=>console.warn('Main PDF metadata cleanup failed',error));
+    void this.metadata.loadingTask.destroy().catch(error=>console.warn('PDF viewer metadata cleanup failed',error));
   }
 }
 
@@ -107,13 +109,13 @@ class ViewerPdfPage implements ViewerPageSource {
     if(this.released)return Promise.reject(viewerRenderCancelled());
     return this.textSource.getTextItems();
   }
-  render(canvas:HTMLCanvasElement,scale:number):PlanRenderHandle{
-    return this.draw(canvas,scale,{x:0,y:0,...this.getNativeSize()},true);
+  render(canvas:HTMLCanvasElement,scale:number,options:ViewerRenderOptions={}):PlanRenderHandle{
+    return this.draw(canvas,scale,{x:0,y:0,...this.getNativeSize()},true,options);
   }
-  renderRegion(canvas:HTMLCanvasElement,scale:number,region:ViewerRegion):PlanRenderHandle{
-    return this.draw(canvas,scale,region,false);
+  renderRegion(canvas:HTMLCanvasElement,scale:number,region:ViewerRegion,options:ViewerRenderOptions={}):PlanRenderHandle{
+    return this.draw(canvas,scale,region,false,options);
   }
-  private draw(canvas:HTMLCanvasElement,desired:number,region:ViewerRegion,wholePage:boolean):PlanRenderHandle{
+  private draw(canvas:HTMLCanvasElement,desired:number,region:ViewerRegion,wholePage:boolean,options:ViewerRenderOptions):PlanRenderHandle{
     let cancelled=false,finished=false;
     let primaryTask:ReturnType<PdfiumDocument['render']>|undefined;
     let fallbackTask:RenderTask|undefined;
@@ -128,13 +130,14 @@ class ViewerPdfPage implements ViewerPageSource {
       if(primary){
         try {
           primaryTask=primary.render({kind:'render',pageNumber:this.pageNumber,rotation:this.rotation,
-            nativeTransform:[...this.viewport.transform] as PdfMatrix,region,scale,width,height});
+            nativeTransform:[...this.viewport.transform] as PdfMatrix,region,scale,width,height,transparent:options.transparent});
           const raster=await primaryTask.promise;
           check();
           const ctx=canvasContext(canvas,width,height);
           ctx.putImageData(new ImageData(new Uint8ClampedArray(raster.pixels),width,height),0,0);
           if(ctx.isContextLost?.())throw new Error('PDFium canvas context lost');
-          this.logRendered('pdfium',region,scale,width,height);
+          this.tint(ctx,width,height,options.tint);
+          this.logRendered('pdfium',region,scale,width,height,options);
           return;
         }catch(error){
           check();
@@ -147,15 +150,17 @@ class ViewerPdfPage implements ViewerPageSource {
       try {
         const ctx=canvasContext(staged,width,height);
         fallbackTask=this.page.render({canvas:staged,canvasContext:ctx,viewport:this.page.getViewport({scale}),
-          transform:[1,0,0,1,-region.x*scale,-region.y*scale]});
+          transform:[1,0,0,1,-region.x*scale,-region.y*scale],
+          background:options.transparent?'rgba(0,0,0,0)':'#ffffff'});
         await fallbackTask.promise;
         check();
         if(ctx.isContextLost?.())throw new Error('PDF.js fallback canvas context lost');
+        this.tint(ctx,width,height,options.tint);
         canvasContext(canvas,width,height).drawImage(staged,0,0);
-        this.logRendered('pdfjs',region,scale,width,height);
+        this.logRendered('pdfjs',region,scale,width,height,options);
       }finally{staged.width=staged.height=0;}
     })().catch(error=>{
-      if(!isViewerRenderCancelled(error))console.error('Main PDF viewer render failed',error);
+      if(!isViewerRenderCancelled(error))console.error('PDF viewer render failed',error);
       throw error;
     }).finally(()=>{finished=true;this.active.delete(handle);});
     const handle:PlanRenderHandle={promise,cancel:()=>{
@@ -165,15 +170,22 @@ class ViewerPdfPage implements ViewerPageSource {
     this.active.add(handle);
     return handle;
   }
+  private tint(ctx:CanvasRenderingContext2D,width:number,height:number,color?:string){
+    if(!color)return;
+    ctx.save();
+    ctx.globalCompositeOperation='source-in';
+    ctx.fillStyle=color;ctx.fillRect(0,0,width,height);
+    ctx.restore();
+  }
   /** Log completed pixels, not the intended engine: fallback must be explicit in development. */
-  private logRendered(renderer:'pdfium'|'pdfjs',region:ViewerRegion,scale:number,width:number,height:number){
+  private logRendered(renderer:'pdfium'|'pdfjs',region:ViewerRegion,scale:number,width:number,height:number,options:ViewerRenderOptions){
     if(!import.meta.env.DEV)return;
     const fallback=renderer==='pdfjs';
     const reason=fallback?` reason=${this.document.getFallbackReason() ?? 'unknown'}`:'';
     console.info(`[BetterCalc PDF] renderer=${renderer} page=${this.pageNumber} fallback=${fallback}${reason}`,{
       rotation:this.rotation,pageBox:this.page.view,userUnit:this.page.userUnit,
       native:this.getNativeSize(),region,scale,raster:{width,height},
-      background:'#ffffff',alpha:true,
+      background:options.transparent?'transparent':'#ffffff',alpha:true,tint:options.tint,
     });
   }
   release(){
@@ -183,6 +195,6 @@ class ViewerPdfPage implements ViewerPageSource {
     const tasks=Array.from(this.active,task=>task.promise);
     this.document.release(this);
     void Promise.allSettled(tasks).then(()=>{this.page.cleanup();})
-      .catch(error=>console.warn('Main PDF page cleanup failed',error));
+      .catch(error=>console.warn('PDF viewer page cleanup failed',error));
   }
 }

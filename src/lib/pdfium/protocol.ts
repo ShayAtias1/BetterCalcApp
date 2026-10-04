@@ -9,6 +9,7 @@ export interface PdfiumRasterRequest {
   region: ViewerRegion;
   width: number;
   height: number;
+  transparent?: boolean;
 }
 export type PdfiumRequest =
   | { kind: 'open'; bytes: ArrayBuffer }
