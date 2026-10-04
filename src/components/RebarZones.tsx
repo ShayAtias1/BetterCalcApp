@@ -3,7 +3,9 @@ import { polygonCentroid } from '../lib/geometry';
 import { labelDirection } from '../lib/textDirection';
 import { markLabel } from '../lib/structuralMarks';
 import { REBAR_COLOR, rebarZoneRows } from '../lib/structuralOverlay';
-import { useLanguage, useT } from '../i18n';
+import { formatNumber, useLanguage, useT } from '../i18n';
+import type { Calibration } from '../types';
+import { prepareStraightBarsOverlay } from '../lib/straightBarsOverlay';
 
 export { REBAR_COLOR };
 
@@ -19,19 +21,35 @@ export default function RebarZones({
   selectedId,
   strokeW,
   zoom,
+  calibration,
 }: {
   items: RebarItem[];
   selectedId: string | null;
   strokeW: number;
   zoom: number;
+  calibration: Calibration | null;
 }) {
   const t = useT();
   const language = useLanguage();
   const meshes = items.filter((i): i is RebarMesh => i.kind === 'mesh' && i.points.length >= 3);
-  if (meshes.length === 0) return null;
+  const bars = items.filter((i) => i.kind === 'bars' && i.barsZone);
 
   return (
     <g className="rebar-zones" pointerEvents="none">
+      {bars.map((item) => {
+        if (item.kind !== 'bars') return null;
+        const overlay = prepareStraightBarsOverlay(item, calibration, t, formatNumber);
+        const selected = item.id === selectedId;
+        return <g key={item.id}>
+          <polygon points={overlay.points.map((p) => `${p.x},${p.y}`).join(' ')} fill={REBAR_COLOR} fillOpacity={selected ? 0.09 : 0.03}
+            stroke={REBAR_COLOR} strokeWidth={strokeW} strokeDasharray={`${3 / zoom} ${3 / zoom}`} />
+          {overlay.lines.map((line, index) => <line key={index} x1={line.start.x} y1={line.start.y} x2={line.end.x} y2={line.end.y}
+            stroke={REBAR_COLOR} strokeWidth={selected ? strokeW * 1.5 : strokeW} />)}
+          {overlay.center && overlay.rows.map((row, index) => <text key={index} x={overlay.center!.x} y={overlay.center!.y + index * 12 / zoom}
+            fontSize={10.5 / zoom} fill={REBAR_COLOR} textAnchor="middle" direction={labelDirection(row, language)}
+            paintOrder="stroke" stroke="#fff" strokeWidth={3 / zoom} strokeLinejoin="round">{row}</text>)}
+        </g>;
+      })}
       {meshes.map((m) => {
         const selected = m.id === selectedId;
         const pts = m.points.map((p) => `${p.x},${p.y}`).join(' ');

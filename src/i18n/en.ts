@@ -870,6 +870,17 @@ export const en: Dictionary = {
 
   // Rebar takeoff: mesh zones (a marked area plus layers) and manual bars.
   rebar: {
+    spatial: {
+      count: '{count} bars',
+      markArea: 'Mark area',
+      changeZone: 'Re-mark area',
+      removeZone: 'Remove area',
+      direction: 'Bar direction',
+      long: 'Long direction',
+      short: 'Short direction',
+      manualLength: 'Override length',
+      automaticLength: 'Automatic length',
+    },
     mesh: 'Mesh',
     bars: 'Bars',
     meshZone: 'Mesh zone',

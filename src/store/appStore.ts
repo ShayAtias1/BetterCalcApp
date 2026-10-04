@@ -44,6 +44,8 @@ import {
   type RebarPatch,
 } from '../lib/structuralMutations';
 import { polygonAreaPx } from '../lib/geometry';
+import { isRectangle } from '../lib/zoneGeometry';
+import { resolveStraightBars } from '../lib/rebar';
 import { overlayForTool, readOverlayVisibility, OVERLAY_STORAGE_KEY, type OverlayKey, type OverlayVisibility } from '../lib/overlayVisibility';
 import { createHistoryTracker } from '../lib/undoHistory';
 import { loadPdfPlanSource } from '../lib/planSource';
@@ -233,6 +235,7 @@ interface AppState {
    * in history — and reset to 'room' whenever a plan is opened or closed.
    */
   drawTarget: DrawTarget;
+  barsDrawing: 'zone' | null;
   /** The concrete zone open in the Concrete tab's form. Session UI state, like `selectedRoomId`: not persisted and cleared by undo, redo, page changes and plan switches. */
   selectedConcreteId: string | null;
   /** The rebar item open in the Rebar tab's form. Session UI state, cleared like `selectedConcreteId`. */
@@ -346,7 +349,9 @@ interface AppState {
   /** Changes the kind of an existing zone (mark renumbered if still automatic). One undo step. */
   changeConcreteElementKind: (id: string, kind: ConcreteKind) => void;
   /** Translate a whole zone in one undo/autosave action; manual sheet coordinates stay local. */
-  moveStructuralZone: (kind: 'concrete' | 'mesh', id: string, offset: Point) => void;
+  startBarsZone: (id: string) => void;
+  removeBarsZone: (id: string) => void;
+  moveStructuralZone: (kind: 'concrete' | 'mesh' | 'bars', id: string, offset: Point) => void;
   duplicateConcreteElement: (id: string) => void;
   deleteConcreteElement: (id: string) => void;
   /**
@@ -506,6 +511,17 @@ function commitStructuralZone(get: () => AppState, set: (patch: Partial<AppState
     set({ drawingPoints: [] });
     return;
   }
+  if (drawTarget === 'rebar' && get().barsDrawing === 'zone') {
+    const item = rebarOf(project).find((i) => i.id === get().selectedRebarId);
+    if (!item || item.kind !== 'bars' || !isRectangle(points)) return;
+    historyTracker.push(get, set, project);
+    const barsZone = { ...item.barsZone, pageNumber: currentPage, points: structuredClone(points),
+      direction: item.barsZone?.direction ?? 'long' as const, lengthMode: item.barsZone?.lengthMode ?? 'automatic' as const };
+    set({ project: { ...updateRebar(project, item.id, { barsZone, pageNumber: currentPage }), updatedAt: Date.now() },
+      drawingPoints: [], barsDrawing: null, toolMode: 'select' });
+    scheduleSave(get, set);
+    return;
+  }
   historyTracker.push(get, set, project);
   if (drawTarget === 'rebar') {
     const mesh = newRebarMesh(project, currentPage, points);
@@ -591,6 +607,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   calibrationPoints: [],
   drawingPoints: [],
   drawTarget: 'room',
+  barsDrawing: null,
   selectedConcreteId: null,
   selectedRebarId: null,
   concreteKind: 'slab',
@@ -657,6 +674,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedConcreteId: null,
       selectedRebarId: null,
       drawTarget: 'room',
+  barsDrawing: null,
       exportRegions: {},
       activeApartmentNumber: '',
       history: [],
@@ -979,6 +997,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setToolMode: (m) => {
     set({
       toolMode: m,
+      barsDrawing: null,
       calibrationPoints: [],
       drawingPoints: [],
       measurePoints: [],
@@ -1020,7 +1039,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Changing the target drops a shape in progress: it was started for the previous target.
   setDrawTarget: (target) => {
     if (get().drawTarget === target) return;
-    set({ drawTarget: target, drawingPoints: [] });
+    set({ drawTarget: target, drawingPoints: [], barsDrawing: null });
     ensureOverlayVisible(overlayForTool(get().toolMode, target), get, set);
   },
   setSelectedConcreteId: (id) => set({ selectedConcreteId: id }),
@@ -1032,15 +1051,36 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ project: { ...updateConcrete(project, id, patch), updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
+  startBarsZone: (id) => {
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    if (!item || item.kind !== 'bars') return;
+    ensureOverlayVisible('rebar', get, set);
+    set({ selectedRebarId: id, drawTarget: 'rebar', barsDrawing: 'zone', toolMode: 'draw-rect', drawingPoints: [] });
+  },
+  removeBarsZone: (id) => {
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    if (!project || !item || item.kind !== 'bars' || !item.barsZone) return;
+    const resolved = resolveStraightBars(item, project.pages[item.pageNumber]?.calibration ?? null);
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, id, { barsZone: undefined, lengthM: resolved.effectiveLengthM ?? item.lengthM }), updatedAt: Date.now() },
+      barsDrawing: null, drawingPoints: [], toolMode: 'select' });
+    scheduleSave(get, set);
+  },
   moveStructuralZone: (kind, id, offset) => {
     const { project } = get();
     if (!project || (!offset.x && !offset.y) || !Number.isFinite(offset.x) || !Number.isFinite(offset.y)) return;
     const source = kind === 'concrete'
       ? concreteOf(project).find((element) => element.id === id)
-      : rebarOf(project).find((item) => item.id === id && item.kind === 'mesh');
-    if (!source || !('points' in source)) return;
-    const points = source.points.map((point) => ({ ...point, x: point.x + offset.x, y: point.y + offset.y }));
-    const next = kind === 'concrete' ? updateConcrete(project, id, { points }) : updateRebar(project, id, { points });
+      : rebarOf(project).find((item) => item.id === id);
+    if (!source) return;
+    const original = 'points' in source ? source.points : source.kind === 'bars' ? source.barsZone?.points : undefined;
+    if (!original) return;
+    const points = original.map((point) => ({ ...point, x: point.x + offset.x, y: point.y + offset.y }));
+    const next = kind === 'concrete' ? updateConcrete(project, id, { points })
+      : source.kind === 'bars' && source.barsZone ? updateRebar(project, id, { barsZone: { ...source.barsZone, points } })
+      : updateRebar(project, id, { points });
     historyTracker.push(get, set, project);
     set({ project: { ...next, updatedAt: Date.now() } });
     scheduleSave(get, set);

@@ -134,7 +134,17 @@ export interface RebarMesh extends MarkFields {
 }
 
 /** Bars entered by quantity — no shape on the plan: diameter, how many, how long each. */
+export interface BarsZone {
+  pageNumber: number;
+  points: Point[];
+  direction: RebarLayerDirection;
+  lengthMode: 'automatic' | 'manual';
+  manualLengthM?: number;
+}
+
 export interface RebarBars extends MarkFields {
+  /** Optional spatial layout. Absent on existing numerical Bars; never added on read. */
+  barsZone?: BarsZone;
   id: string;
   kind: 'bars';
   /** The page the row was added on; only used to group the summary. */

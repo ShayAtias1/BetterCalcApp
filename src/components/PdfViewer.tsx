@@ -228,17 +228,22 @@ export default function PdfViewer() {
 
   const vertexDrag = useRef<{ pointIndex: number } | null>(null);
   const structuralDrag = useRef<{
-    kind: 'concrete' | 'mesh'; id: string; start: Point; points: Point[]; offset: Point;
+    kind: 'concrete' | 'mesh' | 'bars'; id: string; start: Point; points: Point[]; offset: Point;
   } | null>(null);
   const [structuralPreview, setStructuralPreview] = useState<{
-    kind: 'concrete' | 'mesh'; id: string; points: Point[];
+    kind: 'concrete' | 'mesh' | 'bars'; id: string; points: Point[];
   } | null>(null);
   const suppressStructuralClick = useRef(false);
   const structuralPlan = useMemo(() => {
     if (!project || !structuralPreview) return project;
     return structuralPreview.kind === 'concrete'
       ? updateConcreteElement(project, structuralPreview.id, { points: structuralPreview.points })
-      : updateRebarItem(project, structuralPreview.id, { points: structuralPreview.points });
+      : (() => {
+        const item = rebarOf(project).find((i) => i.id === structuralPreview.id);
+        return item?.kind === 'bars' && item.barsZone
+          ? updateRebarItem(project, item.id, { barsZone: { ...item.barsZone, points: structuralPreview.points } })
+          : updateRebarItem(project, structuralPreview.id, { points: structuralPreview.points });
+      })();
   }, [project, structuralPreview]);
 
   // Changing selection, page or editing context cancels an uncommitted whole-zone drag.
@@ -531,11 +536,12 @@ export default function PdfViewer() {
       const native = screenToNative(e.clientX, e.clientY);
       const selected = drawTarget === 'concrete'
         ? overlayVisible.concrete && concreteOf(project).find((item) => item.id === selectedConcreteId)
-        : overlayVisible.rebar && rebarOf(project).find((item) => item.id === selectedRebarId && item.kind === 'mesh');
-      if (selected && 'points' in selected && selected.pageNumber === currentPage && pointInPolygon(native, selected.points)) {
+        : overlayVisible.rebar && rebarOf(project).find((item) => item.id === selectedRebarId);
+      const points = selected && ('points' in selected ? selected.points : selected.kind === 'bars' ? selected.barsZone?.points : undefined);
+      if (selected && points && selected.pageNumber === currentPage && pointInPolygon(native, points)) {
         structuralDrag.current = {
-          kind: drawTarget === 'concrete' ? 'concrete' : 'mesh', id: selected.id,
-          start: native, points: selected.points, offset: { x: 0, y: 0 },
+          kind: drawTarget === 'concrete' ? 'concrete' : selected.kind === 'bars' ? 'bars' : 'mesh', id: selected.id,
+          start: native, points, offset: { x: 0, y: 0 },
         };
       }
       return;
@@ -821,7 +827,10 @@ export default function PdfViewer() {
       if (drawTarget === 'rebar') {
         const mesh = !overlayVisible.rebar
           ? undefined
-          : [...rebarOf(project)].reverse().find((m) => m.kind === 'mesh' && m.pageNumber === currentPage && polygonAreaPx(m.points) > 0 && pointInPolygon(native, m.points));
+          : [...rebarOf(project)].reverse().find((m) => {
+            const points = m.kind === 'mesh' ? m.points : m.barsZone?.points;
+            return m.pageNumber === currentPage && points && polygonAreaPx(points) > 0 && pointInPolygon(native, points);
+          });
         setSelectedRebarId(mesh ? mesh.id : null);
         return;
       }
@@ -913,7 +922,7 @@ export default function PdfViewer() {
             )}
             <MeshLayoutOverlay plan={structuralPlan ?? project} pageNumber={currentPage} selectedId={selectedRebarId} zoom={zoom} visible={overlayVisible.rebar} screenToNative={screenToNative} interactionAllowed={toolMode === 'select'} />
             {overlayVisible.rebar && (
-              <RebarZones items={rebarOf(structuralPlan ?? project).filter((m) => m.pageNumber === currentPage)} selectedId={selectedRebarId} strokeW={strokeW} zoom={zoom} />
+              <RebarZones calibration={project.pages[currentPage]?.calibration ?? null} items={rebarOf(structuralPlan ?? project).filter((m) => m.pageNumber === currentPage)} selectedId={selectedRebarId} strokeW={strokeW} zoom={zoom} />
             )}
 
             {/* Detection suggestions: dashed, faint and unselectable, so they never read as rooms

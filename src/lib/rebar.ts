@@ -180,18 +180,30 @@ function calculateLayer(layer: RebarLayer, zone: ReturnType<typeof zoneGeometry>
   return layerResult(layer.id, diameterMm, spacingM, null, null, zone.areaM2 / spacingM, true);
 }
 
-function calculateBars(item: RebarBars): RebarCalc {
+export interface StraightBarsResult extends RebarCalc {
+  mode: 'legacy' | 'zone';
+  count: number | null;
+  effectiveLengthM: number | null;
+  automaticLengthM: number | null;
+}
+
+/** Single quantity source for numerical Bars and spatial Bars Zones. No persisted derived lengths. */
+export function resolveStraightBars(item: RebarBars, calibration: Calibration | null): StraightBarsResult {
   const wastePercent = finiteNonNegative(item.wastePercent, 0);
   const diameterMm = finitePositive(item.diameterMm);
-  const lengthM = finitePositive(item.lengthM);
-  // Zero bars is a real zero; a missing or negative count is not.
+  const zone = item.barsZone;
+  const sides = zone ? zoneGeometry(zone.points, calibration?.metersPerPixel ?? 0)?.sides : null;
+  const automaticLengthM = sides ? (zone?.direction === 'short' ? sides.shortM : sides.longM) : null;
+  const lengthM = zone ? zone.lengthMode === 'manual' ? finitePositive(zone.manualLengthM) : automaticLengthM : finitePositive(item.lengthM);
   const count = typeof item.count === 'number' && Number.isFinite(item.count) && item.count >= 0 ? item.count : null;
-  if (diameterMm === null || lengthM === null || count === null) {
-    return finish('invalid-input', [emptyLayer(item.id, false, diameterMm)], wastePercent);
-  }
-  return finish('ok', [layerResult(item.id, diameterMm, null, count, lengthM, count * lengthM, false)], wastePercent);
+  const status: RebarStatus = zone && zone.lengthMode !== 'manual' && !finitePositive(calibration?.metersPerPixel)
+    ? 'no-scale' : diameterMm === null || lengthM === null || count === null ? 'invalid-input' : 'ok';
+  const calc = status === 'ok'
+    ? finish('ok', [layerResult(item.id, diameterMm!, null, count, lengthM, count! * lengthM!, false)], wastePercent)
+    : finish(status, [emptyLayer(item.id, false, diameterMm)], wastePercent);
+  return { ...calc, mode: zone ? 'zone' : 'legacy', count, effectiveLengthM: lengthM, automaticLengthM };
 }
 
 export function calculateRebar(item: RebarItem, calibration: Calibration | null): RebarCalc {
-  return item.kind === 'mesh' ? calculateMesh(item, calibration) : calculateBars(item);
+  return item.kind === 'mesh' ? calculateMesh(item, calibration) : resolveStraightBars(item, calibration);
 }

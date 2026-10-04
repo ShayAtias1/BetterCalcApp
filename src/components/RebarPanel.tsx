@@ -2,7 +2,7 @@ import { formatNumber, useT } from '../i18n';
 import { useAppStore } from '../store/appStore';
 import type { Calibration } from '../types';
 import type { BarSpec, MeshReinforcement, RebarBars, RebarItem, RebarLayerDirection, RebarLevel, RebarMesh } from '../types/structural';
-import { REBAR_DIAMETERS_MM, calculateRebar, type RebarCalc } from '../lib/rebar';
+import { REBAR_DIAMETERS_MM, calculateRebar, resolveStraightBars, type RebarCalc } from '../lib/rebar';
 import { resolveMeshProcurement, type MeshProcurementResult } from '../lib/meshSheets';
 import { levelChoice, meshLevels, specNotation, withDirection, withMode, withoutDirection, withoutExtra, withSpec } from '../lib/rebarMesh';
 import type { MeshLevelChoice } from '../lib/structuralMutations';
@@ -101,7 +101,7 @@ export default function RebarPanel() {
 
   const toggleTool = (mode: 'draw' | 'draw-rect') => setToolMode(toolMode === mode ? 'select' : mode);
   const select = (item: RebarItem) => {
-    if (item.kind === 'mesh') setCurrentPage(item.pageNumber);
+    setCurrentPage(item.pageNumber);
     setSelectedId(item.id);
   };
 
@@ -490,12 +490,35 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
   const updateItem = useAppStore((s) => s.updateRebarItem);
   const plan = useAppStore((s) => s.project);
   const siblings = plan ? rebarOf(plan) : [];
-  const calc = calculateRebar(bars, null);
+  const startZone = useAppStore((s) => s.startBarsZone);
+  const removeZone = useAppStore((s) => s.removeBarsZone);
+  const calibration = plan?.pages[bars.pageNumber]?.calibration ?? null;
+  const calc = resolveStraightBars(bars, calibration);
+  const zone = bars.barsZone;
 
   return (
     <div className="room-detail">
-      {calc.status !== 'ok' && <div className="warning-box">{t('rebar.barsInvalid')}</div>}
+      {calc.status !== 'ok' && <div className="warning-box">{statusMessage(calc, t)}</div>}
       <Results calc={calc} showLength />
+      <div className="concrete-kinds">
+        <button className="btn-ghost small" onClick={() => startZone(bars.id)}>{t(zone ? 'rebar.spatial.changeZone' : 'rebar.spatial.markArea')}</button>
+        {zone && <button className="btn-ghost small danger" onClick={() => removeZone(bars.id)}>{t('rebar.spatial.removeZone')}</button>}
+      </div>
+      {zone && <>
+        <div className="form-row">
+          <label>{t('rebar.spatial.direction')}</label>
+          <select value={zone.direction} onChange={(e) => updateItem(bars.id, { barsZone: { ...zone, direction: e.target.value as RebarLayerDirection } })}>
+            <option value="long">{t('rebar.spatial.long')}</option>
+            <option value="short">{t('rebar.spatial.short')}</option>
+          </select>
+        </div>
+        <label className="wi-check">
+          <input type="checkbox" checked={zone.lengthMode === 'manual'} onChange={(e) => updateItem(bars.id, { barsZone: { ...zone,
+            lengthMode: e.target.checked ? 'manual' : 'automatic', manualLengthM: e.target.checked ? calc.effectiveLengthM ?? undefined : undefined } })} />
+          {t('rebar.spatial.manualLength')}
+        </label>
+        {zone.lengthMode !== 'manual' && <p className="muted">{t('rebar.spatial.automaticLength')}: {calc.effectiveLengthM === null ? '-' : metres(calc.effectiveLengthM, t)}</p>}
+      </>}
       <div className="form-grid">
         <div className="form-row">
           <label>{t('concrete.mark')}</label>
@@ -509,10 +532,11 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
           <label>{t('rebar.barCount')}</label>
           <NumberField value={bars.count || undefined} step="1" onChange={(v) => updateItem(bars.id, { count: v ?? 0 })} />
         </div>
-        <div className="form-row">
+        {(!zone || zone.lengthMode === 'manual') && <div className="form-row">
           <label>{t('rebar.barLength')} ({t('units.m')})</label>
-          <NumberField value={bars.lengthM || undefined} onChange={(v) => updateItem(bars.id, { lengthM: v ?? 0 })} />
-        </div>
+          <NumberField value={(zone ? zone.manualLengthM : bars.lengthM) || undefined} onChange={(v) => updateItem(bars.id,
+            zone ? { barsZone: { ...zone, manualLengthM: v ?? 0 } } : { lengthM: v ?? 0 })} />
+        </div>}
         <div className="form-row">
           <label>{t('concrete.waste')}</label>
           <NumberField value={bars.wastePercent} step="1" onChange={(v) => updateItem(bars.id, { wastePercent: v ?? 0 })} />
