@@ -884,13 +884,13 @@ export const en: Dictionary = {
       doneEditing: 'Done editing bar',
 
       mode: 'Bars layout',
-      area: 'Bars area',
+      area: 'Area',
       individual: 'Individual bars',
       drawBar: 'Draw bar',
 
       count: '{count} bars',
       markArea: 'Mark area',
-      changeZone: 'Re-mark area',
+      changeZone: 'Change area',
       removeZone: 'Remove area',
       direction: 'Bar direction',
       long: 'Long direction',

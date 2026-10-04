@@ -76,7 +76,7 @@ export default function RebarPanel() {
           <span className="color-dot" style={{ background: REBAR_COLOR }} />
           <span className="detail-header-text">
             <span className="detail-title" dir="auto">{markLabel(selected, t)}</span>
-            <span className="detail-subtitle">{t(selected.kind === 'mesh' ? 'rebar.meshZone' : selected.barsZone ? 'rebar.spatial.area' : selected.drawnBars !== undefined ? 'rebar.spatial.individual' : 'rebar.manualBars')}</span>
+            <span className="detail-subtitle">{t(selected.kind === 'mesh' ? 'rebar.meshZone' : selected.barsZone ? 'rebar.bars' : selected.drawnBars !== undefined ? 'rebar.spatial.individual' : 'rebar.manualBars')}</span>
           </span>
           <button className="icon-btn" title={t(selected.kind === 'mesh' ? 'rebar.duplicate' : 'rebar.spatial.duplicateItem')} aria-label={t(selected.kind === 'mesh' ? 'rebar.duplicate' : 'rebar.spatial.duplicateItem')} onClick={() => selected.kind === 'mesh' ? duplicateMesh(selected.id) : duplicateBars(selected.id)}>
             <Icon name="copy" />
@@ -515,7 +515,7 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
       {calc.status !== 'ok' && <div className="warning-box">{statusMessage(calc, t)}</div>}
       <Results calc={calc} showLength />
       <div className="concrete-kinds" role="group" aria-label={t('rebar.spatial.mode')}>
-        <button className={`btn-ghost small ${zone ? 'active' : ''}`} disabled={bars.drawnBars !== undefined} onClick={() => startZone(bars.id)}>{t('rebar.spatial.area')}</button>
+        <button className={`btn-ghost small ${bars.drawnBars === undefined ? 'active' : ''}`} aria-pressed={bars.drawnBars === undefined} disabled={bars.drawnBars !== undefined} onClick={() => startZone(bars.id)}>{t('rebar.spatial.area')}</button>
         <button className={`btn-ghost small ${bars.drawnBars !== undefined ? 'active' : ''}`} disabled={!!zone} onClick={() => individualMode(bars.id)}>{t('rebar.spatial.individual')}</button>
       </div>
       {bars.drawnBars !== undefined ? <>

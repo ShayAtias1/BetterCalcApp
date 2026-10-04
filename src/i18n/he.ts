@@ -888,13 +888,13 @@ export const he = {
       doneEditing: 'סיום עריכת מוט',
 
       mode: 'פריסת מוטות',
-      area: 'אזור מוטות',
+      area: 'אזור',
       individual: 'מוטות בודדים',
       drawBar: 'צייר מוט',
 
       count: '{count} מוטות',
       markArea: 'סמן אזור',
-      changeZone: 'סמן אזור מחדש',
+      changeZone: 'שנה אזור',
       removeZone: 'הסר אזור',
       direction: 'כיוון המוטות',
       long: 'לאורך',
