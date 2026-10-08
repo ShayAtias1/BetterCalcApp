@@ -141,11 +141,11 @@ export default function RebarPanel({ readOnly = false }: { readOnly?: boolean })
           addLabel={t('rebar.copy.add')}
           doneLabel={(count) => t('rebar.copy.done', { count })}
         />
-        <button className="btn-ghost small" onClick={() => addBars()} title={t('rebar.addBarsHint')}>
+        <button className="btn-secondary structural-entry-action" onClick={() => addBars()} title={t('rebar.addBarsHint')}>
           <Icon name="plus" size={13} />
           {t('rebar.addBars')}
         </button>
-        <button className="btn-ghost small" onClick={() => addStirrup()}><Icon name="plus" size={13} />{t('rebar.stirrup.addItem')}</button>
+        <button className="btn-secondary structural-entry-action" onClick={() => addStirrup()}><Icon name="plus" size={13} />{t('rebar.stirrup.addItem')}</button>
       </div>
 
       </div>

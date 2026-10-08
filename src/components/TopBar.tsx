@@ -258,6 +258,7 @@ export default function TopBar() {
           label={t('topBar.view')}
           variant="ghost"
           title={t('topBar.viewHint')}
+          desktopMaxWidth={260}
           highlighted={!allVisible}
         >
           {OVERLAY_KEYS.map((key) => (

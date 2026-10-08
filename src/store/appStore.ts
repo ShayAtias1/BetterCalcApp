@@ -503,6 +503,7 @@ interface AppState {
   setSelectedMarkupId: (id: string | null) => void;
 
   updateRoom: (id: string, patch: Partial<Room>) => void;
+  assignRoomsToApartment: (roomIds: string[], apartmentNumber: string) => void;
   /**
    * Sets (or clears, with null) the room type the user picked, and — only for a room that has no
    * work items yet — seeds the profile's work items. One mutation, so one undo step.
@@ -1794,6 +1795,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
     const rooms = project.rooms.map((r) => (r.id === id ? { ...r, ...patch } : r));
+    set({ project: { ...project, rooms, updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
+  assignRoomsToApartment: (roomIds, apartmentNumber) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const target = apartmentNumber.trim();
+    if (!project || !target) return;
+    const selected = new Set(roomIds);
+    if (!project.rooms.some((room) => selected.has(room.id) && room.apartmentNumber !== target)) return;
+    historyTracker.push(get, set, project);
+    const rooms = project.rooms.map((room) =>
+      selected.has(room.id) && room.apartmentNumber !== target ? { ...room, apartmentNumber: target } : room
+    );
     set({ project: { ...project, rooms, updatedAt: Date.now() } });
     scheduleSave(get, set);
   },

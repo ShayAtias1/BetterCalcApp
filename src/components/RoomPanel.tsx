@@ -1,3 +1,4 @@
+import { promptDialog } from '../lib/appDialogs';
 import { useBulkTakeoffDialog } from './bulkTakeoffEntry';
 import { roomHasPendingDetectionWarning } from '../lib/localAiReview';
 import AiSpaceDetectionPanel from './AiSpaceDetectionPanel';
@@ -50,6 +51,7 @@ export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) 
   const toolMode = useAppStore((s) => s.toolMode);
   const setToolMode = useAppStore((s) => s.setToolMode);
   const updateRoom = useAppStore((s) => s.updateRoom);
+  const assignRoomsToApartment = useAppStore((s) => s.assignRoomsToApartment);
   const setRoomType = useAppStore((s) => s.setRoomType);
   const applyRoomTemplate = useAppStore((s) => s.applyRoomTemplate);
   const newRoomTemplate = useAppStore((s) => s.newRoomTemplate);
@@ -66,6 +68,14 @@ export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) 
   const setActiveApartmentNumber = useAppStore((s) => s.setActiveApartmentNumber);
   const [apartmentDialogSource, setApartmentDialogSource] = useState<string | null>(null);
   const [showDetection, setShowDetection] = useState(false);
+  const [assigningApartment, setAssigningApartment] = useState(false);
+  const [assignmentRoomIds, setAssignmentRoomIds] = useState<string[]>([]);
+  const [assignmentTarget, setAssignmentTarget] = useState('');
+  useEffect(() => {
+    setAssigningApartment(false);
+    setAssignmentRoomIds([]);
+    setAssignmentTarget('');
+  }, [project?.id, readOnly]);
   // List ⇄ detail is pure navigation: it lives here, never in the project or in the store's
   // selection. Going back to the list keeps `selectedRoomId`, so the room stays highlighted on the
   // plan and one click reopens it.
@@ -87,6 +97,10 @@ export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) 
   const apartmentNumbers = apartmentNumbersInProject(project);
   const groups = groupRoomsByApartment(project);
   const room = project.rooms.find((r) => r.id === selectedRoomId) ?? null;
+  const selectedAssignmentIds = project.rooms.filter((r) => assignmentRoomIds.includes(r.id)).map((r) => r.id);
+  const toggleAssignmentRoom = (id: string) => {
+    setAssignmentRoomIds((ids) => ids.includes(id) ? ids.filter((selected) => selected !== id) : [...ids, id]);
+  };
   // The detail view is derived, not remembered: a room that was deleted, undone away or that lives
   // on another page (after a page change) can never leave the sidebar showing stale details.
   const detailRoom = detailOpen && room && room.pageNumber === currentPage ? room : null;
@@ -101,7 +115,6 @@ export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) 
     return (
       <div className="room-panel">
         <div className="detail-nav">
-          {!readOnly && <button className="btn-secondary small" onClick={() => openBulk(project.id)}>{t('bulkTakeoff.open')}</button>}
           <button className="btn-ghost small" onClick={() => setDetailOpen(false)}>
             <Icon name="back" />
             {t('rooms.backToRooms')}
@@ -251,7 +264,56 @@ export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) 
 
       </div>
       <div className="room-list">
-        <span className="section-label">{t('rooms.markedAreas', { count: project.rooms.length })}</span>
+        <div className="room-list-head">
+          <span className="section-label">{t('rooms.markedAreas', { count: project.rooms.length })}</span>
+          {!readOnly && project.rooms.length > 0 && !assigningApartment && (
+            <button className="btn-secondary small" onClick={() => {
+              setAssignmentRoomIds([]);
+              setAssignmentTarget(activeApartmentNumber);
+              setAssigningApartment(true);
+            }}>{t('rooms.bulkAssignment.open')}</button>
+          )}
+        </div>
+        {!readOnly && assigningApartment && (
+          <div className="room-apartment-assignment">
+            <p className="muted" aria-live="polite">{t('rooms.bulkAssignment.selected', { count: selectedAssignmentIds.length })}</p>
+            <label className="room-assignment-select-all">
+              <input type="checkbox"
+                checked={project.rooms.length > 0 && selectedAssignmentIds.length === project.rooms.length}
+                onChange={(e) => setAssignmentRoomIds(e.target.checked ? project.rooms.map((r) => r.id) : [])}
+              />
+              {t('rooms.bulkAssignment.selectAll')}
+            </label>
+            <div className="form-row">
+              <label htmlFor="room-assignment-apartment">{t('rooms.detail.apartment')}</label>
+              <select id="room-assignment-apartment" value={assignmentTarget} onChange={async (e) => {
+                const value = e.target.value;
+                if (value === '__new__') {
+                  const next = await promptDialog(t('rooms.newApartmentPrompt'), '');
+                  if (next?.trim()) setAssignmentTarget(next.trim());
+                } else setAssignmentTarget(value);
+              }}>
+                <option value="">{t('rooms.bulkAssignment.choose')}</option>
+                {apartmentNumbers.map((a) => <option key={a} value={a}>{t('rooms.apartment', { apartment: a })}</option>)}
+                {assignmentTarget && !apartmentNumbers.includes(assignmentTarget) && (
+                  <option value={assignmentTarget}>{t('rooms.apartment', { apartment: assignmentTarget })}</option>
+                )}
+                <option value="__new__">{t('rooms.newApartment')}</option>
+              </select>
+            </div>
+            <div className="room-assignment-actions">
+              <button className="btn-primary small" disabled={!assignmentTarget.trim() || selectedAssignmentIds.length === 0} onClick={() => {
+                assignRoomsToApartment(selectedAssignmentIds, assignmentTarget);
+                setAssignmentRoomIds([]);
+                setAssigningApartment(false);
+              }}>{t('rooms.bulkAssignment.assign')}</button>
+              <button className="btn-secondary small" onClick={() => {
+                setAssignmentRoomIds([]);
+                setAssigningApartment(false);
+              }}>{t('common.cancel')}</button>
+            </div>
+          </div>
+        )}
         {project.rooms.length === 0 && (
           <div className="empty-state">
             <Icon name="polygon" size={28} />
@@ -288,7 +350,16 @@ export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) 
               </div>
               <ul>
                 {group.rooms.map((r) => (
-                  <li key={r.id} className={r.id === selectedRoomId ? 'active' : ''} onClick={() => selectRoom(r.id, r.pageNumber)}>
+                  <li key={r.id} className={(assigningApartment ? assignmentRoomIds.includes(r.id) : r.id === selectedRoomId) ? 'active' : ''}
+                    onClick={() => assigningApartment ? toggleAssignmentRoom(r.id) : selectRoom(r.id, r.pageNumber)}>
+                    {!readOnly && assigningApartment && <input
+                      type="checkbox"
+                      className="room-assignment-checkbox"
+                      aria-label={t('rooms.bulkAssignment.selectRoom', { name: r.name || t('rooms.unnamed'), page: r.pageNumber })}
+                      checked={assignmentRoomIds.includes(r.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => toggleAssignmentRoom(r.id)}
+                    />}
                     <span className="color-dot" style={{ background: r.color }} />
                     <span className="room-list-name" dir="auto">{r.name || t('rooms.unnamed')}</span>
                     {(r.aiSource || r.id.startsWith('local-ai:')) && <span className="cal-ok" title={t('aiReviewWorkspace.approved')}><Icon name="check" size={12} /> {t('aiReviewWorkspace.approved')}</span>}
@@ -301,7 +372,7 @@ export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) 
                     {r.pageNumber !== currentPage && <span className="room-list-page">{t('rooms.page', { page: r.pageNumber })}</span>}
                     {/* Row actions appear on hover and on keyboard focus, so they stop competing
                         with the room name while staying reachable by tab. */}
-                    <span className="room-row-actions" hidden={readOnly}>
+                    <span className="room-row-actions" hidden={readOnly || assigningApartment}>
                       <button
                         className="icon-btn"
                         title={t('rooms.duplicate')}

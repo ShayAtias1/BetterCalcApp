@@ -1449,6 +1449,41 @@ button:disabled,
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex-wrap: wrap;
+}
+.room-apartment-assignment {
+  margin-block: var(--s-2) var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-subtle);
+}
+.room-apartment-assignment p {
+  margin: 0 0 var(--s-2);
+}
+.room-assignment-select-all {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-bottom: var(--s-2);
+}
+.room-assignment-select-all input,
+.room-assignment-checkbox {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+}
+.room-apartment-assignment select {
+  min-width: 0;
+  width: 100%;
+}
+.room-assignment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
 }
 .ack-row {
   display: flex;
@@ -2999,11 +3034,32 @@ html[dir='rtl'] .qty-table .col-room {
 .rebar-entry-row {
   display: flex;
   flex-direction: column;
-  gap: var(--s-1);
+  gap: var(--s-2);
   margin-bottom: var(--s-3);
 }
 .rebar-entry-row .btn-ghost {
   align-self: flex-start;
+}
+.structural-entry-action {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  justify-content: flex-start;
+  padding: 8px 12px;
+  font: var(--t-meta);
+  font-weight: 500;
+  white-space: normal;
+  text-align: start;
+}
+.rebar-entry-row > .structural-entry-action {
+  align-self: stretch;
+  justify-content: flex-start;
+  margin-bottom: 0;
+}
+.structural-entry-action:active:not(:disabled) {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .rebar-level {
   margin-bottom: var(--s-3);
