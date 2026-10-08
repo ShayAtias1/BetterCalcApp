@@ -152,8 +152,20 @@ export async function startAiDetection(targetPoint?:Point){
   const source={...binding},state=useAppStore.getState();
   if(!canAuthorTakeoff()||state.detecting||state.project?.id!==source.planId||state.currentPage!==source.pageNumber||(!targetPoint&&state.detectionCandidates.some(c=>c.localAi)))return;
   cancelOneClick();
+  await startPreparedAiPage(source,crypto.randomUUID(),targetPoint);
+}
+
+/** Shared adapter: batch pages and target clicks use the same admission, persistence and polling. */
+export async function startAiPageDetection(source:{planId:string;pageNumber:number;sourceHash:string},requestId:string){
+  await initializeAiWorkflow();
+  return startPreparedAiPage(source,requestId);
+}
+async function startPreparedAiPage(source:{planId:string;pageNumber:number;sourceHash:string},requestId:string,targetPoint?:Point){
+  if(starting||useAiWorkflow.getState().jobs.some(busy))throw new Error('One AI job is already active. Resume after it finishes.');
+  if(useAiWorkflow.getState().jobs.some(j=>j.requestId===requestId))throw new Error('This request identity already exists; it will not be resubmitted.');
+  cancelOneClick();
   starting=true;useAiWorkflow.setState({error:null});
-  let job:AiJobRecord={requestId:crypto.randomUUID(),planId:source.planId,pageNumber:source.pageNumber,sourceHash:source.sourceHash,mode:targetPoint?'one-click-v1':undefined,status:'PREPARING',createdAt:Date.now(),updatedAt:Date.now()};
+  let job:AiJobRecord={requestId,planId:source.planId,pageNumber:source.pageNumber,sourceHash:source.sourceHash,mode:targetPoint?'one-click-v1':'full-page-v1',status:'PREPARING',createdAt:Date.now(),updatedAt:Date.now()};
   let posted=false;
   try{
     await record(job);

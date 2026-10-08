@@ -1,0 +1,7 @@
+.multi-plan-launch{position:fixed;inset-block-end:12px;inset-inline-end:16px;z-index:40;box-shadow:0 2px 8px #0002}
+.multi-plan-backdrop{position:fixed;inset:0;background:#0005;z-index:120;display:flex;align-items:center;justify-content:center;padding:24px}
+.multi-plan-dialog{background:var(--bg-surface,#fff);color:var(--text,#202938);border:1px solid var(--border,#ddd);border-radius:12px;max-width:1080px;width:100%;max-height:90vh;overflow:auto;padding:20px;box-shadow:0 12px 48px #0003}
+.multi-plan-dialog header,.multi-plan-dialog nav{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-block-end:16px}
+.multi-plan-dialog header{justify-content:space-between}.multi-plan-dialog fieldset{border:1px solid var(--border,#ddd);border-radius:8px;margin-block:12px;padding:12px}
+.multi-plan-pages{display:flex;flex-wrap:wrap;gap:16px;margin-block:12px}.multi-plan-dialog label{display:inline-flex;align-items:center;gap:8px}.multi-plan-table{overflow:auto}.multi-plan-table table{width:100%;border-collapse:collapse}.multi-plan-table th,.multi-plan-table td{padding:12px;text-align:start;border-bottom:1px solid var(--border,#ddd);vertical-align:top}.multi-plan-table td button{display:block;margin-block:6px}.multi-plan-error{color:var(--danger,#b42318)}
+@media(max-width:640px){.multi-plan-backdrop{padding:8px}.multi-plan-dialog{padding:12px;max-height:96vh}.multi-plan-launch{inset-block-end:64px}}

@@ -4,17 +4,19 @@ import { readFileSync } from 'node:fs';
 import { createStore } from 'zustand/vanilla';
 import { aiTiles, AI_PREPARATION_VERSION, aiReviewKey } from '../../src/lib/ai/contracts.ts';
 const hash='a'.repeat(64),newHash='b'.repeat(64);
-const reviews=new Map(),pdfs=new Map([['restore',new Blob([hash])]]),jobs=new Map();
+const reviews=new Map(),pdfs=new Map([['restore',new Blob([hash])]]),jobs=new Map(),batches=new Map();
 const result=JSON.parse(readFileSync(new URL('./frozen-spaces.json',import.meta.url)));
 function manifest(planId,pageNumber=1){return {preparationVersion:AI_PREPARATION_VERSION,renderer:'embedpdf-pdfium',planId,pageNumber,sourceHash:hash,nativeWidth:100,nativeHeight:80,rotation:0,userUnit:1,view:[0,0,100,80],pageDimensions:[5500,4400],renderScale:55,tiles:aiTiles(5500,4400)};}
 const app=createStore(()=>({project:{id:'restore',rooms:[]},currentPage:1,detectionCandidates:[],selectedDetectionCandidateId:null,detectionCandidatesPage:null}));
 const restored={requestId:'restored-request',jobId:'restored-job',planId:'restore',pageNumber:1,sourceHash:hash,status:'PROCESSING',createdAt:Date.now(),updatedAt:Date.now(),manifest:manifest('restore')};jobs.set(restored.requestId,restored);
 await mock.module(new URL('../../src/db/database.ts',import.meta.url).href,{namedExports:{
+  listAiBatches:async()=>structuredClone([...batches.values()]),saveAiBatch:async batch=>batches.set(batch.id,structuredClone(batch)),
   loadPlan:async id=>({id,rooms:[]}),
   loadPdfBlob:async id=>pdfs.get(id),loadAiReview:async key=>structuredClone(reviews.get(key)),
   updateAiReview:async(key,update)=>{reviews.set(key,structuredClone(update(reviews.get(key))));},
   saveAiJob:async job=>{jobs.set(job.requestId,structuredClone(job));},listAiJobs:async()=>[...jobs.values()]
 }});
+await mock.module(new URL('../../src/lib/pdfViewerSource.ts',import.meta.url).href,{namedExports:{ViewerPdfDocument:{open:async()=>{throw new Error('PDF rendering is outside this workflow fixture.');}}}});
 await mock.module(new URL('../../src/store/appStore.ts',import.meta.url).href,{namedExports:{useAppStore:app}});
 let prepareGate=null,postCalls=0,rejectPost=false;
 const oneClickRequests=new Set();
@@ -28,7 +30,7 @@ await mock.module(new URL('../../src/lib/ai/jobClient.ts',import.meta.url).href,
   submitSpaceJob:async(requestId,m)=>{if(m.preparationVersion==='one-click-v1')oneClickRequests.add(requestId);postCalls++;if(rejectPost)throw Object.assign(new Error('Cap reached.'),{status:429});return {id:requestId,requestId,status:'PROCESSING'};},
   getSpaceJob:async id=>response(id==='restored-job'?'restored-request':id),findSpaceJob:async id=>response(id)
 }});
-const {initializeAiWorkflow,activateAiPage,startAiDetection,useAiWorkflow}=await import('../../src/lib/ai/workflow.ts');
+const {initializeAiWorkflow,activateAiPage,startAiDetection,startAiPageDetection,useAiWorkflow}=await import('../../src/lib/ai/workflow.ts');
 const {notifyPdfBlobChanged}=await import('../../src/lib/pdfBlobEvents.ts');
 async function until(predicate){for(let i=0;i<100;i++){if(predicate())return;await new Promise(r=>setTimeout(r,5));}throw new Error('Workflow state did not settle.');}
 function navigate(page){app.setState({currentPage:page,detectionCandidates:[],detectionCandidatesPage:null,selectedDetectionCandidateId:null});}
@@ -87,4 +89,61 @@ test('One-Click appends one editable persisted draft alongside existing suggesti
   assert.deepEqual(target.localAi.targetPoint,{x:50,y:40});assert.deepEqual(target.validationProblems,[]);
   navigate(2);await activateAiPage('oneclick',2);navigate(1);await activateAiPage('oneclick',1);
   assert.equal(app.getState().detectionCandidates.length,2);assert.equal(postCalls,before+1);
+});
+
+test('batch adapter preserves One-Click drafts on a different visible page and rejects duplicate identities',async()=>{
+  const before=postCalls,visible=structuredClone(app.getState().detectionCandidates);
+  pdfs.set('batch-plan',new Blob([hash]));
+  let release;prepareGate=new Promise(resolve=>{release=resolve;});
+  const source={planId:'batch-plan',pageNumber:3,sourceHash:hash};
+  const first=startAiPageDetection(source,'batch-page-request');
+  await until(()=>useAiWorkflow.getState().jobs.some(j=>j.requestId==='batch-page-request'&&j.status==='PREPARING'));
+  await startAiDetection({x:50,y:40});
+  await assert.rejects(startAiPageDetection(source,'other-batch-request'),/already active/);
+  release();await first;prepareGate=null;
+  await until(()=>useAiWorkflow.getState().jobs.some(j=>j.requestId==='batch-page-request'&&j.status==='COMPLETED'));
+  assert.equal(postCalls,before+1);
+  assert.deepEqual(app.getState().detectionCandidates,visible);
+  const job=useAiWorkflow.getState().jobs.find(j=>j.requestId==='batch-page-request');
+  assert.equal(job.mode,'full-page-v1');assert.equal(job.manifest.pageNumber,3);
+  assert.equal(reviews.get(aiReviewKey('batch-plan',3,hash)).candidates.length,result.spaces.length);
+  await assert.rejects(startAiPageDetection(source,'batch-page-request'),/already exists/);
+  assert.equal(postCalls,before+1);
+});
+
+test('full-page batch completion merges into the same review without losing edited One-Click proposals',async()=>{
+  const edited={...app.getState().detectionCandidates.find(c=>c.localAi?.detectionMode==='one-click-v1'),reviewedWarningIds:['requiresReview'],roomTypeKey:'bedroom',semanticTypeEdited:true};
+  app.setState({detectionCandidates:app.getState().detectionCandidates.map(c=>c.id===edited.id?edited:c)});
+  const before=postCalls;
+  await startAiPageDetection({planId:'oneclick',pageNumber:1,sourceHash:hash},'same-page-batch');
+  await until(()=>useAiWorkflow.getState().jobs.some(j=>j.requestId==='same-page-batch'&&j.status==='COMPLETED')&&app.getState().detectionCandidates.length===result.spaces.length+2);
+  assert.deepEqual(app.getState().detectionCandidates.find(c=>c.id===edited.id),edited);
+  assert.equal(postCalls,before+1);
+});
+
+test('batch confirmation treats target-only/uncertain reviews as queued and runs new full-page jobs sequentially',async()=>{
+  Object.defineProperty(navigator,'locks',{configurable:true,value:{request:async(_name,_options,callback)=>callback({name:'test-lock'})}});
+  const {prepareBatch,runBatch}=await import('../../src/lib/ai/batchWorkflow.ts');
+  const before=postCalls;
+  const targetJobs=[1,2].map(pageNumber=>({requestId:`target-only-${pageNumber}`,planId:'target-only',pageNumber,sourceHash:hash,mode:'one-click-v1',status:'COMPLETED',createdAt:Date.now(),updatedAt:Date.now()}));
+  useAiWorkflow.setState(s=>({jobs:[...s.jobs,...targetJobs]}));
+  pdfs.set('target-only',new Blob([hash]));
+  for(const pageNumber of [1,2]){
+    const key=aiReviewKey('target-only',pageNumber,hash);
+    // Includes a rejected target and an uncertain target with no geometry.
+    reviews.set(key,{key,planId:'target-only',pageNumber,sourceHash:hash,candidates:[],resolvedIds:pageNumber===1?['rejected-target']:[],updatedAt:Date.now()});
+  }
+  const selection=[1,2].map(pageNumber=>({plan:{id:'target-only',name:'Target-only PDF',rooms:[]},pageNumber,sourceHash:hash}));
+  const batch=await prepareBatch('folder',selection,['area']);
+  assert.deepEqual(batch.pages.map(p=>p.status),['queued','queued']);
+  assert.equal(postCalls,before); // Preparing scope never admits a request.
+  await runBatch(batch);
+  assert.equal(postCalls,before+2);
+  const saved=batches.get(batch.id);assert.equal(saved.state,'completed');
+  assert.deepEqual(saved.pages.map(p=>p.status),['completed','completed']);
+  assert.equal(useAiWorkflow.getState().jobs.filter(j=>j.status==='PROCESSING'||j.status==='PREPARING').length,0);
+  assert.ok(saved.pages.every(p=>useAiWorkflow.getState().jobs.find(j=>j.requestId===p.requestId)?.mode==='full-page-v1'));
+  const cached=await prepareBatch('folder',selection,['area']);
+  assert.deepEqual(cached.pages.map(p=>p.status),['completed','completed']);
+  await runBatch(cached);assert.equal(postCalls,before+2);
 });

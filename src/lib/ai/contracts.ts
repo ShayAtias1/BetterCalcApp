@@ -16,7 +16,8 @@ export interface AiImage { name:string; width:number; height:number; base64:stri
 export interface AiJobRecord {
   requestId:string; jobId?:string; planId:string; pageNumber:number; sourceHash:string;
   status:AiJobStatus; createdAt:number; updatedAt:number; manifest?:AiManifest;
-  mode?:'one-click-v1';
+  /** Missing mode identifies checkpoint full-page jobs. */
+  mode?:'full-page-v1'|'one-click-v1';
   resultSummary?:string;
   error?:string; metrics?:AiMetrics;
 }
