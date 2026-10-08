@@ -1,3 +1,4 @@
+import type { AiBatch } from '../lib/ai/batchModel';
 import type { AiJobRecord, AiReviewRecord } from '../lib/ai/contracts';
 import { notifyPdfBlobChanged } from '../lib/pdfBlobEvents';
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
@@ -9,6 +10,7 @@ import { migrateComparePageOwnership } from '../lib/compareMigration';
 import { withMeasurementValues } from '../lib/measurementValues';
 
 interface QtoDB extends DBSchema {
+  aiBatches: { key:string; value:AiBatch };
   aiReviews: { key:string; value:AiReviewRecord };
   aiJobs: { key:string; value:AiJobRecord };
   /**
@@ -39,7 +41,7 @@ interface QtoDB extends DBSchema {
 }
 
 const DB_NAME = 'bettercalc-qto';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 let dbPromise: Promise<IDBPDatabase<QtoDB>> | null = null;
 
@@ -47,6 +49,7 @@ function getDb(): Promise<IDBPDatabase<QtoDB>> {
   if (!dbPromise) {
     dbPromise = openDB<QtoDB>(DB_NAME, DB_VERSION, {
       upgrade(db) {
+        if (!db.objectStoreNames.contains('aiBatches')) db.createObjectStore('aiBatches', {keyPath:'id'});
         // v4 adds isolated AI stores; existing plan/PDF storage is unchanged.
         if (!db.objectStoreNames.contains('aiReviews')) db.createObjectStore('aiReviews', {keyPath:'key'});
         if (!db.objectStoreNames.contains('aiJobs')) db.createObjectStore('aiJobs', {keyPath:'requestId'});
@@ -473,3 +476,6 @@ export async function updateAiReview(key:string,update:(previous:AiReviewRecord|
 }
 export async function saveAiJob(job:AiJobRecord):Promise<void>{await (await getDb()).put('aiJobs',job);}
 export async function listAiJobs():Promise<AiJobRecord[]>{return (await getDb()).getAll('aiJobs');}
+
+export async function saveAiBatch(batch:AiBatch):Promise<void>{await (await getDb()).put('aiBatches',batch);}
+export async function listAiBatches():Promise<AiBatch[]>{return (await getDb()).getAll('aiBatches');}

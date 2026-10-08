@@ -132,10 +132,18 @@ async function poll(initial:AiJobRecord){
 /** Explicit user action only. A persisted request identity precedes any paid POST. */
 export async function startAiDetection(){
   if(starting||!binding||!useAiWorkflow.getState().ready||useAiWorkflow.getState().jobs.some(busy))return;
-  const source={...binding},state=useAppStore.getState();
-  if(state.project?.id!==source.planId||state.currentPage!==source.pageNumber||state.detectionCandidates.some(c=>c.localAi))return;
+  const state=useAppStore.getState();
+  if(state.project?.id!==binding.planId||state.currentPage!==binding.pageNumber||state.detectionCandidates.some(c=>c.localAi))return;
+  await startAiPageDetection({...binding},crypto.randomUUID());
+}
+
+/** Batch adapter: same preparation, admission, persistence and polling as a single page. */
+export async function startAiPageDetection(source:{planId:string;pageNumber:number;sourceHash:string},requestId:string){
+  await initializeAiWorkflow();
+  if(starting||useAiWorkflow.getState().jobs.some(busy))throw new Error('One AI job is already active. Resume after it finishes.');
+  if(useAiWorkflow.getState().jobs.some(j=>j.requestId===requestId))throw new Error('This request identity already exists; it will not be resubmitted.');
   starting=true;useAiWorkflow.setState({error:null});
-  let job:AiJobRecord={requestId:crypto.randomUUID(),planId:source.planId,pageNumber:source.pageNumber,sourceHash:source.sourceHash,status:'PREPARING',createdAt:Date.now(),updatedAt:Date.now()};
+  let job:AiJobRecord={requestId,planId:source.planId,pageNumber:source.pageNumber,sourceHash:source.sourceHash,status:'PREPARING',createdAt:Date.now(),updatedAt:Date.now()};
   let posted=false;
   try{
     await record(job);

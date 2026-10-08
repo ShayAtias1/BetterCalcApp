@@ -1,3 +1,4 @@
+import MultiPlanAi from './components/MultiPlanAi';
 import AiReviewWorkspace from './components/AiReviewWorkspace';
 import { useEffect, useState } from 'react';
 import { useAppStore } from './store/appStore';
@@ -162,5 +163,5 @@ function AppContent() {
 }
 
 export default function App() {
-  return <WorkspaceLayoutProvider><AppContent /></WorkspaceLayoutProvider>;
+  return <WorkspaceLayoutProvider><AppContent /><MultiPlanAi /></WorkspaceLayoutProvider>;
 }
