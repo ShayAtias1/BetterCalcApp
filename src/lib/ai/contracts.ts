@@ -16,6 +16,8 @@ export interface AiImage { name:string; width:number; height:number; base64:stri
 export interface AiJobRecord {
   requestId:string; jobId?:string; planId:string; pageNumber:number; sourceHash:string;
   status:AiJobStatus; createdAt:number; updatedAt:number; manifest?:AiManifest;
+  mode?:'one-click-v1';
+  resultSummary?:string;
   error?:string; metrics?:AiMetrics;
 }
 export interface AiMetrics { latencySeconds?:number; estimatedCostUsd?:number|null; usage?:unknown; model?:string; serviceTier?:string }

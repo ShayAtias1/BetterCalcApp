@@ -212,3 +212,17 @@ test('semantic labels reuse exact profiles; confirmation is separate and never c
   assert.deepEqual(room.aiSource!.reviewNotes, candidate.localAi!.reviewNotes);
   assert.ok(room.aiSource!.reviewedWarningIds.length);
 });
+
+test('One-Click target containment remains an approval gate after edits and normal Room approval preserves point provenance',context=>{
+  context.after(()=>store().setProject(null));
+  open();const candidate=store().detectionCandidates[0];
+  candidate.localAi.targetPoint={x:60,y:60};candidate.localAi.detectionMode='one-click-v1';
+  const original=candidate.points.map(p=>({...p}));
+  store().editDetectionCandidate(candidate.id,[{x:10,y:10},{x:20,y:10},{x:20,y:20},{x:10,y:20}]);
+  assert.ok(store().detectionCandidates[0].validationProblems?.some(p=>p.includes('target point')));
+  assert.equal(store().acceptDetectionCandidate(candidate.id),null);
+  store().editDetectionCandidate(candidate.id,original);
+  assert.equal(store().acceptDetectionCandidate(candidate.id),candidate.id);
+  const room=store().project!.rooms.at(-1)!;assert.deepEqual(room.aiSource?.targetPoint,{x:60,y:60});
+  assert.equal(room.aiSource?.detectionMode,'one-click-v1');assert.deepEqual(room.workItems,[]);
+});

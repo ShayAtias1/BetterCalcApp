@@ -3,6 +3,9 @@ import type { Point } from '../types';
 import { polygonAreaPx } from './geometry';
 
 export interface LocalAiMetadata {
+  targetPoint?: Point;
+  detectionMode?: string;
+  overlapWarnings?: string[];
   planId: string;
   sourceHash: string;
   pageNumber: number;

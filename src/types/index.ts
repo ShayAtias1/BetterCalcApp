@@ -66,6 +66,9 @@ export interface Point {
 export interface Room {
   /** Local AI provenance only; never used to calculate quantities. */
   aiSource?: {
+    targetPoint?: Point;
+    detectionMode?: string;
+    overlapWarnings?: string[];
     spaceId: string;
     suggestedType: string | null;
     geometryClass: string;

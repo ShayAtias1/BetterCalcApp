@@ -3495,3 +3495,7 @@ html[dir='rtl'] .qty-table .col-room {
   .ai-review-workspace-footer { max-height: 90px; overflow: auto; }
   .ai-review-detail { padding: var(--s-2); }
 }
+
+/* One-click selection leaves navigation in the existing viewer. */
+.pdf-viewport.one-click-ai-armed, .pdf-viewport.one-click-ai-armed * { cursor: crosshair !important; }
+.pdf-viewport.one-click-ai-armed [data-suggestion-edge] { pointer-events: none; }

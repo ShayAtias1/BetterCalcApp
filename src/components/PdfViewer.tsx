@@ -1,3 +1,4 @@
+import { useAiWorkflow, cancelOneClick, startAiDetection } from '../lib/ai/workflow';
 import { aiCandidateLabel } from '../lib/localAiReview';
 import { FIELD_OPERATION_CANCEL } from '../lib/fieldLifecycle';
 import { useTouchMeshLayout } from '../hooks/useTouchMeshLayout';
@@ -244,6 +245,8 @@ export default function PdfViewer() {
   const selectedMarkupId = useAppStore((s) => s.selectedMarkupId);
   const setSelectedMarkupId = useAppStore((s) => s.setSelectedMarkupId);
   const duplicateMarkup = useAppStore((s) => s.duplicateMarkup);
+  const oneClickArmed=useAiWorkflow(s=>s.oneClickArmed);
+  const oneClickPanGesture=useRef(false);
   const detectionCandidates = useAppStore((s) => s.detectionCandidates);
   const selectedDetectionCandidateId = useAppStore(s => s.selectedDetectionCandidateId);
   const selectDetectionCandidate = useAppStore(s => s.selectDetectionCandidate);
@@ -535,6 +538,7 @@ export default function PdfViewer() {
         !!target?.closest?.('input, textarea, select, [contenteditable="true"]');
 
       if (e.code === 'Space') spaceHeld.current = true;
+      if (e.key === 'Escape' && useAiWorkflow.getState().oneClickArmed) { cancelOneClick();return; }
       if (e.key === 'Escape') {
         structuralDrag.current = null;
         barDrag.current = null;
@@ -654,12 +658,14 @@ export default function PdfViewer() {
   const handleMouseDown = (e: MouseEvent) => {
     if (reviewOnly) return;
     const isPanGesture = toolMode === 'pan' || e.button === 1 || spaceHeld.current;
+    oneClickPanGesture.current=isPanGesture;
     if (isPanGesture) {
       isPanning.current = true;
       beginPanDrag(e.clientX, e.clientY);
       return;
     }
     suppressStructuralClick.current = false;
+    if(useAiWorkflow.getState().oneClickArmed)return;
     const addEdge = !touchInput && toolMode === 'select' && drawTarget === 'room'
       ? (e.target as Element).closest?.('[data-suggestion-edge]') : null;
     if (e.button === 0 && selectedArea?.kind === 'suggestion' && addEdge) {
@@ -875,6 +881,7 @@ export default function PdfViewer() {
 
   const handleDoubleClick = (e: MouseEvent) => {
     if (reviewOnly) return;
+    if (useAiWorkflow.getState().oneClickArmed) return;
     if (toolMode !== 'select' || drawTarget !== 'room' || !overlayVisible.finishes || spaceHeld.current) return;
     if (!touchInput && selectedArea?.kind === 'suggestion') {
       const index = nearestPointIndex(selectedArea.points, screenToNative(e.clientX, e.clientY), VERTEX_HIT_RADIUS_SCREEN / zoom);
@@ -959,6 +966,10 @@ export default function PdfViewer() {
     }
     if (isPanning.current || structuralDrag.current) return;
     const native = screenToNative(e.clientX, e.clientY);
+    if(useAiWorkflow.getState().oneClickArmed){
+      if(e.button!==0||spaceHeld.current||oneClickPanGesture.current){oneClickPanGesture.current=false;return;}
+      void startAiDetection(native);return;
+    }
 
     if (toolMode === 'calibrate') {
       if (calibrationPoints.length < 2) addCalibrationPoint(native);
@@ -1121,7 +1132,7 @@ export default function PdfViewer() {
   return (
     <div
       ref={containerRef}
-      className={`pdf-viewport tool-${toolMode}`}
+      className={`pdf-viewport tool-${toolMode}${oneClickArmed?' one-click-ai-armed':''}`}
       {...navigation}
       onPointerCancelCapture={(event) => {
         if (navigation.onPointerCancelCapture(event) && event.pointerType !== 'mouse') { touch.cancel(); meshTouch.editing.cancel(); }
