@@ -3410,3 +3410,88 @@ html[dir='rtl'] .qty-table .col-room {
 [data-layout="narrow"] .project-overview .project-domains button { flex: 1; min-height: 44px; }
 
 [data-layout="narrow"] .project-overview .plan-list li:not(:has(.plan-status)) .list-item-actions { grid-row: 2; }
+
+/* Local AI review uses the same selection colors and handles as ordinary geometry. */
+.detect-candidate-list .selected-ai-suggestion {
+  flex-direction: column;
+  align-items: stretch;
+  background: #eff6ff;
+  outline: 1px solid #2563eb;
+  border-radius: 4px;
+  padding: 6px;
+}
+.detect-candidate-list .selected-ai-suggestion .detect-candidate-label {
+  white-space: normal;
+  overflow: visible;
+}
+.detect-candidate-list .selected-ai-suggestion .list-item-actions {
+  flex-wrap: wrap;
+}
+.ai-suggestion-edit-help {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 5;
+  pointer-events: none;
+  width: fit-content;
+  max-width: calc(100% - 24px);
+  padding: 6px 10px;
+  border: 1px solid #2563eb;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1e40af;
+  font-size: 12px;
+}
+
+/* Compact review controls; source warning text is allowed to wrap in full. */
+.detect-candidate-list .ai-review-candidate { flex-direction: column; align-items: stretch; }
+.detect-candidate-list .ai-review-candidate .detect-candidate-label { white-space: normal; overflow: visible; }
+.detect-candidate-list .ai-review-candidate .list-item-actions,
+.ai-review-warning-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.ai-review-warning-actions { margin-bottom: 6px; }
+.ai-review-type { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+.ai-review-type label { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+.ai-review-type select { min-width: 0; max-width: 100%; flex: 1; }
+.ai-review-warnings { margin-top: 4px; }
+.ai-review-warnings summary { cursor: pointer; }
+.ai-review-warning { display: flex; align-items: flex-start; gap: 6px; margin: 4px 0; }
+.ai-review-warning input { flex-shrink: 0; margin-top: 2px; }
+.ai-review-errors { color: #b91c1c; margin-top: 4px; }
+
+.ai-job-status { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; }
+.ai-job-status progress { width: 48px; flex-shrink: 0; }
+
+/* AI review is a full-width dock in normal flow, leaving the plan visible above. */
+.ai-review-workspace { flex: none; min-height: 0; background: var(--bg-surface); border-top: 1px solid var(--border); }
+.ai-review-workspace-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2); padding: var(--s-2) var(--s-3); font-size: 13px; }
+.ai-review-workspace-head > button { margin-inline-start: auto; }
+.ai-review-workspace-body { height: clamp(240px, 35vh, 380px); max-height: 45vh; display: grid; grid-template-columns: minmax(210px, 28%) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+.ai-review-queue { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-inline-end: 1px solid var(--border); }
+.ai-review-queue-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1); padding: var(--s-2); }
+.ai-review-queue-head strong { margin-inline-end: auto; }
+.ai-review-queue ul { list-style: none; padding: 0 var(--s-2); margin: 0; overflow: auto; min-height: 0; }
+.ai-review-queue-row { width: 100%; text-align: start; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px var(--s-2); padding: var(--s-2); margin-block-end: 4px; background: transparent; border: 1px solid transparent; border-radius: var(--r-md); }
+.ai-review-queue-row.active { border-color: var(--accent); background: var(--accent-bg); }
+.ai-review-queue-row:hover { background: var(--bg-subtle); }
+.ai-review-queue-name { font-weight: 600; overflow-wrap: anywhere; white-space: normal; }
+.ai-review-queue-state { grid-column: 1 / -1; font-size: 11px; color: var(--muted); }
+.ai-review-queue-state > span { display: inline-flex; align-items: center; gap: 4px; }
+.ai-review-detail { min-width: 0; overflow: auto; padding: var(--s-3); font-size: 13px; }
+.ai-review-detail header { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--s-2); margin-bottom: var(--s-2); }
+.ai-review-detail-actions { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.ai-review-workspace :is(p,span,label,summary,strong,small,button) { white-space: normal; overflow-wrap: anywhere; }
+.ai-review-workspace button { height: auto; min-height: 28px; }
+.ai-review-workspace-footer { grid-column: 1 / -1; border-top: 1px solid var(--border); padding: var(--s-2) var(--s-3); display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2); font-size: 11px; }
+.ai-review-workspace-footer > .muted { flex: 1 1 240px; }
+.ai-review-hard-error { color: var(--danger); }
+.ai-review-uncertainty { color: var(--warning); }
+.ai-review-warning-details { margin-top: var(--s-2); }
+.ai-review-workspace .ai-review-type { flex-wrap: wrap; margin-block: var(--s-2); }
+.ai-review-workspace .ai-review-type label { flex: 1 1 240px; }
+@media (max-width: 760px) {
+  .ai-review-workspace-body { grid-template-columns: minmax(130px, 35%) minmax(0, 1fr); max-height: 42vh; }
+  .ai-review-workspace-footer > .muted { display: none; }
+  .ai-review-workspace-footer { max-height: 90px; overflow: auto; }
+  .ai-review-detail { padding: var(--s-2); }
+}

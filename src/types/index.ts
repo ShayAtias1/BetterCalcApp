@@ -64,6 +64,19 @@ export interface Point {
 }
 
 export interface Room {
+  /** Local AI provenance only; never used to calculate quantities. */
+  aiSource?: {
+    spaceId: string;
+    suggestedType: string | null;
+    geometryClass: string;
+    geometryConfidence?: string;
+    typeConfidence?: string;
+    requiresReview?: boolean;
+    ambiguities?: string[];
+    reason?: string | null;
+    reviewNotes: string[];
+    reviewedWarningIds: string[];
+  };
   id: string;
   pageNumber: number;
   /** Polygon vertices in PDF page coordinates (unscaled, at pdf.js scale=1). */

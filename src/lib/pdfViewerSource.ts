@@ -14,6 +14,7 @@ export interface ViewerPageSource extends Pick<PlanPageSource,'getNativeSize'|'g
   readonly rotation:number;
   readonly numPages:number;
   renderRegion(canvas:HTMLCanvasElement,scale:number,region:ViewerRegion,options?:ViewerRenderOptions):PlanRenderHandle;
+  prepareAiRaster():Promise<{png:Blob;width:number;height:number;scale:number;nativeWidth:number;nativeHeight:number;rotation:number;userUnit:number;view:number[]}>;
   release():void;
 }
 function canvasContext(canvas:HTMLCanvasElement,width:number,height:number){
@@ -91,7 +92,7 @@ class ViewerPdfPage implements ViewerPageSource {
   readonly rotation:number;
   readonly numPages:number;
   private released=false;
-  private active=new Set<PlanRenderHandle>();
+  private active=new Set<{promise:Promise<unknown>;cancel:()=>void}>();
   private viewport: ReturnType<PDFPageProxy['getViewport']>;
   private textSource:PdfPlanSource;
   private document:ViewerPdfDocument;
@@ -114,6 +115,28 @@ class ViewerPdfPage implements ViewerPageSource {
   }
   renderRegion(canvas:HTMLCanvasElement,scale:number,region:ViewerRegion,options:ViewerRenderOptions={}):PlanRenderHandle{
     return this.draw(canvas,scale,region,false,options);
+  }
+  /** Independent full-resolution PDFium image, no viewer surface/budget/fallback. */
+  async prepareAiRaster(){
+    if(this.released)throw viewerRenderCancelled();
+    const native=this.getNativeSize(), scale=5500/Math.max(native.width,native.height);
+    if(![0,90,180,270].includes(this.rotation) || this.page.userUnit!==1 || this.page.view[0]!==0 || this.page.view[1]!==0)
+      throw new Error('AI preparation currently requires a standard unit, zero-origin PDF page box.');
+    const width=Math.min(5500,Math.ceil(native.width*scale)),height=Math.min(5500,Math.ceil(native.height*scale));
+    const primary=this.document.getPrimary();
+    if(!primary)throw new Error('AI detection requires PDFium rendering; PDF.js fallback is not supported.');
+    const task=primary.render({kind:'render',purpose:'ai',pageNumber:this.pageNumber,rotation:this.rotation,
+      nativeTransform:[...this.viewport.transform] as PdfMatrix,region:{x:0,y:0,...native},scale,width,height});
+    this.active.add(task);
+    const canvas=document.createElement('canvas');
+    try{
+      const raster=await task.promise;
+      if(this.released)throw viewerRenderCancelled();
+      const ctx=canvasContext(canvas,width,height);
+      ctx.putImageData(new ImageData(new Uint8ClampedArray(raster.pixels),width,height),0,0);
+      const png=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('AI PNG encoding failed.')),'image/png'));
+      return {png,width,height,scale,nativeWidth:native.width,nativeHeight:native.height,rotation:this.rotation,userUnit:this.page.userUnit,view:[...this.page.view]};
+    }finally{this.active.delete(task);canvas.width=canvas.height=0;}
   }
   private draw(canvas:HTMLCanvasElement,desired:number,region:ViewerRegion,wholePage:boolean,options:ViewerRenderOptions):PlanRenderHandle{
     let cancelled=false,finished=false;

@@ -1,3 +1,4 @@
+import { aiCandidateLabel } from '../lib/localAiReview';
 import { FIELD_OPERATION_CANCEL } from '../lib/fieldLifecycle';
 import { useTouchMeshLayout } from '../hooks/useTouchMeshLayout';
 import { useTouchTakeoff } from '../hooks/useTouchTakeoff';
@@ -244,6 +245,9 @@ export default function PdfViewer() {
   const setSelectedMarkupId = useAppStore((s) => s.setSelectedMarkupId);
   const duplicateMarkup = useAppStore((s) => s.duplicateMarkup);
   const detectionCandidates = useAppStore((s) => s.detectionCandidates);
+  const selectedDetectionCandidateId = useAppStore(s => s.selectedDetectionCandidateId);
+  const selectDetectionCandidate = useAppStore(s => s.selectDetectionCandidate);
+  const editDetectionCandidate = useAppStore(s => s.editDetectionCandidate);
   const clearDetectionCandidates = useAppStore((s) => s.clearDetectionCandidates);
   const deleteMarkup = useAppStore((s) => s.deleteMarkup);
   const deleteRoom = useAppStore((s) => s.deleteRoom);
@@ -261,10 +265,10 @@ export default function PdfViewer() {
   const focusRequest = usePlanFocusStore((s) => s.request);
 
   const structuralDrag = useRef<{
-    kind: AreaGeometryKind; id: string; placementId?: string; start: Point; points: Point[]; offset: Point; drawnBars?: DrawnStraightBar[]; handleIndex?: number; previewPoints?: Point[];
+    kind: AreaGeometryKind | 'suggestion'; id: string; placementId?: string; start: Point; points: Point[]; offset: Point; drawnBars?: DrawnStraightBar[]; handleIndex?: number; previewPoints?: Point[];
   } | null>(null);
   const [structuralPreview, setStructuralPreview] = useState<{
-    kind: AreaGeometryKind; id: string; placementId?: string; points: Point[]; drawnBars?: DrawnStraightBar[];
+    kind: AreaGeometryKind | 'suggestion'; id: string; placementId?: string; points: Point[]; drawnBars?: DrawnStraightBar[];
   } | null>(null);
   const barDrag = useRef<{ itemId: string; bar: DrawnStraightBar; start: Point; endpoint: 'start' | 'end' | null; preview: DrawnStraightBar | null; stirrup?: boolean } | null>(null);
   const [barPreview, setBarPreview] = useState<{ itemId: string; bar: DrawnStraightBar; stirrup?: boolean } | null>(null);
@@ -278,7 +282,7 @@ export default function PdfViewer() {
         drawnBars: item.drawnBars.map((bar) => bar.id === barPreview.bar.id ? barPreview.bar : bar),
       });
     }
-    if (!structuralPreview) return project;
+    if (!structuralPreview || structuralPreview.kind === 'suggestion') return project;
     if (structuralPreview.kind === 'room') return { ...project, rooms: project.rooms.map((room) =>
       room.id === structuralPreview.id ? { ...room, points: structuralPreview.points } : room) };
     return structuralPreview.kind === 'concrete'
@@ -300,7 +304,7 @@ export default function PdfViewer() {
     setBarPreview(null);
     setStructuralPreview(null);
   }, [project, currentPage, toolMode, drawTarget, selectedRoomId, selectedConcreteId, selectedRebarId, selectedDrawnBarId, selectedStirrupPlacementId,
-    overlayVisible.finishes, overlayVisible.concrete, overlayVisible.rebar, meshLayoutView.editing]);
+    selectedDetectionCandidateId, detectionCandidates, overlayVisible.finishes, overlayVisible.concrete, overlayVisible.rebar, meshLayoutView.editing]);
 
   const spaceHeld = useRef(false);
   const isPanning = useRef(false);
@@ -393,6 +397,11 @@ export default function PdfViewer() {
   const selectedArea = (() => {
     if (!areaPlan || toolMode !== 'select') return null;
     if (drawTarget === 'room' && overlayVisible.finishes) {
+      if (!touchInput && !reviewOnly) {
+        const candidate = detectionCandidates.find(c => c.id === selectedDetectionCandidateId && c.pageNumber === currentPage && c.localAi?.planId === project?.id);
+        if (candidate) return { kind: 'suggestion' as const, id: candidate.id,
+          points: structuralPreview?.kind === 'suggestion' && structuralPreview.id === candidate.id ? structuralPreview.points : candidate.points, color: CANDIDATE_COLOR };
+      }
       const item = areaPlan.rooms.find((r) => r.id === selectedRoomId && r.pageNumber === currentPage);
       return item ? { kind: 'room' as const, id: item.id, points: item.points, color: item.color } : null;
     }
@@ -535,7 +544,8 @@ export default function PdfViewer() {
         clearMeasurePoints();
         clearMarkupPoints();
         // Nothing has been created yet, so this leaves no history entry behind.
-        clearDetectionCandidates();
+        if (useAppStore.getState().selectedDetectionCandidateId) selectDetectionCandidate(null);
+        else clearDetectionCandidates();
       }
       if (e.key === 'Enter' && drawingPoints.length >= 3) {
         finishDrawing();
@@ -614,7 +624,7 @@ export default function PdfViewer() {
     selectedStirrupPlacementId,
     drawTarget,
     overlayVisible.rebar,
-    clearDetectionCandidates,
+    clearDetectionCandidates, selectDetectionCandidate,
     project,
     textDraft,
     deleteMarkup,
@@ -650,6 +660,19 @@ export default function PdfViewer() {
       return;
     }
     suppressStructuralClick.current = false;
+    const addEdge = !touchInput && toolMode === 'select' && drawTarget === 'room'
+      ? (e.target as Element).closest?.('[data-suggestion-edge]') : null;
+    if (e.button === 0 && selectedArea?.kind === 'suggestion' && addEdge) {
+      const index = Number(addEdge.getAttribute('data-suggestion-edge'));
+      const a = selectedArea.points[index], b = selectedArea.points[(index + 1) % selectedArea.points.length];
+      if (a && b) {
+        const points = selectedArea.points.map(p => ({ ...p }));
+        points.splice(index + 1, 0, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+        editDetectionCandidate(selectedArea.id, points);
+        suppressStructuralClick.current = true;
+      }
+      return;
+    }
     if (e.button === 0 && selectedArea) {
       const native = screenToNative(e.clientX, e.clientY);
       const handleIndex = nearestPointIndex(selectedArea.points, native, VERTEX_HIT_RADIUS_SCREEN / zoom);
@@ -745,7 +768,7 @@ export default function PdfViewer() {
       if (!suppressStructuralClick.current && Math.hypot(offset.x, offset.y) * zoom < 3) return;
       suppressStructuralClick.current = true;
       drag.offset = offset;
-      const points = drag.handleIndex === undefined ? translateArea(drag.points, offset) : reshapeArea(drag.points, drag.handleIndex, native);
+      const points = drag.handleIndex === undefined ? translateArea(drag.points, offset) : reshapeArea(drag.points, drag.handleIndex, native, drag.kind === 'suggestion' ? { polygon: true, allowInvalid: true } : undefined);
       if (!points) return;
       drag.previewPoints = points;
       setStructuralPreview({
@@ -818,7 +841,9 @@ export default function PdfViewer() {
       setStructuralPreview(null);
       // A click on a selected handle must keep its area selected, even without a drag.
       if (drag.handleIndex !== undefined) suppressStructuralClick.current = true;
-      if (drag.drawnBars && drag.kind === 'bars') moveStructuralZone('bars', drag.id, drag.offset);
+      if (drag.kind === 'suggestion') {
+        if (drag.previewPoints) editDetectionCandidate(drag.id, drag.previewPoints);
+      } else if (drag.drawnBars && drag.kind === 'bars') moveStructuralZone('bars', drag.id, drag.offset);
       else if (drag.previewPoints) editAreaGeometry(drag.kind, drag.id, drag.previewPoints, drag.placementId);
       return;
     }
@@ -850,7 +875,16 @@ export default function PdfViewer() {
 
   const handleDoubleClick = (e: MouseEvent) => {
     if (reviewOnly) return;
-    if (toolMode !== 'select' || drawTarget !== 'room' || !overlayVisible.finishes || room?.pageNumber !== currentPage) return;
+    if (toolMode !== 'select' || drawTarget !== 'room' || !overlayVisible.finishes || spaceHeld.current) return;
+    if (!touchInput && selectedArea?.kind === 'suggestion') {
+      const index = nearestPointIndex(selectedArea.points, screenToNative(e.clientX, e.clientY), VERTEX_HIT_RADIUS_SCREEN / zoom);
+      if (index >= 0 && selectedArea.points.length > 3) {
+        e.stopPropagation();
+        editDetectionCandidate(selectedArea.id, selectedArea.points.filter((_, i) => i !== index));
+      }
+      return;
+    }
+    if (room?.pageNumber !== currentPage) return;
     // Double-clicking a text note reopens it for editing.
     const bodyTarget = (e.target as Element).closest?.('[data-markup-id]');
     const noteId = bodyTarget?.getAttribute('data-markup-id');
@@ -906,6 +940,12 @@ export default function PdfViewer() {
         setSelectedRebarId(mesh ? mesh.id : null);
         return;
       }
+      // Suggestions share native hit-testing with rooms, but never enter the plan while editing.
+      const candidate = !touchInput && !reviewOnly && overlayVisible.finishes
+        ? [...detectionCandidates].reverse().find(c => c.localAi?.planId === project.id && c.pageNumber === currentPage &&
+          (pointInPolygon(native, c.points) || nearestPointIndex(c.points, native, hitRadius) >= 0)) : undefined;
+      selectDetectionCandidate(candidate?.id ?? null);
+      if (candidate) return;
       // A hidden Finishes overlay is not hit-tested either.
       const hit = !overlayVisible.finishes ? undefined : [...project.rooms].reverse().find((r) => r.pageNumber === currentPage && polygonAreaPx(r.points) > 0 && pointInPolygon(native, r.points));
       setSelectedRoomId(hit ? hit.id : null);
@@ -1036,15 +1076,15 @@ export default function PdfViewer() {
   const selectedTouchBar = individual?.kind === 'bars' ? individual.drawnBars?.find((bar) => bar.id === selectedDrawnBarId && bar.pageNumber === currentPage) : undefined;
   const meshTouch = useTouchMeshLayout(transform);
   const touch = useTouchTakeoff({
-    transform, area: selectedArea, bar: selectedTouchBar && individual ? { itemId: individual.id, bar: selectedTouchBar } : null, line: stirrupLine && stirrupItem ? { itemId: stirrupItem.id, placement: stirrupLine } : null,
-    contextKey: `${project?.id}:${currentPage}:${toolMode}:${drawTarget}:${selectedRoomId}:${selectedConcreteId}:${selectedRebarId}:${selectedStirrupPlacementId}:${selectedMarkupId}:${selectedDrawnBarId}`,
+    transform, area: selectedArea?.kind === 'suggestion' ? null : selectedArea, bar: selectedTouchBar && individual ? { itemId: individual.id, bar: selectedTouchBar } : null, line: stirrupLine && stirrupItem ? { itemId: stirrupItem.id, placement: stirrupLine } : null,
+    contextKey: `${project?.id}:${currentPage}:${toolMode}:${drawTarget}:${selectedRoomId}:${selectedDetectionCandidateId}:${selectedConcreteId}:${selectedRebarId}:${selectedStirrupPlacementId}:${selectedMarkupId}:${selectedDrawnBarId}`,
     onAreaPreview: setStructuralPreview, onLinePreview: setBarPreview, onTextDraft: setTextDraft,
     finishMeasurement: finishOpenMeasurement, finishMarkup: finishOpenMarkup,
   });
 
   const desktopStart = useRef<Pick<ReturnType<typeof useAppStore.getState>, 'project' | 'history' | 'future' | 'dirty'> | null>(null);
   const navigation = usePlanNavigation({
-    transform, reviewOnly, contextKey: `${project?.id}:${currentPage}:${toolMode}:${drawTarget}:${selectedRoomId}:${selectedConcreteId}:${selectedRebarId}:${selectedStirrupPlacementId}:${selectedMarkupId}:${selectedDrawnBarId}:${meshLayoutView.level}:${meshLayoutView.editing}`,
+    transform, reviewOnly, contextKey: `${project?.id}:${currentPage}:${toolMode}:${drawTarget}:${selectedRoomId}:${selectedDetectionCandidateId}:${selectedConcreteId}:${selectedRebarId}:${selectedStirrupPlacementId}:${selectedMarkupId}:${selectedDrawnBarId}:${meshLayoutView.level}:${meshLayoutView.editing}`,
     editing: { begin: (x, y, target, pointerType) => meshTouch.active ? meshTouch.editing.begin(x, y, target, pointerType) : touch.editing.begin(x, y, target, pointerType),
       move: (x, y) => { meshTouch.editing.move(x, y); touch.editing.move(x, y); },
       end: (x, y) => { meshTouch.editing.end(x, y); touch.editing.end(x, y); },
@@ -1098,6 +1138,9 @@ export default function PdfViewer() {
       onClick={handleClick}
     >
       {(reviewOnly || touchInput || fieldDraft || layout === 'compact' || geometryAction !== 'browse') && <FieldTools controls={touch} />}
+      {selectedArea?.kind === 'suggestion' && <div className="ai-suggestion-edit-help" role="status">
+        AI draft · Drag vertices · Edge + adds a vertex · Double-click vertex deletes · Esc deselects
+      </div>}
       {loadError && <div className="viewer-error">{loadError}</div>}
       <div
         className="pdf-content"
@@ -1168,22 +1211,23 @@ export default function PdfViewer() {
               <RebarZones pageNumber={currentPage} pages={project.pages} selectedBarId={selectedDrawnBarId} calibration={project.pages[currentPage]?.calibration ?? null} items={rebarOf(structuralPlan ?? project).filter((m) => m.kind === 'mesh' ? m.pageNumber === currentPage : m.kind === 'bars' ? (m.drawnBars?.some((b) => b.pageNumber === currentPage) ?? (m.barsZone?.pageNumber ?? m.pageNumber) === currentPage) : false)} selectedId={selectedRebarId} strokeW={strokeW} zoom={zoom} />
             )}
 
-            {/* Detection suggestions: dashed, faint and unselectable, so they never read as rooms
-                that are already part of the project. They live in session state only. */}
+            {/* Draft suggestions share editing helpers, but are never part of Plan.rooms. */}
             {detectionCandidates
-              .filter((c) => c.pageNumber === currentPage)
+              .filter((c) => c.pageNumber === currentPage && (!c.localAi || c.localAi.planId === project.id) && overlayVisible.finishes)
               .map((c) => {
-                const pts = c.points.map((p) => `${p.x},${p.y}`).join(' ');
-                const label = c.suggestedName || t('viewer.notDetected');
-                const centre = polygonCentroid(c.points);
+                const selected = selectedArea?.kind === 'suggestion' && selectedArea.id === c.id;
+                const points = selected ? selectedArea.points : c.points;
+                const pts = points.map((p) => `${p.x},${p.y}`).join(' ');
+                const label = c.localAi ? aiCandidateLabel(c, t) : c.suggestedName || t('viewer.notDetected');
+                const centre = polygonCentroid(points);
                 return (
-                  <g key={c.id} pointerEvents="none">
+                  <g key={c.id} data-ai-suggestion-id={c.id} pointerEvents="none">
                     <polygon
                       points={pts}
                       fill={CANDIDATE_COLOR}
-                      fillOpacity={0.08}
-                      stroke={CANDIDATE_COLOR}
-                      strokeWidth={strokeW}
+                      fillOpacity={selected ? 0.18 : 0.08}
+                      stroke={c.validationProblems?.length ? "#dc2626" : CANDIDATE_COLOR}
+                      strokeWidth={selected ? 3 / zoom : strokeW}
                       strokeDasharray={`${6 / zoom} ${4 / zoom}`}
                     />
                     <text
@@ -1207,8 +1251,17 @@ export default function PdfViewer() {
               stroke="#c2410c" strokeWidth={strokeW} strokeDasharray={`${4 / zoom} ${4 / zoom}`} />}
             {selectedArea && selectedArea.points.length >= 3 && <g>
               <polygon points={selectedArea.points.map((point) => `${point.x},${point.y}`).join(' ')} fill="transparent"
-                pointerEvents="all" style={{ cursor: structuralDrag.current ? 'grabbing' : 'grab' }} />
-              <AreaGeometryHandles points={selectedArea.points} color={selectedArea.color} zoom={zoom} touch={touchInput} />
+                pointerEvents={selectedArea.kind === 'suggestion' ? "none" : "all"} style={{ cursor: structuralDrag.current ? 'grabbing' : 'grab' }} />
+              <AreaGeometryHandles points={selectedArea.points} color={selectedArea.color} zoom={zoom} touch={touchInput} polygon={selectedArea.kind === 'suggestion'} />
+              {selectedArea.kind === 'suggestion' && selectedArea.points.map((a, index) => {
+                const b = selectedArea.points[(index + 1) % selectedArea.points.length];
+                const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
+                return <g key={`edge-${index}`}>
+                  <circle cx={x} cy={y} r={5 / zoom} fill="#fff" stroke={CANDIDATE_COLOR} strokeWidth={1.5 / zoom}
+                    pointerEvents="all" data-suggestion-edge={index} style={{ cursor: 'copy' }}><title>Add vertex on edge</title></circle>
+                  <text x={x} y={y} textAnchor="middle" dominantBaseline="central" fontSize={10 / zoom} fill={CANDIDATE_COLOR} pointerEvents="none">+</text>
+                </g>;
+              })}
             </g>}
             {/* In-progress polygon drawing */}
             {toolMode === 'draw' && drawingPoints.length > 0 && (

@@ -1,6 +1,8 @@
+import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { useState } from 'react';
 import { useAppStore } from '../store/appStore';
-import { roomProfileLabel } from '../lib/roomProfiles';
+import { roomProfileLabel, ROOM_PROFILES, roomProfileName } from '../lib/roomProfiles';
+import { aiWarnings, aiCandidateLabel, aiCandidateTypeKey } from '../lib/localAiReview';
 import Icon from './Icon';
 import { useT } from '../i18n';
 
@@ -97,6 +99,7 @@ export default function AutoDetectPanel() {
  * the current page, and gone as soon as they are all accepted or rejected.
  */
 export function DetectionReviewPanel() {
+  const { touchInput, reviewOnly } = useWorkspaceLayout();
   const t = useT();
   const currentPage = useAppStore((s) => s.currentPage);
   const candidates = useAppStore((s) => s.detectionCandidates);
@@ -105,9 +108,17 @@ export function DetectionReviewPanel() {
   const rejectCandidate = useAppStore((s) => s.rejectDetectionCandidate);
   const clearCandidates = useAppStore((s) => s.clearDetectionCandidates);
   const activeApartmentNumber = useAppStore((s) => s.activeApartmentNumber);
+  const selectedCandidateId = useAppStore(s => s.selectedDetectionCandidateId);
+  const selectCandidate = useAppStore(s => s.selectDetectionCandidate);
+  const restoreCandidate = useAppStore(s => s.restoreDetectionCandidate);
+  const setWarningReviewed = useAppStore(s => s.setDetectionWarningReviewed);
+  const setAllWarningsReviewed = useAppStore(s => s.setAllDetectionWarningsReviewed);
+  const setCandidateType = useAppStore(s => s.setDetectionCandidateType);
+  const confirmCandidateType = useAppStore(s => s.confirmDetectionCandidateType);
   const [message, setMessage] = useState<string | null>(null);
 
-  const pageCandidates = candidates.filter((c) => c.pageNumber === currentPage);
+  const pageCandidates = candidates.filter((c) => c.pageNumber === currentPage && !c.localAi);
+  const validCount = pageCandidates.filter(c => !c.validationProblems?.length).length;
   if (pageCandidates.length === 0) return null;
 
   const flash = (text: string) => {
@@ -123,12 +134,13 @@ export function DetectionReviewPanel() {
           <div className="detect-review-bulk">
             <button
               className="btn-primary small"
+              disabled={validCount === 0}
               onClick={() => {
                 const n = acceptAll();
                 if (n > 0) flash(t('autoDetect.added', { count: n }));
               }}
             >
-              {t('autoDetect.acceptAll')}
+              {pageCandidates.some(c => c.localAi) ? `Accept all valid (${validCount})` : t('autoDetect.acceptAll')}
             </button>
             <button
               className="btn-secondary small"
@@ -146,25 +158,63 @@ export function DetectionReviewPanel() {
             ? t('autoDetect.assignToApartment', { apartment: activeApartmentNumber })
             : t('autoDetect.assignToNone')}
         </p>
+        {pageCandidates.some(c => c.localAi && aiWarnings(c.localAi).length > 0) && <div className="ai-review-warning-actions">
+          <button className="btn-secondary small" disabled={!pageCandidates.some(c => c.localAi && aiWarnings(c.localAi).some(w => !c.reviewedWarningIds?.includes(w.id)))} onClick={() => setAllWarningsReviewed(true)}>{t('aiReview.reviewAll')}</button>
+          <button className="btn-secondary small" disabled={!pageCandidates.some(c => c.reviewedWarningIds?.length)} onClick={() => setAllWarningsReviewed(false)}>{t('aiReview.restoreWarnings')}</button>
+        </div>}
+        {pageCandidates.some(c => c.localAi) && <p className="auto-detect-hint">{t('aiReview.typeUnconfirmed')} {t('aiReview.noFinishes')}</p>}
         <ul className="detect-candidate-list">
           {pageCandidates.map((c) => (
-            <li key={c.id}>
-              {/* Plain language on purpose: the engine reports whether it recognised a room name,
-                  which is not a probability, so no percentage is shown. */}
-              <span className="detect-candidate-label">
-                {c.roomTypeKey ? (
-                  <span className="cal-ok">
-                    <Icon name="check" size={12} /> {t('autoDetect.detectedType', { type: roomProfileLabel(c.roomTypeKey) ?? '' })}
-                  </span>
-                ) : (
-                  <span className="cal-missing">
-                    <Icon name="alert" size={12} /> {t('autoDetect.typeUnknown')}
-                  </span>
-                )}
-                {c.suggestedName && <span className="muted"> · {c.suggestedName}</span>}
-              </span>
+            <li key={c.id} className={[c.localAi ? "ai-review-candidate" : "", selectedCandidateId === c.id ? "selected-ai-suggestion" : ""].join(" ")}>
+              <div className="detect-candidate-label">
+                {c.localAi ? <>
+                  <strong>{aiCandidateLabel(c, t)}</strong>
+                  <div className="muted">{t('aiReview.sourceId', { id: c.localAi.spaceId })}</div>
+                  <div className="ai-review-type">
+                  <label>
+                    {t('aiReview.type')}
+                    <select value={aiCandidateTypeKey(c) ?? ''} disabled={reviewOnly} onChange={event => setCandidateType(c.id, event.target.value || null)}>
+                      <option value="">{t('aiReview.unknown')}</option>
+                      {ROOM_PROFILES.map(profile => <option key={profile.key} value={profile.key}>{roomProfileName(profile, t)}</option>)}
+                    </select>
+                  </label>
+                  {aiCandidateTypeKey(c) && <button className="btn-secondary small" disabled={reviewOnly || c.semanticTypeConfirmed} onClick={() => confirmCandidateType(c.id)}>
+                    {t(c.semanticTypeConfirmed ? 'aiReview.typeConfirmed' : 'aiReview.confirmType')}
+                  </button>}
+                  </div>
+                  {aiWarnings(c.localAi, t).length > 0 && <details className="ai-review-warnings">
+                    <summary>
+                      {aiWarnings(c.localAi, t).some(w => !c.reviewedWarningIds?.includes(w.id)) && <Icon name="alert" size={12} />}
+                      {t('aiReview.warnings', { count: aiWarnings(c.localAi, t).filter(w => !c.reviewedWarningIds?.includes(w.id)).length })}
+                    </summary>
+                    {aiWarnings(c.localAi, t).filter(w => !c.reviewedWarningIds?.includes(w.id)).map(w => <label key={w.id} className="ai-review-warning">
+                      <input type="checkbox" checked={false} onChange={() => setWarningReviewed(c.id, w.id, true)} aria-label={`${t('aiReview.reviewed')}: ${w.text}`} />
+                      <span dir="auto">{w.text}</span>
+                    </label>)}
+                    {c.reviewedWarningIds?.length ? <details>
+                      <summary>{t('aiReview.reviewed')}</summary>
+                      {aiWarnings(c.localAi, t).filter(w => c.reviewedWarningIds?.includes(w.id)).map(w => <label key={w.id} className="ai-review-warning muted">
+                        <input type="checkbox" checked onChange={() => setWarningReviewed(c.id, w.id, false)} aria-label={`${t('aiReview.reviewed')}: ${w.text}`} />
+                        <span dir="auto">{w.text}</span>
+                      </label>)}
+                    </details> : null}
+                  </details>}
+                </> : <>
+                  {c.roomTypeKey ? <span className="cal-ok"><Icon name="check" size={12} /> {t('autoDetect.detectedType', { type: roomProfileLabel(c.roomTypeKey) ?? '' })}</span>
+                    : <span className="muted">{t('autoDetect.typeUnknown')}</span>}
+                  {c.suggestedName && <span className="muted"> · {c.suggestedName}</span>}
+                </>}
+                {!!c.validationProblems?.length && <div className="ai-review-errors" role="status">
+                  <strong>{t('aiReview.blocked')}</strong>
+                  {c.validationProblems.map(problem => <div key={problem} dir="auto">{problem}</div>)}
+                </div>}
+              </div>
               <span className="list-item-actions">
-                <button className="btn-secondary small" onClick={() => acceptCandidate(c.id)} title={t('autoDetect.acceptHint')}>
+                {c.localAi && !touchInput && !reviewOnly && <button className="btn-secondary small" aria-pressed={selectedCandidateId === c.id} onClick={() => {
+                  useAppStore.getState().setToolMode('select'); selectCandidate(c.id);
+                }}>Edit</button>}
+                {c.localAi && !touchInput && !reviewOnly && selectedCandidateId === c.id && <button className="btn-secondary small" onClick={() => restoreCandidate(c.id)}>Restore original</button>}
+                <button className="btn-secondary small" disabled={!!c.validationProblems?.length} onClick={() => acceptCandidate(c.id)} title={t('autoDetect.acceptHint')}>
                   {t('autoDetect.accept')}
                 </button>
                 <button className="icon-btn danger" onClick={() => rejectCandidate(c.id)} title={t('autoDetect.rejectHint')}>
@@ -174,7 +224,9 @@ export function DetectionReviewPanel() {
             </li>
           ))}
         </ul>
-        <p className="auto-detect-hint">{t('autoDetect.editHint')}</p>
+        <p className="auto-detect-hint">{pageCandidates.some(c => c.localAi)
+          ? 'Use Select to click an AI polygon. Drag a white vertex; click an edge + to add one; double-click a vertex to delete it (minimum three). Restore original discards draft edits. Approval uses the current geometry.'
+          : t('autoDetect.editHint')}</p>
       </div>
       {message && <div className="detect-toast">{message}</div>}
     </div>

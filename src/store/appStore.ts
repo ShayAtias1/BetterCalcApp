@@ -1,3 +1,5 @@
+import { aiWarnings, aiCandidateTypeKey, aiCandidateLabel } from '../lib/localAiReview';
+import { polygonProblems, type LocalAiMetadata } from '../lib/localAiImport';
 import { canAuthorTakeoff, canUseToolMode, canUseMarkupTool, canUseMeasureTool, isTouchInput, isPhoneWorkspace } from '../lib/workspaceCapabilities';
 import { useFieldWorkflowStore } from './fieldWorkflowStore';
 import { concreteOf, rebarOf } from '../lib/structuralPlan';
@@ -153,33 +155,59 @@ export interface DetectionCandidate {
   roomTypeKey: string | null;
   /** Qualitative only ('high' = a room name was recognised) — not a probability. */
   confidence: 'high' | 'low';
+  originalPoints?: Point[];
+  originalValidationProblems?: string[];
+  localAi?: LocalAiMetadata;
+  validationProblems?: string[];
+  reviewedWarningIds?: string[];
+  semanticTypeEdited?: boolean;
+  semanticTypeConfirmed?: boolean;
+}
+
+/** Rechecked at the commit boundary, independent of disabled UI controls. */
+function candidateCanBeAccepted(candidate: DetectionCandidate, plan: Plan, pageNumber: number): boolean {
+  if (candidate.pageNumber !== pageNumber) return false;
+  if (!candidate.localAi) return true;
+  const meta = candidate.localAi;
+  return meta.planId === plan.id && meta.pageNumber === pageNumber &&
+    !plan.rooms.some(room => room.id === candidate.id) &&
+    !candidate.validationProblems?.length &&
+    polygonProblems(candidate.points, meta.width, meta.height).length === 0;
 }
 
 /**
  * Turns an accepted candidate into an ordinary room. The accepted room is a normal room in every
  * way; `detectedType`/`detectionConfidence` are only metadata about where it came from, while
- * `roomType` records that the user confirmed that classification by accepting.
+ * `roomType` records legacy detection classification. Local AI types require separate confirmation and never seed finish items.
  */
 function roomFromCandidate(candidate: DetectionCandidate, project: Plan, seed: number, apartmentNumber: string): Room {
-  const profile = getRoomProfile(candidate.roomTypeKey);
+  const profile = getRoomProfile(candidate.localAi
+    ? (candidate.semanticTypeConfirmed ? aiCandidateTypeKey(candidate) : null) : candidate.roomTypeKey);
   return {
-    id: uuid(),
+    id: candidate.localAi ? candidate.id : uuid(),
     pageNumber: candidate.pageNumber,
     points: candidate.points.map((p) => ({ x: p.x, y: p.y })),
     closed: true,
     // `seed` counts up across a batch, so accepting several unnamed candidates gives each one its
     // own number instead of naming them all after the same room count.
-    name: candidate.suggestedName || t('defaultNames.room', { number: seed + 1 }),
+    name: candidate.localAi ? aiCandidateLabel(candidate) : candidate.suggestedName || t('defaultNames.room', { number: seed + 1 }),
     // Accepting is a manual act, so the room joins the apartment the user is working in — all the
     // detection metadata below is preserved untouched.
     apartmentNumber,
     notes: '',
-    // Work items come from the one shared profile builder; an unclassified candidate becomes a
+    // Even separately confirmed local AI types never seed work items. Legacy work items come
+    // from the one shared profile builder; an unclassified candidate becomes a
     // plain room with no work items, exactly like a room drawn by hand.
-    workItems: profile ? buildWorkItemsForProfile(profile, project) : [],
+    workItems: !candidate.localAi && profile ? buildWorkItemsForProfile(profile, project) : [],
     color: nextColor(seed),
-    roomType: candidate.roomTypeKey ?? undefined,
-    detectedType: candidate.roomTypeKey ?? undefined,
+    roomType: profile?.key,
+    detectedType: candidate.localAi ? undefined : profile?.key,
+    ...(candidate.localAi ? { aiSource: { spaceId: candidate.localAi.spaceId,
+      suggestedType: candidate.localAi.suggestedType ?? null, geometryClass: candidate.localAi.geometryClass,
+      geometryConfidence: candidate.localAi.geometryConfidence, typeConfidence: candidate.localAi.typeConfidence,
+      requiresReview: candidate.localAi.requiresReview, ambiguities: candidate.localAi.ambiguities ? [...candidate.localAi.ambiguities] : undefined,
+      reason: candidate.localAi.reason,
+      reviewNotes: [...candidate.localAi.reviewNotes], reviewedWarningIds: [...(candidate.reviewedWarningIds ?? [])] } } : {}),
     detectionConfidence: candidate.confidence,
   };
 }
@@ -292,6 +320,14 @@ interface AppState {
   detectionLabel: string;
   detectionSummary: DetectionSummary | null;
   /** Detection suggestions awaiting review. Session state — not in Plan, not persisted, not in history. */
+  selectedDetectionCandidateId: string | null;
+  selectDetectionCandidate: (id: string | null) => void;
+  editDetectionCandidate: (id: string, points: Point[]) => void;
+  restoreDetectionCandidate: (id: string) => void;
+  setDetectionWarningReviewed: (id: string, warningId: string, reviewed: boolean) => void;
+  setAllDetectionWarningsReviewed: (reviewed: boolean) => void;
+  setDetectionCandidateType: (id: string, key: string | null) => void;
+  confirmDetectionCandidateType: (id: string) => void;
   detectionCandidates: DetectionCandidate[];
   /** Page the pending candidates belong to; they are dropped when the user leaves it. */
   detectionCandidatesPage: number | null;
@@ -691,6 +727,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   detectionProgress: 0,
   detectionLabel: '',
   detectionSummary: null,
+  selectedDetectionCandidateId: null,
   detectionCandidates: [],
   detectionCandidatesPage: null,
 
@@ -718,6 +755,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       history: [],
       future: [],
       detectionSummary: null,
+      selectedDetectionCandidateId: null,
       detectionCandidates: [],
       detectionCandidatesPage: null,
       detecting: false,
@@ -926,11 +964,63 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ detecting: false });
     }
   },
+  selectDetectionCandidate: (id) => {
+    const { project, currentPage, detectionCandidates } = get();
+    const candidate = detectionCandidates.find(c => c.id === id && c.pageNumber === currentPage && c.localAi?.planId === project?.id);
+    set({ selectedDetectionCandidateId: candidate?.id ?? null,
+      ...(candidate ? { selectedRoomId: null, selectedMarkupId: null } : {}) });
+  },
+  editDetectionCandidate: (id, points) => {
+    if (!canAuthorTakeoff()) return;
+    const { project, currentPage } = get();
+    set({ detectionCandidates: get().detectionCandidates.map(c => {
+      if (c.id !== id || !c.localAi || c.localAi.planId !== project?.id || c.pageNumber !== currentPage) return c;
+      return { ...c, originalPoints: c.originalPoints ?? c.points.map(p => ({ ...p })),
+        originalValidationProblems: c.originalValidationProblems ?? [...(c.validationProblems ?? [])],
+        points: points.map(p => ({ ...p })), validationProblems: polygonProblems(points, c.localAi.width, c.localAi.height) };
+    }) });
+  },
+  restoreDetectionCandidate: (id) => {
+    const candidate = get().detectionCandidates.find(c => c.id === id);
+    if (!candidate?.originalPoints || !canAuthorTakeoff() || candidate.localAi?.planId !== get().project?.id || candidate.pageNumber !== get().currentPage) return;
+    set({ detectionCandidates: get().detectionCandidates.map(c => c.id === id ? { ...c,
+      points: candidate.originalPoints!.map(p => ({ ...p })), validationProblems: [...(candidate.originalValidationProblems ?? [])] } : c) });
+  },
+  setDetectionWarningReviewed: (id, warningId, reviewed) => {
+    const { project, currentPage } = get();
+    set({ detectionCandidates: get().detectionCandidates.map(c => {
+      if (c.id !== id || c.localAi?.planId !== project?.id || !c.localAi || c.pageNumber !== currentPage ||
+          !aiWarnings(c.localAi).some(w => w.id === warningId)) return c;
+      const ids = new Set(c.reviewedWarningIds ?? []);
+      if (reviewed) ids.add(warningId); else ids.delete(warningId);
+      return { ...c, reviewedWarningIds: [...ids] };
+    }) });
+  },
+  setAllDetectionWarningsReviewed: (reviewed) => {
+    const { project, currentPage } = get();
+    set({ detectionCandidates: get().detectionCandidates.map(c =>
+      c.localAi && c.localAi.planId === project?.id && c.pageNumber === currentPage
+        ? { ...c, reviewedWarningIds: reviewed ? aiWarnings(c.localAi).map(w => w.id) : [] } : c) });
+  },
+  setDetectionCandidateType: (id, key) => {
+    if (!canAuthorTakeoff() || (key !== null && !getRoomProfile(key))) return;
+    const { project, currentPage } = get();
+    set({ detectionCandidates: get().detectionCandidates.map(c =>
+      c.id === id && c.localAi?.planId === project?.id && c.pageNumber === currentPage
+        ? { ...c, roomTypeKey: key, semanticTypeEdited: true, semanticTypeConfirmed: false } : c) });
+  },
+  confirmDetectionCandidateType: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const { project, currentPage } = get();
+    set({ detectionCandidates: get().detectionCandidates.map(c =>
+      c.id === id && c.localAi?.planId === project?.id && c.pageNumber === currentPage && getRoomProfile(aiCandidateTypeKey(c))
+        ? { ...c, semanticTypeConfirmed: true } : c) });
+  },
   acceptDetectionCandidate: (candidateId) => {
     const { project, detectionCandidates } = get();
     if (!project) return null;
     const candidate = detectionCandidates.find((c) => c.id === candidateId && c.pageNumber === get().currentPage);
-    if (!candidate) return null;
+    if (!candidate || !canAuthorTakeoff() || !candidateCanBeAccepted(candidate, project, get().currentPage)) return null;
 
     historyTracker.push(get, set, project);
     const room = roomFromCandidate(candidate, project, project.rooms.length, get().activeApartmentNumber);
@@ -939,6 +1029,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // The candidate leaves the review list; the rest stay for review. Candidates are session
       // state, so an undo of this room does not bring the suggestion back — that is fine.
       detectionCandidates: detectionCandidates.filter((c) => c.id !== candidateId),
+      selectedDetectionCandidateId: get().selectedDetectionCandidateId === candidateId ? null : get().selectedDetectionCandidateId,
       selectedRoomId: room.id,
     });
     scheduleSave(get, set);
@@ -946,10 +1037,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   acceptAllDetectionCandidates: () => {
     const { project, detectionCandidates, currentPage } = get();
-    if (!project) return 0;
-    // Only what the user is actually reviewing on screen. Anything belonging to another page is
-    // never accepted sight-unseen — it is dropped along with the rest of the review session.
-    const accepted = detectionCandidates.filter((c) => c.pageNumber === currentPage);
+    if (!project || !canAuthorTakeoff()) return 0;
+    // Only valid suggestions on the current source page are accepted. Blocked suggestions
+    // remain in the review list so their validation problems can be inspected or rejected.
+    const accepted = detectionCandidates.filter((c) => candidateCanBeAccepted(c, project, currentPage));
     if (accepted.length === 0) return 0;
 
     // One push for the whole batch: a single undo removes every room it created.
@@ -959,8 +1050,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     const rooms = accepted.map((c) => roomFromCandidate(c, project, seed++, activeApartment));
     set({
       project: { ...project, rooms: [...project.rooms, ...rooms], updatedAt: Date.now() },
-      detectionCandidates: [],
-      detectionCandidatesPage: null,
+      selectedDetectionCandidateId: accepted.some(c => c.id === get().selectedDetectionCandidateId) ? null : get().selectedDetectionCandidateId,
+      detectionCandidates: detectionCandidates.filter(c => !accepted.some(a => a.id === c.id)),
+      detectionCandidatesPage: detectionCandidates.length > accepted.length ? currentPage : null,
       selectedRoomId: null,
     });
     scheduleSave(get, set);
@@ -969,11 +1061,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   rejectDetectionCandidate: (candidateId) => {
     // Pure session state: no project change, no history, no save.
     const remaining = get().detectionCandidates.filter((c) => c.id !== candidateId);
-    set({ detectionCandidates: remaining, detectionCandidatesPage: remaining.length > 0 ? get().detectionCandidatesPage : null });
+    set({ selectedDetectionCandidateId: get().selectedDetectionCandidateId === candidateId ? null : get().selectedDetectionCandidateId, detectionCandidates: remaining, detectionCandidatesPage: remaining.length > 0 ? get().detectionCandidatesPage : null });
   },
   clearDetectionCandidates: () => {
     if (get().detectionCandidates.length === 0 && get().detectionCandidatesPage === null) return;
-    set({ detectionCandidates: [], detectionCandidatesPage: null });
+    set({ selectedDetectionCandidateId: null, detectionCandidates: [], detectionCandidatesPage: null });
   },
   autoCalculateQuantities: () => {
     const { project, currentPage } = get();
@@ -1021,7 +1113,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const pageChanged = n !== get().currentPage;
     set({
       currentPage: n,
-      ...(pageChanged ? { detectionCandidates: [], detectionCandidatesPage: null } : {}),
+      ...(pageChanged ? { selectedDetectionCandidateId: null, detectionCandidates: [], detectionCandidatesPage: null } : {}),
       selectedRoomId: null,
       selectedMarkupId: null,
       selectedConcreteId: null,
@@ -1040,6 +1132,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     useFieldWorkflowStore.getState().setCalibrationDialog(false);
     useFieldWorkflowStore.getState().setDraft(isTouchInput() && m !== 'select' && m !== 'pan');
     set({
+      selectedDetectionCandidateId: null,
       toolMode: m,
       barsDrawing: null, stirrupDrawing: null,
       calibrationPoints: [],
@@ -1049,7 +1142,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
     ensureOverlayVisible(overlayForTool(m, get().drawTarget), get, set);
   },
-  setSelectedRoomId: (id) => set({ selectedRoomId: id }),
+  setSelectedRoomId: (id) => set({ selectedRoomId: id, ...(id ? { selectedDetectionCandidateId: null } : {}) }),
 
   addCalibrationPoint: (p) => {
     if (!canAuthorTakeoff()) return;

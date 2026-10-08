@@ -1,3 +1,4 @@
+import AiReviewWorkspace from './components/AiReviewWorkspace';
 import { useEffect, useState } from 'react';
 import { useAppStore } from './store/appStore';
 import { useCompareStore } from './store/compareStore';
@@ -86,6 +87,7 @@ function Workspace() {
           </div>
         </AdaptiveInspector>
       </div>
+      {!reviewOnly && activeTab === 'rooms' && <AiReviewWorkspace key={planId} />}
       <QuantitiesPanel mobileOpen={destination === 'quantities'} onMobileClose={() => setDestination('plan')} />
       {layout === 'narrow' && <nav className="mobile-destinations" aria-label={t('adaptive.plan')}>
         {(['plan', 'items', 'quantities'] as const).map((next) => <button key={next} aria-current={destination === next ? 'page' : undefined} onClick={() => setDestination(next)}>{t(`adaptive.${next}`)}</button>)}

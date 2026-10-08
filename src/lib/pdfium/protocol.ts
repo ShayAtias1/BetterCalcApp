@@ -2,6 +2,7 @@ export type PdfMatrix = [number, number, number, number, number, number];
 export interface ViewerRegion { x: number; y: number; width: number; height: number }
 export interface PdfiumRasterRequest {
   kind: 'render';
+  purpose?: 'ai';
   pageNumber: number;
   rotation: number;
   nativeTransform: PdfMatrix;

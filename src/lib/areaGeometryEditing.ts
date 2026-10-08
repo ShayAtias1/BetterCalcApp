@@ -5,10 +5,12 @@ import { rectangleLocalFrame } from './zoneGeometry';
 export type AreaGeometryKind = 'room' | 'concrete' | 'mesh' | 'bars' | 'stirrup';
 
 /** Rectangle corners resize along the original local axes, with the opposite corner anchored.
- * Polygon vertices move individually. Always derive from the drag's original geometry. */
-export function reshapeArea(points: Point[], index: number, target: Point): Point[] | null {
+ * Polygon vertices move individually. Draft suggestions can force vertex-only edits and
+ * temporarily invalid geometry; ordinary objects retain the existing rectangle/area guards.
+ * Always derive from the drag's original geometry. */
+export function reshapeArea(points: Point[], index: number, target: Point, options: { polygon?: boolean; allowInvalid?: boolean } = {}): Point[] | null {
   if (points.length < 3 || index < 0 || index >= points.length || !Number.isFinite(target.x) || !Number.isFinite(target.y)) return null;
-  const frame = rectangleLocalFrame(points);
+  const frame = options.polygon ? null : rectangleLocalFrame(points);
   let result: Point[];
   if (frame) {
     const anchor = points[(index + 2) % 4];
@@ -33,7 +35,7 @@ export function reshapeArea(points: Point[], index: number, target: Point): Poin
   } else {
     result = points.map((point, vertex) => vertex === index ? { ...target } : { ...point });
   }
-  return polygonAreaPx(result) > 1e-9 ? result : null;
+  return options.allowInvalid || polygonAreaPx(result) > 1e-9 ? result : null;
 }
 
 export function translateArea(points: Point[], offset: Point): Point[] {

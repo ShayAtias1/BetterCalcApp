@@ -1,3 +1,5 @@
+import { roomHasPendingDetectionWarning } from '../lib/localAiReview';
+import AiSpaceDetectionPanel from './AiSpaceDetectionPanel';
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import ReviewFields from './ReviewFields';
 import { useEffect, useRef, useState } from 'react';
@@ -155,7 +157,7 @@ export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) 
   return (
     <div className="room-panel">
       {/* Suggestions awaiting review take over the top of the tab until they are handled. */}
-      {SHOW_AUTO_DETECT && <DetectionReviewPanel />}
+      {!readOnly && (SHOW_AUTO_DETECT || import.meta.env.DEV) && <DetectionReviewPanel />}
 
       <div hidden={readOnly}>
       <div className="room-create-row">
@@ -284,7 +286,8 @@ export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) 
                   <li key={r.id} className={r.id === selectedRoomId ? 'active' : ''} onClick={() => selectRoom(r.id, r.pageNumber)}>
                     <span className="color-dot" style={{ background: r.color }} />
                     <span className="room-list-name" dir="auto">{r.name || t('rooms.unnamed')}</span>
-                    {r.detectionConfidence === 'low' && (
+                    {(r.aiSource || r.id.startsWith('local-ai:')) && <span className="cal-ok" title={t('aiReviewWorkspace.approved')}><Icon name="check" size={12} /> {t('aiReviewWorkspace.approved')}</span>}
+                    {roomHasPendingDetectionWarning(r) && (
                       <span className="room-review-flag" title={t('rooms.reviewFlag')}>
                         <Icon name="alert" size={13} />
                       </span>
@@ -324,6 +327,8 @@ export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) 
       </div>
 
       {/* Room details are a separate view — the list stays a list, however many apartments it holds. */}
+
+      {!readOnly && import.meta.env.DEV && <AiSpaceDetectionPanel />}
 
       {/* Auto detection is a secondary path: its launcher only appears when asked for. */}
       {!readOnly && SHOW_AUTO_DETECT && showDetection && <AutoDetectPanel />}

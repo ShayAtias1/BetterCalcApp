@@ -1,3 +1,4 @@
+import type { AiJobRecord, AiReviewRecord } from '../lib/ai/contracts';
 import { notifyPdfBlobChanged } from '../lib/pdfBlobEvents';
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { v4 as uuid } from 'uuid';
@@ -8,6 +9,8 @@ import { migrateComparePageOwnership } from '../lib/compareMigration';
 import { withMeasurementValues } from '../lib/measurementValues';
 
 interface QtoDB extends DBSchema {
+  aiReviews: { key:string; value:AiReviewRecord };
+  aiJobs: { key:string; value:AiJobRecord };
   /**
    * Plans. The store keeps its historical name: before projects existed every saved takeoff was a
    * single plan document stored here, and keeping the name means no record ever has to move.
@@ -36,7 +39,7 @@ interface QtoDB extends DBSchema {
 }
 
 const DB_NAME = 'bettercalc-qto';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let dbPromise: Promise<IDBPDatabase<QtoDB>> | null = null;
 
@@ -44,6 +47,9 @@ function getDb(): Promise<IDBPDatabase<QtoDB>> {
   if (!dbPromise) {
     dbPromise = openDB<QtoDB>(DB_NAME, DB_VERSION, {
       upgrade(db) {
+        // v4 adds isolated AI stores; existing plan/PDF storage is unchanged.
+        if (!db.objectStoreNames.contains('aiReviews')) db.createObjectStore('aiReviews', {keyPath:'key'});
+        if (!db.objectStoreNames.contains('aiJobs')) db.createObjectStore('aiJobs', {keyPath:'requestId'});
         if (!db.objectStoreNames.contains('projects')) {
           db.createObjectStore('projects', { keyPath: 'id' });
         }
@@ -458,3 +464,12 @@ export async function deleteComparePdfBlob(comparisonId: string, layer: string):
   await db.delete('comparePdfFiles', `${comparisonId}:${layer}`);
   notifyPdfBlobChanged(`compare:${comparisonId}:${layer}`);
 }
+
+// ---------- page-bound AI development reviews and jobs ----------
+export async function loadAiReview(key:string):Promise<AiReviewRecord|undefined>{return (await getDb()).get('aiReviews',key);}
+export async function updateAiReview(key:string,update:(previous:AiReviewRecord|undefined)=>AiReviewRecord):Promise<void>{
+  const db=await getDb(),tx=db.transaction('aiReviews','readwrite');
+  await tx.store.put(update(await tx.store.get(key)));await tx.done;
+}
+export async function saveAiJob(job:AiJobRecord):Promise<void>{await (await getDb()).put('aiJobs',job);}
+export async function listAiJobs():Promise<AiJobRecord[]>{return (await getDb()).getAll('aiJobs');}

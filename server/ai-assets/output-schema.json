@@ -1,0 +1,110 @@
+{
+  "type": "object",
+  "properties": {
+    "spaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          },
+          "geometryClass": {
+            "type": "string",
+            "enum": [
+              "CLOSED",
+              "OPEN_CONNECTED",
+              "AMBIGUOUS"
+            ]
+          },
+          "polygon": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "minItems": 3
+          },
+          "vertexCount": {
+            "type": "integer",
+            "minimum": 3
+          },
+          "type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "typeConfidence": {
+            "type": "string",
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ]
+          },
+          "geometryConfidence": {
+            "type": "string",
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ]
+          },
+          "requiresReview": {
+            "type": "boolean"
+          },
+          "ambiguities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "geometryTile": {
+            "type": "string",
+            "enum": [
+              "TILE_A",
+              "TILE_B",
+              "TILE_C",
+              "TILE_D"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "CROSS_TILE_INCOMPLETE",
+              null
+            ]
+          }
+        },
+        "required": [
+          "spaceId",
+          "geometryClass",
+          "polygon",
+          "vertexCount",
+          "type",
+          "typeConfidence",
+          "geometryConfidence",
+          "requiresReview",
+          "ambiguities",
+          "geometryTile",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "spaces"
+  ],
+  "additionalProperties": false
+}

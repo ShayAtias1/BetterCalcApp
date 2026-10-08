@@ -1,0 +1,10 @@
+{
+  "source": "BetterCalc-AI-Lab/results/api-optimization-01-high-detail",
+  "copiedAssetsSha256": {
+    "config-used.json": "5cadd26253100f54c5f99940780ab25b1ebc6a535a32587a88c59db8600ca5f2",
+    "product-prompt.txt": "57d5ef613933eae57e26a56b9837f81d7dc0e2d988146b8176389fa59852379d",
+    "output-schema.json": "afe84e3c1afdd1847d066f00fcc7d7b0522b3be781d07971050c62a1eedaf8b7"
+  },
+  "preparationSource": "scripts/api-feasibility/formal_blind_project_002.py",
+  "requestSource": "scripts/api-feasibility/local_tiles_005.py"
+}

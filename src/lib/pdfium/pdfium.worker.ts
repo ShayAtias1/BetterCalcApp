@@ -63,9 +63,11 @@ function selectPage(pageNumber: number, rotation: number) {
 function render(data: PdfiumRasterRequest): Extract<PdfiumResult,{kind:'render'}> {
   if (!engine) throw new Error('PDFium not initialized');
   const {width,height,scale,region}=data;
+  // Dedicated AI rendering follows the frozen 5500px policy, never the viewer budget.
+  const budget = data.purpose === 'ai' ? {maxDimension:5500,maxPixels:5500*5500} : PDF_RENDER_BUDGET;
   if (![width,height].every(Number.isInteger) || width<1 || height<1 ||
-    width>PDF_RENDER_BUDGET.maxDimension || height>PDF_RENDER_BUDGET.maxDimension ||
-    width*height>PDF_RENDER_BUDGET.maxPixels || !Number.isFinite(scale) || scale<=0 ||
+    width>budget.maxDimension || height>budget.maxDimension ||
+    width*height>budget.maxPixels || !Number.isFinite(scale) || scale<=0 ||
     !data.nativeTransform.every(Number.isFinite) || ![region.x,region.y].every(Number.isFinite)) {
     throw new Error('PDFium raster exceeds viewer budget or has invalid coordinates');
   }
