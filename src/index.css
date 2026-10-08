@@ -792,7 +792,8 @@ button:disabled,
   position: relative;
   flex: none;
 }
-.top-bar-menu-btn .menu-caret {
+.top-bar-menu-btn .menu-caret,
+.room-workspace-select .menu-caret {
   font-size: 9px;
   opacity: 0.55;
   margin-inline-start: 2px;
@@ -1329,6 +1330,30 @@ button:disabled,
   flex: none;
   padding-inline: var(--s-4);
 }
+.concrete-create-controls,
+.rebar-create-controls {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  row-gap: var(--s-3);
+}
+.concrete-create-controls > .room-shape-tools,
+.rebar-create-controls > .room-shape-tools {
+  justify-self: start;
+}
+.concrete-create-controls > .concrete-from-rooms-toggle,
+.rebar-create-controls > .structural-entry-action {
+  grid-column: 1;
+  margin-bottom: 0;
+}
+.concrete-create-controls > .concrete-from-rooms,
+.rebar-create-controls > .concrete-from-rooms {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+.rebar-create-controls {
+  row-gap: var(--s-2);
+}
 
 /* Active apartment is WORKSPACE STATE, not a form field: one compact strip with an accent
    edge, reading "עובד בדירה [12 ▾]". The sentence that used to repeat the value is gone. */
@@ -1354,6 +1379,25 @@ button:disabled,
   color: var(--text-h);
   background: var(--bg-surface);
   padding: 4px 8px;
+}
+.room-workspace-select {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.room-workspace-select select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-inline-end: 26px;
+  cursor: pointer;
+}
+.room-workspace-select .menu-caret {
+  position: absolute;
+  inset-inline-end: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-h);
+  pointer-events: none;
 }
 
 /* An apartment group is marked by its EDGE and its header — never by tinting the whole

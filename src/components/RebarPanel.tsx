@@ -120,7 +120,7 @@ export default function RebarPanel({ readOnly = false }: { readOnly?: boolean })
   return (
     <div className="room-panel">
       <div hidden={readOnly}>
-      <div className="room-create-row">
+      <div className="room-create-row rebar-create-controls">
         <button className={`btn-primary ${toolMode === 'draw' ? 'active' : ''}`} onClick={() => toggleTool('draw')} title={t('rebar.drawHint')}>
           {t('rebar.draw')}
         </button>
@@ -132,9 +132,6 @@ export default function RebarPanel({ readOnly = false }: { readOnly?: boolean })
             <Icon name="rectangle" />
           </button>
         </div>
-      </div>
-
-      <div className="rebar-entry-row">
         <ExistingAreaPicker
           copy={copyRoomsToRebar}
           willCreate={(count) => t('rebar.copy.willCreate', { count })}

@@ -103,7 +103,7 @@ export default function ConcretePanel({ readOnly = false }: { readOnly?: boolean
         ))}
       </div>
 
-      <div className="room-create-row">
+      <div className="room-create-row concrete-create-controls">
         <button className={`btn-primary ${toolMode === 'draw' ? 'active' : ''}`} onClick={() => toggleTool('draw')} title={t('concrete.drawHint')}>
           {t('concrete.draw')}
         </button>
@@ -125,14 +125,13 @@ export default function ConcretePanel({ readOnly = false }: { readOnly?: boolean
             <Icon name="rectangle" />
           </button>
         </div>
-      </div>
-
       <ExistingAreaPicker
         copy={copyRoomsToConcrete}
         willCreate={(count) => t('concrete.copy.willCreate', { count, kind: t(`concrete.kinds.${concreteKind}`) })}
         addLabel={t('concrete.copy.add')}
         doneLabel={(count) => t('concrete.copy.done', { count })}
       />
+      </div>
 
       </div>
       <div className="room-list">

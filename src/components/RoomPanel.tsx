@@ -219,6 +219,7 @@ export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) 
           room stays fully editable afterwards. */}
       <div className="active-apartment-row">
         <label htmlFor="new-room-template">{t('rooms.newRoomTemplate')}</label>
+        <div className="room-workspace-select">
         <select
           id="new-room-template"
           value={newRoomTemplate ?? ''}
@@ -232,12 +233,15 @@ export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) 
             </option>
           ))}
         </select>
+        <span className="menu-caret" aria-hidden="true">▾</span>
+        </div>
       </div>
 
       {/* Workspace state, not a form field: this is the apartment being worked in, and the sentence
           that used to repeat the selected value under it is gone — the value itself says it. */}
       <div className="active-apartment-row">
         <label htmlFor="active-apartment">{t('rooms.workingIn')}</label>
+        <div className="room-workspace-select">
         <select
           id="active-apartment"
           value={activeApartmentNumber}
@@ -258,6 +262,8 @@ export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) 
           )}
           <option value="__new__">{t('rooms.newApartment')}</option>
         </select>
+        <span className="menu-caret" aria-hidden="true">▾</span>
+        </div>
       </div>
 
       {!readOnly && <button className="btn-secondary full-width bulk-takeoff-launch" onClick={() => openBulk(project.id)}>{t('bulkTakeoff.open')}</button>}
