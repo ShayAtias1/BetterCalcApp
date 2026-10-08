@@ -1,3 +1,4 @@
+import { planBulkTakeoff, materializeBulkTakeoff, type BulkWorkConfig, type BulkConflictPolicy } from '../lib/bulkTakeoff';
 import { aiWarnings, aiCandidateTypeKey, aiCandidateLabel } from '../lib/localAiReview';
 import { candidateGeometryProblems, overlapNotes } from '../lib/ai/oneClick';
 import type { LocalAiMetadata } from '../lib/localAiImport';
@@ -521,6 +522,7 @@ interface AppState {
    */
   duplicateApartment: (sourceApartmentNumber: string, targetApartmentNumber: string) => number;
   deleteRoom: (id: string) => void;
+  applyBulkTakeoff: (expectedPlan: Plan, roomIds: string[], configs: BulkWorkConfig[], policy: BulkConflictPolicy, updateConfirmed: boolean) => 'applied' | 'stale' | 'blocked' | 'no-change';
   addWorkItem: (roomId: string, type: WorkType) => void;
   updateWorkItem: (roomId: string, itemId: string, patch: Partial<WorkItem>) => void;
   removeWorkItem: (roomId: string, itemId: string) => void;
@@ -1880,6 +1882,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedRoomId: selectedRoomId === id ? null : selectedRoomId,
     });
     scheduleSave(get, set);
+  },
+  applyBulkTakeoff: (expectedPlan, roomIds, configs, policy, updateConfirmed) => {
+    if (!canAuthorTakeoff()) return 'blocked';
+    const project = get().project;
+    if (!project || project !== expectedPlan) return 'stale';
+    if (policy === 'update-existing' && !updateConfirmed) return 'blocked';
+    const preview = planBulkTakeoff(project, roomIds, configs, policy);
+    if (!preview.changedCount) return 'no-change';
+    // Materialize before changing history/state, so errors cannot leave a partial operation.
+    const updated = materializeBulkTakeoff(project, preview, uuid);
+    historyTracker.push(get, set, project);
+    set({ project: updated });
+    scheduleSave(get, set);
+    return 'applied';
   },
   addWorkItem: (roomId, type) => {
     if (!canAuthorTakeoff()) return;

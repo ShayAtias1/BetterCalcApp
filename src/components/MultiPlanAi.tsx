@@ -1,3 +1,6 @@
+import { useT } from '../i18n';
+import { canAuthorTakeoff } from '../lib/workspaceCapabilities';
+import { useBulkTakeoffDialog } from './bulkTakeoffEntry';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useAppStore } from '../store/appStore';
 import { useLanguage } from '../i18n';
@@ -15,6 +18,7 @@ import './MultiPlanAi.css';
 
 type Inventory = Awaited<ReturnType<typeof inspectBatchPlans>>;
 export default function MultiPlanAi(){
+  const t=useT();
   const language=useLanguage(),l=multiPlanAiCopy[language];
   const folder=useAppStore(s=>s.currentProject),projectPlans=useAppStore(s=>s.projectPlans),activePlan=useAppStore(s=>s.project);
   const batches=useAiBatches(s=>s.batches),batchError=useAiBatches(s=>s.error),batchReady=useAiBatches(s=>s.ready);
@@ -199,7 +203,7 @@ export default function MultiPlanAi(){
                 const primaryState=status==='processing'?l.processing:status==='failed'?l.failed:status==='queued'?l.queued:!review?l.completed:pending?(review.resolvedIds.length?l.partial:l.awaitingReview):review.resolvedIds.length||q.rooms.length?l.reviewed:l.completed;
                 const readiness=changed?l.changed:status==='queued'||status==='processing'?l.detectionPending:status==='failed'?null:!resultsLoaded?l.loadingResults:!q.rooms.length?l.empty:!q.calibrated?l.calibration:q.missing.length?`${l.configuration}: ${q.missing.map(c=>l[c]).join(', ')}`:pending?l.awaitingReview:l.ready;
                 const pageError=p.error||jobs.find(j=>j.requestId===p.requestId)?.error;
-                return <article className={`mp-result-page ${status}`} key={p.reviewKey}><div className="mp-result-row"><strong className="mp-page-number">{l.page} <bdi>{p.pageNumber}</bdi></strong><div className="mp-page-state"><span className={`mp-status ${status==='failed'?'failed':status==='processing'?'processing':pending?'review':status==='completed'?'completed':'queued'}`}>{primaryState}</span>{status==='completed'&&review&&resultsLoaded&&<span className="muted">{q.rooms.length} {l.approved}</span>}</div><div className="mp-page-readiness">{readiness}</div><button className="btn-secondary" disabled={busy||loadingInventory||changed||status!=='completed'} onClick={()=>void action(()=>visit(p.planId,p.pageNumber))}>{pending?l.review:needsConfiguration?l.configure:l.openPage}</button></div>
+                return <article className={`mp-result-page ${status}`} key={p.reviewKey}><div className="mp-result-row"><strong className="mp-page-number">{l.page} <bdi>{p.pageNumber}</bdi></strong><div className="mp-page-state"><span className={`mp-status ${status==='failed'?'failed':status==='processing'?'processing':pending?'review':status==='completed'?'completed':'queued'}`}>{primaryState}</span>{status==='completed'&&review&&resultsLoaded&&<span className="muted">{q.rooms.length} {l.approved}</span>}</div><div className="mp-page-readiness">{readiness}</div><div className="bulk-result-actions"><button className="btn-secondary" disabled={busy||loadingInventory||changed||status!=='completed'} onClick={()=>void action(()=>visit(p.planId,p.pageNumber))}>{pending?l.review:needsConfiguration?l.configure:l.openPage}</button>{q.rooms.length>0&&canAuthorTakeoff()&&<button className="btn-secondary" disabled={busy||loadingInventory||changed} onClick={()=>void action(async()=>{await visit(p.planId,p.pageNumber);if(useAppStore.getState().project?.id===p.planId)useBulkTakeoffDialog.getState().openFor(p.planId,p.pageNumber);})}>{t('bulkTakeoff.open')}</button>}</div></div>
                   {pageError&&<p className="mp-page-error" dir="auto">{pageError}</p>}
                   {status==='completed'&&(q.rooms.length>0||!review)&&(!review?<p className="mp-page-meta muted">{l.reviewLoading}</p>:<details className="mp-page-details"><summary>{l.pageDetails} · {q.rooms.length} {l.approved}</summary><div className="mp-page-detail-content"><div className="mp-page-metrics">{batch.calculations.includes('area')&&q.area!==null&&<span>{l.area}: <bdi>{q.area.toFixed(2)} m²</bdi></span>}{batch.calculations.includes('perimeter')&&q.perimeter!==null&&<span>{l.perimeter}: <bdi>{q.perimeter.toFixed(2)} m</bdi></span>}</div><p className="muted">{l.roomHint}</p><div className="mp-room-actions">{q.rooms.map(r=><button className="btn-secondary" disabled={busy||changed} key={r.id} onClick={()=>void action(()=>visit(p.planId,p.pageNumber,r.id))}>{l.selectRoom}: <bdi>{r.name}</bdi></button>)}</div></div></details>)}
                 </article>;

@@ -1,3 +1,4 @@
+import { useBulkTakeoffDialog } from './bulkTakeoffEntry';
 import { roomHasPendingDetectionWarning } from '../lib/localAiReview';
 import AiSpaceDetectionPanel from './AiSpaceDetectionPanel';
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
@@ -40,6 +41,7 @@ const SHOW_AUTO_DETECT = false;
 export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) {
   const { touchInput } = useWorkspaceLayout();
   const t = useT();
+  const openBulk = useBulkTakeoffDialog(s => s.openFor);
   const project = useAppStore((s) => s.project);
   const selectedRoomId = useAppStore((s) => s.selectedRoomId);
   const setSelectedRoomId = useAppStore((s) => s.setSelectedRoomId);
@@ -99,6 +101,7 @@ export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) 
     return (
       <div className="room-panel">
         <div className="detail-nav">
+          {!readOnly && <button className="btn-secondary small" onClick={() => openBulk(project.id)}>{t('bulkTakeoff.open')}</button>}
           <button className="btn-ghost small" onClick={() => setDetailOpen(false)}>
             <Icon name="back" />
             {t('rooms.backToRooms')}
@@ -243,6 +246,8 @@ export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) 
           <option value="__new__">{t('rooms.newApartment')}</option>
         </select>
       </div>
+
+      {!readOnly && <button className="btn-secondary full-width bulk-takeoff-launch" onClick={() => openBulk(project.id)}>{t('bulkTakeoff.open')}</button>}
 
       </div>
       <div className="room-list">

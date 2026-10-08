@@ -1,3 +1,5 @@
+import BulkTakeoff from './components/BulkTakeoff';
+import AppDialogs from './components/AppDialogs';
 import MultiPlanAi from './components/MultiPlanAi';
 import AiReviewWorkspace from './components/AiReviewWorkspace';
 import { useEffect, useState } from 'react';
@@ -163,5 +165,5 @@ function AppContent() {
 }
 
 export default function App() {
-  return <WorkspaceLayoutProvider><AppContent /><MultiPlanAi /></WorkspaceLayoutProvider>;
+  return <WorkspaceLayoutProvider><AppContent /><MultiPlanAi /><BulkTakeoff /><AppDialogs /></WorkspaceLayoutProvider>;
 }
