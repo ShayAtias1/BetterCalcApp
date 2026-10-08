@@ -1,3 +1,5 @@
+import type { Point } from '../../types';
+import { ONE_CLICK_VERSION, targetCrop, type OneClickManifest } from './oneClick';
 import { ViewerPdfDocument } from '../pdfViewerSource';
 import { aiTiles, AI_IMAGE_NAMES, AI_PREPARATION_VERSION, type AiManifest, type AiImage } from './contracts';
 export async function pdfFingerprint(blob:Blob):Promise<string>{
@@ -29,5 +31,28 @@ export async function prepareAiPage(planId:string,pageNumber:number,blob:Blob,so
       }
     }finally{bitmap.close();canvas.width=canvas.height=0;}
     return {manifest,images};
+  }finally{document.dispose();}
+}
+
+/** Same independent PDFium raster; one context image and a detailed point-centered crop. */
+export async function prepareOneClickPage(planId:string,pageNumber:number,blob:Blob,sourceHash:string,targetPoint:Point){
+  const document=await ViewerPdfDocument.open(()=>Promise.resolve(blob),new AbortController().signal);
+  try {
+    const raster=await (await document.getPage(pageNumber)).prepareAiRaster();
+    if(!Number.isFinite(targetPoint.x)||!Number.isFinite(targetPoint.y)||targetPoint.x<0||targetPoint.y<0||targetPoint.x>raster.nativeWidth||targetPoint.y>raster.nativeHeight)throw new Error('Select a point inside the PDF page.');
+    const crop=targetCrop(raster.width,raster.height,targetPoint,raster.scale);
+    const manifest:OneClickManifest={preparationVersion:ONE_CLICK_VERSION,renderer:'embedpdf-pdfium',planId,pageNumber,sourceHash,
+      nativeWidth:raster.nativeWidth,nativeHeight:raster.nativeHeight,rotation:raster.rotation,userUnit:raster.userUnit,view:raster.view,
+      pageDimensions:[raster.width,raster.height],renderScale:raster.scale,tiles:[],targetPoint:{...targetPoint},crop,
+      coordinateMapping:'top-left displayed page; native = PAGE normalized * pageDimensions / renderScale; intrinsic rotation included'};
+    const bitmap=await createImageBitmap(raster.png),canvas=window.document.createElement('canvas');
+    try {
+      canvas.width=crop.tileWidth;canvas.height=crop.tileHeight;
+      const ctx=canvas.getContext('2d');if(!ctx)throw new Error('AI crop canvas unavailable.');
+      ctx.drawImage(bitmap,crop.pageX,crop.pageY,crop.pageWidth,crop.pageHeight,0,0,crop.tileWidth,crop.tileHeight);
+      const png=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('AI crop encoding failed.')),'image/png'));
+      return {manifest,images:[{name:'PAGE',width:raster.width,height:raster.height,base64:await base64(raster.png)},
+        {name:'TARGET_CROP',width:crop.tileWidth,height:crop.tileHeight,base64:await base64(png)}]};
+    }finally{bitmap.close();canvas.width=canvas.height=0;}
   }finally{document.dispose();}
 }

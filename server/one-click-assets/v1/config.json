@@ -1,0 +1,10 @@
+{
+  "version": "one-click-v1",
+  "model": "gpt-6.1-sol",
+  "reasoningEffort": "low",
+  "imageDetail": "high",
+  "serviceTier": "default",
+  "maxOutputTokens": 24000,
+  "timeoutSeconds": 420,
+  "maxRetries": 0
+}

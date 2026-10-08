@@ -1,8 +1,11 @@
-import { AI_PREPARATION_VERSION } from './ai/contracts';
+import { AI_PREPARATION_VERSION } from './ai/contracts.ts';
 import type { Point } from '../types';
-import { polygonAreaPx } from './geometry';
+import { polygonAreaPx } from './geometry.ts';
 
 export interface LocalAiMetadata {
+  targetPoint?: Point;
+  detectionMode?: string;
+  overlapWarnings?: string[];
   planId: string;
   sourceHash: string;
   pageNumber: number;

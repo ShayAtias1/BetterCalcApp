@@ -1,13 +1,16 @@
 import { create } from 'zustand';
-import { loadPdfBlob, loadAiReview, updateAiReview, saveAiJob, listAiJobs } from '../../db/database';
+import { loadPlan, loadPdfBlob, loadAiReview, updateAiReview, saveAiJob, listAiJobs } from '../../db/database';
 import { useAppStore } from '../../store/appStore';
 import { subscribePdfBlobChanges } from '../pdfBlobEvents';
 import { parseLocalAiResult } from '../localAiImport';
-import { pdfFingerprint, prepareAiPage } from './preparePage';
+import type { Point } from '../../types';
+import { canAuthorTakeoff, isTouchInput } from '../workspaceCapabilities';
+import { parseOneClickResult, type OneClickManifest } from './oneClick';
+import { pdfFingerprint, prepareAiPage, prepareOneClickPage } from './preparePage';
 import { submitSpaceJob, getSpaceJob, findSpaceJob } from './jobClient';
 import { aiReviewKey, aiImportManifest, type AiJobRecord, type AiJobResponse } from './contracts';
 
-export const useAiWorkflow=create<{jobs:AiJobRecord[];ready:boolean;error:string|null;sourceHash:string|null;resolvedIds:string[];reviewScope:{planId:string;pageNumber:number}|null}>(()=>({jobs:[],ready:false,error:null,sourceHash:null,resolvedIds:[],reviewScope:null}));
+export const useAiWorkflow=create<{jobs:AiJobRecord[];oneClickArmed:boolean;ready:boolean;error:string|null;sourceHash:string|null;resolvedIds:string[];reviewScope:{planId:string;pageNumber:number}|null}>(()=>({jobs:[],oneClickArmed:false,ready:false,error:null,sourceHash:null,resolvedIds:[],reviewScope:null}));
 let initialization:Promise<void>|null=null;
 let starting=false, epoch=0;
 let binding:{planId:string;pageNumber:number;sourceHash:string;key:string}|null=null;
@@ -66,7 +69,7 @@ async function initialize(){
 }
 
 export async function activateAiPage(planId:string,pageNumber:number){
-  const token=++epoch;binding=null;useAiWorkflow.setState({ready:false,sourceHash:null,resolvedIds:[],reviewScope:null});
+  const token=++epoch;binding=null;useAiWorkflow.setState({oneClickArmed:false});useAiWorkflow.setState({ready:false,sourceHash:null,resolvedIds:[],reviewScope:null});
   try{
     await writes;
     const blob=await loadPdfBlob(planId);if(!blob)throw new Error('The local PDF could not be found.');
@@ -83,9 +86,11 @@ export async function activateAiPage(planId:string,pageNumber:number){
 
 async function completed(job:AiJobRecord,response:AiJobResponse){
   const m=job.manifest;if(!m)throw new Error('Missing preparation manifest for the completed job.');
+  if(m.planId!==job.planId||m.pageNumber!==job.pageNumber||m.sourceHash!==job.sourceHash)throw new Error('Preparation manifest source identity mismatch.');
   const blob=await loadPdfBlob(job.planId);
   if(!blob||await pdfFingerprint(blob)!==job.sourceHash)throw new Error('The source PDF changed. This result cannot be attached to the replacement PDF.');
-  const candidates=parseLocalAiResult(response.result,aiImportManifest(m),{planId:job.planId,sourceHash:job.sourceHash,importId:response.id,pageNumber:job.pageNumber,
+  const sourcePlan=job.mode==='one-click-v1'?(useAppStore.getState().project?.id===job.planId?useAppStore.getState().project:await loadPlan(job.planId)):null;
+  const candidates=job.mode==='one-click-v1'?parseOneClickResult(response.result,m as OneClickManifest,response.id,sourcePlan?.rooms??[]):parseLocalAiResult(response.result,aiImportManifest(m),{planId:job.planId,sourceHash:job.sourceHash,importId:response.id,pageNumber:job.pageNumber,
     width:m.nativeWidth,height:m.nativeHeight,rotation:m.rotation,userUnit:m.userUnit,view:m.view});
   const key=aiReviewKey(job.planId,job.pageNumber,job.sourceHash);
   await writes;
@@ -95,10 +100,13 @@ async function completed(job:AiJobRecord,response:AiJobResponse){
     for(const candidate of candidates)if(!resolvedIds.includes(candidate.id)&&!merged.has(candidate.id))merged.set(candidate.id,candidate);
     return {key,planId:job.planId,pageNumber:job.pageNumber,sourceHash:job.sourceHash,candidates:[...merged.values()],resolvedIds,updatedAt:Date.now()};
   });
-  const updated={...job,jobId:response.id,status:'COMPLETED' as const,updatedAt:Date.now(),metrics:response.metrics,error:undefined};
+  const updated={...job,jobId:response.id,status:'COMPLETED' as const,updatedAt:Date.now(),metrics:response.metrics,error:undefined,resultSummary:job.mode==='one-click-v1'&&!candidates.length?String((response.result as {reason?:string}).reason||'The target boundary could not be reliably identified.'):undefined};
   await record(updated);
   const state=useAppStore.getState();
-  if(state.project?.id===job.planId && state.currentPage===job.pageNumber)await activateAiPage(job.planId,job.pageNumber);
+  if(state.project?.id===job.planId && state.currentPage===job.pageNumber){
+    await activateAiPage(job.planId,job.pageNumber);
+    if(job.mode==='one-click-v1'&&candidates.length&&useAppStore.getState().project?.id===job.planId&&useAppStore.getState().currentPage===job.pageNumber)useAppStore.getState().selectDetectionCandidate(candidates[0].id);
+  }
 }
 async function poll(initial:AiJobRecord){
   if(polling.has(initial.requestId))return;
@@ -130,17 +138,27 @@ async function poll(initial:AiJobRecord){
 }
 
 /** Explicit user action only. A persisted request identity precedes any paid POST. */
-export async function startAiDetection(){
+export function armOneClick(){
+  const state=useAppStore.getState();
+  if(!canAuthorTakeoff()||isTouchInput()||!binding||!useAiWorkflow.getState().ready||starting||useAiWorkflow.getState().jobs.some(busy)||state.detecting||state.drawTarget!=='room')return;
+  state.setToolMode('select');state.clearDrawingPoints();state.clearMeasurePoints();state.clearMarkupPoints();
+  useAppStore.setState({selectedDetectionCandidateId:null,selectedRoomId:null,selectedMarkupId:null});
+  useAiWorkflow.setState({oneClickArmed:true});
+}
+export function cancelOneClick(){useAiWorkflow.setState({oneClickArmed:false});}
+useAppStore.subscribe((next,previous)=>{if(next.toolMode!==previous.toolMode||next.drawTarget!==previous.drawTarget||next.project?.id!==previous.project?.id||next.currentPage!==previous.currentPage||next.selectedDetectionCandidateId!==previous.selectedDetectionCandidateId||next.selectedRoomId!==previous.selectedRoomId||next.selectedMarkupId!==previous.selectedMarkupId||next.drawingPoints!==previous.drawingPoints||next.measurePoints!==previous.measurePoints||next.markupPoints!==previous.markupPoints)cancelOneClick();});
+export async function startAiDetection(targetPoint?:Point){
   if(starting||!binding||!useAiWorkflow.getState().ready||useAiWorkflow.getState().jobs.some(busy))return;
   const source={...binding},state=useAppStore.getState();
-  if(state.project?.id!==source.planId||state.currentPage!==source.pageNumber||state.detectionCandidates.some(c=>c.localAi))return;
+  if(!canAuthorTakeoff()||state.detecting||state.project?.id!==source.planId||state.currentPage!==source.pageNumber||(!targetPoint&&state.detectionCandidates.some(c=>c.localAi)))return;
+  cancelOneClick();
   starting=true;useAiWorkflow.setState({error:null});
-  let job:AiJobRecord={requestId:crypto.randomUUID(),planId:source.planId,pageNumber:source.pageNumber,sourceHash:source.sourceHash,status:'PREPARING',createdAt:Date.now(),updatedAt:Date.now()};
+  let job:AiJobRecord={requestId:crypto.randomUUID(),planId:source.planId,pageNumber:source.pageNumber,sourceHash:source.sourceHash,mode:targetPoint?'one-click-v1':undefined,status:'PREPARING',createdAt:Date.now(),updatedAt:Date.now()};
   let posted=false;
   try{
     await record(job);
     const blob=await loadPdfBlob(source.planId);if(!blob||await pdfFingerprint(blob)!==source.sourceHash)throw new Error('The source PDF changed before preparation.');
-    const prepared=await prepareAiPage(source.planId,source.pageNumber,blob,source.sourceHash);
+    const prepared=targetPoint?await prepareOneClickPage(source.planId,source.pageNumber,blob,source.sourceHash,targetPoint):await prepareAiPage(source.planId,source.pageNumber,blob,source.sourceHash);
     const current=await loadPdfBlob(source.planId);if(!current||await pdfFingerprint(current)!==source.sourceHash)throw new Error('The source PDF changed during preparation.');
     job={...job,manifest:prepared.manifest,status:'PROCESSING',updatedAt:Date.now()};await record(job);
     posted=true;

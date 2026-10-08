@@ -631,13 +631,19 @@ export const en: Dictionary = {
   },
 
   aiDetection: {
+    oneClick: 'One-Click AI (experimental)',
+    cancelOneClick: 'Cancel One-Click AI',
+    oneClickHint: 'Click inside one room. Escape cancels. Hold Space or use the middle mouse button to pan.',
+    oneClickDisclosure: 'One-Click sends the page and a detailed crop around your selected point to OpenAI for paid processing. Provider retention rules apply. The result requires review.',
+    oneClickCompleted: 'Review the selected One-Click suggestion before approving it.',
+
     title: 'AI Space Detection',
     disclosure: 'Clicking sends this PDF page as five images to OpenAI for paid AI processing. Provider retention rules apply. Drafts remain local; no training collection.',
     retry: 'Retry AI Space Detection',
     preparing: 'Preparing full-resolution page images…',
     processing: 'AI is processing. You can continue using BetterCalc.',
     page: 'Page {page}',
-    reviewFirst: 'Review, approve or reject the current suggestions before starting another detection.',
+    reviewFirst: 'Review, approve or reject the current suggestions before another full-page detection. One-Click can add a missed space.',
     completed: 'Detection completed. Review the suggestions above; geometry approval is required.',
   },
 

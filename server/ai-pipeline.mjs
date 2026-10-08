@@ -41,7 +41,8 @@ export function modelRequest(images){
     text:{format:{type:'json_schema',name:'tile_local_architectural_spaces',strict:true,schema}}};
 }
 // Validate against the copied schema rather than a reduced response format.
-function matches(value,shape){
+export function matches(value,shape){
+  if(shape.anyOf)return shape.anyOf.some(s=>matches(value,s));
   if(shape.enum && !shape.enum.includes(value))return false;
   const types=Array.isArray(shape.type)?shape.type:[shape.type];
   const type=value===null?'null':Array.isArray(value)?'array':typeof value;

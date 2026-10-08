@@ -10,18 +10,22 @@ function manifest(planId,pageNumber=1){return {preparationVersion:AI_PREPARATION
 const app=createStore(()=>({project:{id:'restore',rooms:[]},currentPage:1,detectionCandidates:[],selectedDetectionCandidateId:null,detectionCandidatesPage:null}));
 const restored={requestId:'restored-request',jobId:'restored-job',planId:'restore',pageNumber:1,sourceHash:hash,status:'PROCESSING',createdAt:Date.now(),updatedAt:Date.now(),manifest:manifest('restore')};jobs.set(restored.requestId,restored);
 await mock.module(new URL('../../src/db/database.ts',import.meta.url).href,{namedExports:{
+  loadPlan:async id=>({id,rooms:[]}),
   loadPdfBlob:async id=>pdfs.get(id),loadAiReview:async key=>structuredClone(reviews.get(key)),
   updateAiReview:async(key,update)=>{reviews.set(key,structuredClone(update(reviews.get(key))));},
   saveAiJob:async job=>{jobs.set(job.requestId,structuredClone(job));},listAiJobs:async()=>[...jobs.values()]
 }});
 await mock.module(new URL('../../src/store/appStore.ts',import.meta.url).href,{namedExports:{useAppStore:app}});
 let prepareGate=null,postCalls=0,rejectPost=false;
+const oneClickRequests=new Set();
+const oneClickResult={status:'FOUND',reason:'',space:{polygon:[[.2,.2],[.8,.2],[.8,.8],[.2,.8]],type:'bedroom',geometryConfidence:'MEDIUM',ambiguities:[]}};
 await mock.module(new URL('../../src/lib/ai/preparePage.ts',import.meta.url).href,{namedExports:{
+  prepareOneClickPage:async(planId,pageNumber,_blob,_hash,targetPoint)=>{if(prepareGate)await prepareGate;return {manifest:{...manifest(planId,pageNumber),preparationVersion:'one-click-v1',targetPoint,tiles:[],crop:{}},images:[]};},
   pdfFingerprint:async blob=>blob.text(),prepareAiPage:async(planId,pageNumber)=>{if(prepareGate)await prepareGate;return {manifest:manifest(planId,pageNumber),images:[]};}
 }});
-const response=requestId=>({id:requestId==='restored-request'?'restored-job':requestId,requestId,status:'COMPLETED',result});
+const response=requestId=>({id:requestId==='restored-request'?'restored-job':requestId,requestId,status:'COMPLETED',result:oneClickRequests.has(requestId)?oneClickResult:result});
 await mock.module(new URL('../../src/lib/ai/jobClient.ts',import.meta.url).href,{namedExports:{
-  submitSpaceJob:async requestId=>{postCalls++;if(rejectPost)throw Object.assign(new Error('Cap reached.'),{status:429});return {id:requestId,requestId,status:'PROCESSING'};},
+  submitSpaceJob:async(requestId,m)=>{if(m.preparationVersion==='one-click-v1')oneClickRequests.add(requestId);postCalls++;if(rejectPost)throw Object.assign(new Error('Cap reached.'),{status:429});return {id:requestId,requestId,status:'PROCESSING'};},
   getSpaceJob:async id=>response(id==='restored-job'?'restored-request':id),findSpaceJob:async id=>response(id)
 }});
 const {initializeAiWorkflow,activateAiPage,startAiDetection,useAiWorkflow}=await import('../../src/lib/ai/workflow.ts');
@@ -66,4 +70,21 @@ test('failed paid admission remains failed until the user explicitly retries',as
   rejectPost=true;await startAiDetection();assert.equal(postCalls,2);
   assert.equal(useAiWorkflow.getState().jobs.find(j=>j.planId==='failed').status,'FAILED');
   navigate(2);await activateAiPage('failed',2);navigate(1);await activateAiPage('failed',1);assert.equal(postCalls,2);
+});
+
+test('One-Click appends one editable persisted draft alongside existing suggestions and ignores repeated submission',async()=>{
+  rejectPost=false;pdfs.set('oneclick',new Blob([hash]));
+  app.setState({project:{id:'oneclick',rooms:[]},currentPage:1,detectionCandidates:[],selectDetectionCandidate:id=>app.setState({selectedDetectionCandidateId:id})});
+  await activateAiPage('oneclick',1);
+  const candidate={id:'existing-draft',pageNumber:1,points:[],localAi:{planId:'oneclick',sourceHash:hash}};
+  app.setState({detectionCandidates:[candidate]});
+  let release;prepareGate=new Promise(resolve=>{release=resolve;});const before=postCalls;
+  const first=startAiDetection({x:50,y:40});await until(()=>useAiWorkflow.getState().jobs.some(j=>j.planId==='oneclick'&&j.status==='PREPARING'));
+  await startAiDetection({x:60,y:40});release();await first;prepareGate=null;
+  await until(()=>useAiWorkflow.getState().jobs.some(j=>j.planId==='oneclick'&&j.status==='COMPLETED')&&app.getState().detectionCandidates.length===2);
+  assert.equal(postCalls,before+1);assert.equal(app.getState().project.rooms.length,0);
+  const target=app.getState().detectionCandidates.find(c=>c.id!==candidate.id);assert.equal(target.localAi.detectionMode,'one-click-v1');
+  assert.deepEqual(target.localAi.targetPoint,{x:50,y:40});assert.deepEqual(target.validationProblems,[]);
+  navigate(2);await activateAiPage('oneclick',2);navigate(1);await activateAiPage('oneclick',1);
+  assert.equal(app.getState().detectionCandidates.length,2);assert.equal(postCalls,before+1);
 });

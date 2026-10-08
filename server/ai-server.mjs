@@ -1,3 +1,4 @@
+import { validateOneClickSubmission, oneClickModelRequest, parseOneClickResponse } from './one-click-pipeline.mjs';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
@@ -18,10 +19,10 @@ export function createAiService({env=process.env,fetchProvider=fetch,ledgerPath=
   function saveLedger(){writeFileSync(ledgerPath+'.tmp',JSON.stringify(ledger),{mode:0o600});renameSync(ledgerPath+'.tmp',ledgerPath);}
   const jobs=new Map();let active=false;
   function status(job){return {id:job.id,requestId:job.requestId,status:job.status,error:job.error,result:job.result,metrics:job.metrics};}
-  async function run(job,images){
+  async function run(job,images,manifest){
     const start=Date.now();let measured=null;
     try{
-      let body=JSON.stringify(modelRequest(images));images=null;
+      let body=JSON.stringify(job.oneClick?oneClickModelRequest(images,manifest):modelRequest(images));images=null;
       const pending=fetchProvider('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${env.OPENAI_API_KEY}`,'Content-Type':'application/json'},body,signal:AbortSignal.timeout(config.timeoutSeconds*1000)});
       body=null;
       const response=await pending;
@@ -35,7 +36,8 @@ export function createAiService({env=process.env,fetchProvider=fetch,ledgerPath=
       measured=estimateCost(raw);
       job.metrics={latencySeconds:(Date.now()-start)/1000,usage:raw.usage,estimatedCostUsd:measured,model:raw.model,serviceTier:raw.service_tier};
       if(raw.service_tier && !['default','standard'].includes(raw.service_tier))throw new Error('Provider returned an unexpected service tier.');
-      job.result=parseModelResponse(raw);job.status='COMPLETED';
+      if(raw.model && raw.model!==config.model && !raw.model.startsWith(config.model+'-'))throw new Error('Provider returned an unexpected model.');
+      job.result=job.oneClick?parseOneClickResponse(raw):parseModelResponse(raw);job.status='COMPLETED';
     }catch(error){
       job.status='FAILED';
       // Only our own fixed errors are sent to the client. Never provider bodies/headers/secrets.
@@ -79,20 +81,21 @@ export function createAiService({env=process.env,fetchProvider=fetch,ledgerPath=
       for await(const chunk of req){size+=chunk.length;if(size>MAX_BODY_BYTES){reply(413,{error:'Image payload exceeds the input limit.'});req.resume();return;}chunks.push(chunk);}
       let body;try{body=JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{return reply(400,{error:'Invalid JSON request.'});}
       if(Object.keys(body??{}).some(k=>!['requestId','manifest','images'].includes(k)))return reply(400,{error:'Unknown request fields; model and upstream are fixed.'});
-      validateSubmission(body);
+      const oneClick=body.manifest?.preparationVersion==='one-click-v1';
+      if(oneClick)validateOneClickSubmission(body);else validateSubmission(body);
       const previous=ledger.find(e=>e.requestId===body.requestId);
       if(previous){const job=jobs.get(previous.jobId);return job?reply(200,status(job)):reply(410,{error:'This paid submission was already admitted. It will not be rerun.'});}
       if(!env.OPENAI_API_KEY || env.OPENAI_API_KEY==='YOUR_OPENAI_API_KEY')return reply(503,{error:'Set OPENAI_API_KEY in the local service environment.'});
       if(active)return reply(409,{error:'One AI inference is already running. Wait for it to finish.'});
       if(ledger.length>=requestCap)return reply(429,{error:'Local request cap reached.'});
       if(ledger.reduce((sum,e)=>sum+e.charge,0)+COST_RESERVATION_USD>spendCap)return reply(429,{error:'Local spending cap cannot reserve this request. Increase it explicitly if desired.'});
-      const job={id:randomUUID(),requestId:body.requestId,status:'PROCESSING',createdAt:Date.now(),updatedAt:Date.now()};
+      const job={id:randomUUID(),requestId:body.requestId,oneClick,status:'PROCESSING',createdAt:Date.now(),updatedAt:Date.now()};
       ledger.push({requestId:job.requestId,jobId:job.id,status:'PROCESSING',charge:COST_RESERVATION_USD});
       try{saveLedger();}catch{ledger.pop();return reply(503,{error:'Cannot write spending ledger; no inference submitted.'});}
       jobs.set(job.id,job);active=true;
       reply(202,status(job));
       // Safe only in this long-lived Node process. Never copy detached work into a short-lived function.
-      void run(job,body.images);
+      void run(job,body.images,body.manifest);
     }catch(error){reply(error.statusCode??500,{error:error.statusCode===400?error.message:'Local AI service failed; no automatic retry.'});}
   });
   server.requestTimeout=30_000;server.headersTimeout=10_000;

@@ -1,5 +1,6 @@
 import { aiWarnings, aiCandidateTypeKey, aiCandidateLabel } from '../lib/localAiReview';
-import { polygonProblems, type LocalAiMetadata } from '../lib/localAiImport';
+import { candidateGeometryProblems, overlapNotes } from '../lib/ai/oneClick';
+import type { LocalAiMetadata } from '../lib/localAiImport';
 import { canAuthorTakeoff, canUseToolMode, canUseMarkupTool, canUseMeasureTool, isTouchInput, isPhoneWorkspace } from '../lib/workspaceCapabilities';
 import { useFieldWorkflowStore } from './fieldWorkflowStore';
 import { concreteOf, rebarOf } from '../lib/structuralPlan';
@@ -172,7 +173,7 @@ function candidateCanBeAccepted(candidate: DetectionCandidate, plan: Plan, pageN
   return meta.planId === plan.id && meta.pageNumber === pageNumber &&
     !plan.rooms.some(room => room.id === candidate.id) &&
     !candidate.validationProblems?.length &&
-    polygonProblems(candidate.points, meta.width, meta.height).length === 0;
+    candidateGeometryProblems(candidate.points, meta).length === 0;
 }
 
 /**
@@ -202,7 +203,7 @@ function roomFromCandidate(candidate: DetectionCandidate, project: Plan, seed: n
     color: nextColor(seed),
     roomType: profile?.key,
     detectedType: candidate.localAi ? undefined : profile?.key,
-    ...(candidate.localAi ? { aiSource: { spaceId: candidate.localAi.spaceId,
+    ...(candidate.localAi ? { aiSource: { targetPoint:candidate.localAi.targetPoint?{...candidate.localAi.targetPoint}:undefined,detectionMode:candidate.localAi.detectionMode,overlapWarnings:candidate.localAi.overlapWarnings?[...candidate.localAi.overlapWarnings]:undefined,spaceId: candidate.localAi.spaceId,
       suggestedType: candidate.localAi.suggestedType ?? null, geometryClass: candidate.localAi.geometryClass,
       geometryConfidence: candidate.localAi.geometryConfidence, typeConfidence: candidate.localAi.typeConfidence,
       requiresReview: candidate.localAi.requiresReview, ambiguities: candidate.localAi.ambiguities ? [...candidate.localAi.ambiguities] : undefined,
@@ -977,14 +978,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (c.id !== id || !c.localAi || c.localAi.planId !== project?.id || c.pageNumber !== currentPage) return c;
       return { ...c, originalPoints: c.originalPoints ?? c.points.map(p => ({ ...p })),
         originalValidationProblems: c.originalValidationProblems ?? [...(c.validationProblems ?? [])],
-        points: points.map(p => ({ ...p })), validationProblems: polygonProblems(points, c.localAi.width, c.localAi.height) };
+        points: points.map(p => ({ ...p })), validationProblems: candidateGeometryProblems(points, c.localAi),
+        ...(c.localAi.targetPoint?{localAi:{...c.localAi,overlapWarnings:overlapNotes(points,project?.rooms??[],currentPage)},reviewedWarningIds:c.reviewedWarningIds?.filter(id=>!id.startsWith('overlap:'))}:{}) };
     }) });
   },
   restoreDetectionCandidate: (id) => {
     const candidate = get().detectionCandidates.find(c => c.id === id);
     if (!candidate?.originalPoints || !canAuthorTakeoff() || candidate.localAi?.planId !== get().project?.id || candidate.pageNumber !== get().currentPage) return;
     set({ detectionCandidates: get().detectionCandidates.map(c => c.id === id ? { ...c,
-      points: candidate.originalPoints!.map(p => ({ ...p })), validationProblems: [...(candidate.originalValidationProblems ?? [])] } : c) });
+      points: candidate.originalPoints!.map(p => ({ ...p })), validationProblems: [...(candidate.originalValidationProblems ?? [])],
+      ...(c.localAi?.targetPoint?{localAi:{...c.localAi,overlapWarnings:overlapNotes(candidate.originalPoints!,get().project?.rooms??[],get().currentPage)},reviewedWarningIds:c.reviewedWarningIds?.filter(id=>!id.startsWith('overlap:'))}:{}) } : c) });
   },
   setDetectionWarningReviewed: (id, warningId, reviewed) => {
     const { project, currentPage } = get();

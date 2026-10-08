@@ -44,6 +44,7 @@ export function aiWarnings(meta: LocalAiMetadata, tr: TranslateFn = t): { id: st
     warnings.push({ id: 'geometryConfidence', text: tr('aiReview.geometryConfidence', { level: meta.geometryConfidence }) });
   }
   if (meta.requiresReview) warnings.push({ id: 'requiresReview', text: tr('aiReview.requiresReview') });
+  meta.overlapWarnings?.forEach(text=>warnings.push({id:`overlap:${text}`,text}));
   // Retain compatibility with drafts imported before structured review fields were retained.
   if (meta.ambiguities === undefined) meta.reviewNotes.forEach((text, index) => warnings.push({ id: `note:${index}`, text }));
   return warnings;
