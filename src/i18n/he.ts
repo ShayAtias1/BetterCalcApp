@@ -633,6 +633,15 @@ export const he = {
     noWarnings: 'אין אזהרות אי־ודאות AI פעילות.',
   },
 
+  aiTools: {
+    title: 'כלי AI',
+    allSpaces: 'זיהוי כל החללים',
+    oneClick: 'זיהוי חלל בלחיצה',
+    multiPlan: 'זיהוי במספר תוכניות',
+    fullPageConsent: 'לשלוח עמוד זה כחמש תמונות ל־OpenAI לעיבוד בתשלום? חלים כללי שמירת המידע של הספק. הטיוטות נשארות מקומיות; BetterCalc אינו אוסף נתונים לאימון.',
+    oneClickConsent: 'לאפשר ללחיצה הבאה בתוך חדר לשלוח את העמוד וחיתוך מפורט ל־OpenAI לעיבוד בתשלום? חלים כללי שמירת המידע של הספק. התוצאות דורשות בדיקה.',
+  },
+
   aiDetection: {
     oneClick: 'One-Click AI (ניסיוני)',
     cancelOneClick: 'ביטול One-Click AI',

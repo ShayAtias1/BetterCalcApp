@@ -630,6 +630,15 @@ export const en: Dictionary = {
     noWarnings: 'No active AI uncertainty warnings.',
   },
 
+  aiTools: {
+    title: 'AI Tools',
+    allSpaces: 'Detect All Spaces',
+    oneClick: 'One-Click AI',
+    multiPlan: 'Multi-Plan AI',
+    fullPageConsent: 'Send this page as five images to OpenAI for paid processing? Provider retention rules apply. Drafts stay local; BetterCalc does not collect training data.',
+    oneClickConsent: 'Allow the next room click to send this page and a detailed crop to OpenAI for paid processing? Provider retention rules apply. Results require review.',
+  },
+
   aiDetection: {
     oneClick: 'One-Click AI (experimental)',
     cancelOneClick: 'Cancel One-Click AI',

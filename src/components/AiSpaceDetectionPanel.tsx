@@ -2,11 +2,18 @@ import { canAuthorTakeoff, isTouchInput } from '../lib/workspaceCapabilities';
 import { useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
 import { useT } from '../i18n';
+import Icon from './Icon';
+import { useMultiPlanAiDialog } from './multiPlanAiEntry';
+import { useAiBatches } from '../lib/ai/batchWorkflow';
+import './AiSpaceDetectionPanel.css';
 import { useAiWorkflow, initializeAiWorkflow, activateAiPage, startAiDetection, armOneClick, cancelOneClick } from '../lib/ai/workflow';
 
 /** Development only until the job transport has production admission/abuse protection. */
 export default function AiSpaceDetectionPanel(){
   const t=useT(),planId=useAppStore(s=>s.project?.id),pageNumber=useAppStore(s=>s.currentPage);
+  const folder=useAppStore(s=>s.currentProject);
+  const batchReady=useAiBatches(s=>s.ready);
+  const openMultiPlan=useMultiPlanAiDialog(s=>s.setOpen);
   const candidates=useAppStore(s=>s.detectionCandidates);
   const {jobs,ready,error,sourceHash,oneClickArmed}=useAiWorkflow();
   useEffect(()=>{
@@ -17,12 +24,18 @@ export default function AiSpaceDetectionPanel(){
   const active=jobs.find(job=>job.status==='PREPARING'||job.status==='PROCESSING');
   const current=jobs.filter(job=>job.planId===planId&&job.pageNumber===pageNumber&&job.sourceHash===sourceHash).sort((a,b)=>b.createdAt-a.createdAt)[0];
   const hasDrafts=candidates.some(c=>c.localAi);
-  return <div className="auto-detect-panel">
-    <span className="section-label">{t('aiDetection.title')}</span>
-    <p className="auto-detect-hint">{t('aiDetection.disclosure')}</p>
-    <button className="btn-primary full-width" disabled={!ready||!!active||hasDrafts} onClick={()=>void startAiDetection()}>{t(current?.status==='FAILED'?'aiDetection.retry':'aiDetection.title')}</button>
-    <p className="auto-detect-hint">{t('aiDetection.oneClickDisclosure')}</p>
-    <button className="btn-primary full-width" disabled={!ready||!!active||!canAuthorTakeoff()||isTouchInput()} aria-pressed={oneClickArmed} onClick={()=>oneClickArmed?cancelOneClick():armOneClick()}>{t(oneClickArmed?'aiDetection.cancelOneClick':'aiDetection.oneClick')}</button>
+  return <section className="ai-tools-section" aria-labelledby="ai-tools-title">
+    <h3 id="ai-tools-title">{t('aiTools.title')}</h3>
+    <div className="ai-tools-actions">
+      <button className="btn-secondary ai-tool-button" disabled={!ready||!!active||hasDrafts} onClick={()=>{
+        if(window.confirm(t('aiTools.fullPageConsent')))void startAiDetection();
+      }}><Icon name="scan" size={16}/><span>{t('aiTools.allSpaces')}</span></button>
+      <button className={`btn-secondary ai-tool-button${oneClickArmed?' active':''}`} disabled={!ready||!!active||!canAuthorTakeoff()||isTouchInput()} aria-pressed={oneClickArmed} aria-label={t(oneClickArmed?'aiDetection.cancelOneClick':'aiTools.oneClick')} onClick={()=>{
+        if(oneClickArmed)cancelOneClick();
+        else if(window.confirm(t('aiTools.oneClickConsent')))armOneClick();
+      }}><Icon name="target" size={16}/><span>{t('aiTools.oneClick')}</span>{oneClickArmed&&<Icon name="close" size={14}/>}</button>
+      <button className="btn-secondary ai-tool-button" disabled={!folder||!batchReady} onClick={()=>{cancelOneClick();openMultiPlan(true);}}><Icon name="layers" size={16}/><span>{t('aiTools.multiPlan')}</span></button>
+    </div>
     {oneClickArmed&&<p className="auto-detect-hint" role="status">{t('aiDetection.oneClickHint')}</p>}
     {current?.mode==='one-click-v1'&&current.status==='COMPLETED'&&<p className="auto-detect-hint">{current.resultSummary||t('aiDetection.oneClickCompleted')}</p>}
     {hasDrafts&&<p className="auto-detect-hint">{t('aiDetection.reviewFirst')}</p>}
@@ -33,5 +46,5 @@ export default function AiSpaceDetectionPanel(){
     {current?.status==='COMPLETED'&&current.mode!=='one-click-v1'&&<p className="auto-detect-hint" role="status">{t('aiDetection.completed')}</p>}
     {current?.status==='FAILED'&&<p className="cal-missing" role="alert">{current.error}</p>}
     {error&&<p className="cal-missing" role="alert">{error}</p>}
-  </div>;
+  </section>;
 }
