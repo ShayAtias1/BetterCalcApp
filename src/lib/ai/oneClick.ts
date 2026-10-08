@@ -1,6 +1,6 @@
 import type { Point, Room } from '../../types';
 import type { AiManifest, AiTile } from './contracts';
-import { polygonProblems, type ImportedSpace, type LocalAiMetadata } from '../localAiImport';
+import { polygonProblems, type ImportedSpace, type LocalAiMetadata } from '../localAiImport.ts';
 export const ONE_CLICK_VERSION = 'one-click-v1';
 export interface OneClickManifest extends AiManifest { targetPoint:Point; crop:AiTile }
 export function targetCrop(width:number,height:number,point:Point,scale:number):AiTile {
