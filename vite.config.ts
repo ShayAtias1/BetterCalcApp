@@ -20,7 +20,11 @@ function appVersion(): string {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  server: { proxy: { '/ai': { target: 'http://127.0.0.1:4781', changeOrigin: true } } },
+  cacheDir: 'node_modules/.vite-bettercalc-app',
+  server: {
+    host: '127.0.0.1', port: 5173, strictPort: true,
+    proxy: { '/ai': { target: 'http://127.0.0.1:4781', changeOrigin: true } },
+  },
   define: {
     __APP_VERSION__: JSON.stringify(appVersion()),
   },

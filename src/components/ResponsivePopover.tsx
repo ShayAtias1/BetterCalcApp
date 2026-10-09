@@ -31,7 +31,7 @@ export default function ResponsivePopover({ anchorRef, onClose, id, label, child
       const bounds = anchor.getBoundingClientRect();
       const width = Math.max(1, right - left);
       surface.style.maxWidth = `${Math.min(layout === 'expanded' ? desktopMaxWidth : 360, width)}px`;
-      surface.style.minWidth = `${Math.min(layout === 'expanded' ? 240 : 168, width)}px`;
+      surface.style.minWidth = `${Math.min(layout === 'expanded' ? Math.min(240, desktopMaxWidth) : 168, width)}px`;
       surface.style.maxHeight = `${Math.max(1, bottom - top)}px`;
       let size = surface.getBoundingClientRect();
       const gap = 6;

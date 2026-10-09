@@ -199,7 +199,7 @@ export default function CompareTopBar({
           variant="ghost"
           title={t('compare.topBar.viewHint')}
           highlighted={!annotationsVisible || !measurementsVisible}
-          desktopMaxWidth={420}
+          desktopMaxWidth={200}
         >
           <button className="menu-item" onClick={toggleAnnotationsVisible}>
             <span className="menu-check">{annotationsVisible && <Icon name="check" size={13} />}</span>
