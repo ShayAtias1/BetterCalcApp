@@ -1,0 +1,13 @@
+{
+  "task": "openings-v1",
+  "baseline": "Vision-002 Original",
+  "source": "BetterCalc-AI-Lab/openings-poc/runs/vision-002",
+  "copiedAssetsSha256": {
+    "config-used.json": "9bd0a6461047f84a176e9d6da2cb1b6fb43c284ce8d1bfdee8999de1009efef9",
+    "product-prompt.txt": "2c7e3fd36fca296dd7ee8ac663b0d66e1d1053f0e13b4385905854dc88ca56e2",
+    "output-schema.json": "4d4ee96837b506e59f55a1953f3fb92126f3d2681ed587e34089f60e2ab0fe07"
+  },
+  "preparation": "5500px longest dimension; PAGE plus four ceil(dimension / 1.82) overlapping corner crops",
+  "requestSource": "openings-poc/vision.py",
+  "runtimeLabDependency": false
+}

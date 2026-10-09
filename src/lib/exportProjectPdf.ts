@@ -1,3 +1,4 @@
+import { openingPdfSchedule, openingPdfDeductions, type OpeningPdfOptions } from './openingQuantityReport';
 import { PDFDocument } from 'pdf-lib';
 import { drawLogo, embedReportFonts, logoWidth, PdfPainter, REPORT_LOGO_HEIGHT, type ReportFonts } from './pdfText';
 import { saveAs } from 'file-saver';
@@ -89,8 +90,8 @@ export class ReportWriter {
     this.y += ROW_H;
   }
 
-  section(title: string) {
-    this.ensure(3);
+  section(title: string, minimumRows = 3) {
+    this.ensure(minimumRows);
     this.y += 10;
     this.pt.fillText(title, this.startX, this.y + 16, { size: 15, bold: true, color: '#0f172a' });
     this.y += 26;
@@ -185,7 +186,7 @@ const amountHeaders = ({ t }: ExportContext) => {
 };
 const amountCells = (a: CategoryAmount, fmt: (v: number | null | undefined) => string) => [fmt(a.quantityM2), fmt(a.orderM2), fmt(a.lengthM), fmt(a.orderLengthM)];
 
-export async function exportProjectToPdf(project: Project, plans: Plan[], content: ExportContent, language: Language) {
+export async function exportProjectToPdf(project: Project, plans: Plan[], content: ExportContent, language: Language, options: OpeningPdfOptions = {}) {
   const x = exportContext(language);
   const { t } = x;
   const fmt = (v: number | null | undefined) => (v == null ? DASH : x.number(v));
@@ -265,6 +266,15 @@ export async function exportProjectToPdf(project: Project, plans: Plan[], conten
           )
         )
       );
+    }
+  }
+
+  if (content.finishes) {
+    const deductions=openingPdfDeductions(plans,x);
+    const schedule=openingPdfSchedule(plans,x,options);
+    for(const table of [deductions,schedule]){
+      if(!table)continue;
+      report.section(table.title,4);report.table(table.headers,table.widths,table.rows.map(cells=>({cells})));
     }
   }
 

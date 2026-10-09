@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import AiReviewWindow from './AiReviewWindow';
 import { useAppStore } from '../store/appStore';
 import { useAiWorkflow } from '../lib/ai/workflow';
 import { aiCandidateLabel, aiCandidateTypeKey, aiWarnings, aiReviewProgress } from '../lib/localAiReview';
@@ -7,7 +7,7 @@ import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { useT } from '../i18n';
 import Icon from './Icon';
 
-/** A dock in normal layout flow: the drawing is resized, never covered by review details. */
+/** Review content uses an opt-in window above its fixed launcher. */
 export default function AiReviewWorkspace(){
   const t=useT(),{touchInput,reviewOnly}=useWorkspaceLayout();
   const project=useAppStore(s=>s.project),pageNumber=useAppStore(s=>s.currentPage);
@@ -15,9 +15,6 @@ export default function AiReviewWorkspace(){
   const selectedId=useAppStore(s=>s.selectedDetectionCandidateId);
   const {resolvedIds:storedResolvedIds,sourceHash,reviewScope}=useAiWorkflow();
   const resolvedIds=reviewScope?.planId===project?.id&&reviewScope?.pageNumber===pageNumber?storedResolvedIds:[];
-  const [collapsed,setCollapsed]=useState(false);
-  const selectedRow=useRef<HTMLButtonElement>(null);
-  const previousPending=useRef(0);
   const pending=candidates.filter(c=>c.localAi && c.localAi.planId===project?.id && c.pageNumber===pageNumber && (!sourceHash||c.localAi.sourceHash===sourceHash) && !resolvedIds.includes(c.id) && !project?.rooms.some(room=>room.id===c.id));
   const selected=pending.find(c=>c.id===selectedId);
   const progress=aiReviewProgress(pending.map(c=>c.id),resolvedIds);
@@ -25,16 +22,9 @@ export default function AiReviewWorkspace(){
   const activeWarnings=warnings.filter(w=>!selected?.reviewedWarningIds?.includes(w.id));
   const reviewedWarnings=warnings.filter(w=>selected?.reviewedWarningIds?.includes(w.id));
   const validCount=pending.filter(c=>!c.validationProblems?.length).length;
-  useEffect(()=>{
-    if(!pending.length)setCollapsed(true);
-    else if(previousPending.current===0)setCollapsed(false);
-    previousPending.current=pending.length;
-  },[pending.length]);
-  useEffect(()=>{if(selectedId){setCollapsed(false);}},[selectedId]);
-  useEffect(()=>{if(!collapsed)selectedRow.current?.scrollIntoView({block:'nearest',inline:'nearest'});},[selectedId,collapsed]);
   if(!project||(!pending.length&&!progress.total)||reviewOnly)return null;
   const actions=()=>useAppStore.getState();
-  const select=(id:string)=>{actions().setDrawTarget('room');actions().setToolMode('select');actions().selectDetectionCandidate(id);setCollapsed(false);};
+  const select=(id:string)=>{actions().setDrawTarget('room');actions().setToolMode('select');actions().selectDetectionCandidate(id);};
   const index=pending.findIndex(c=>c.id===selectedId);
   const advance=(offset:number)=>{if(pending.length)select(pending[(index<0?0:(index+offset+pending.length)%pending.length)].id);};
   const resolve=(approve:boolean)=>{
@@ -44,13 +34,8 @@ export default function AiReviewWorkspace(){
     else actions().rejectDetectionCandidate(selected.id);
     if(neighbor)select(neighbor.id);
   };
-  return <section className={`ai-review-workspace${collapsed?' collapsed':''}`} aria-label={t('aiReviewWorkspace.title')}>
-    <header className="ai-review-workspace-head">
-      <strong>{t('aiReviewWorkspace.title')}</strong>
-      <span title={t('aiReviewWorkspace.progressMeaning')} role="status">{t('aiReviewWorkspace.progress',progress)}</span>
-      <button className="btn-secondary small" aria-expanded={!collapsed} aria-controls="ai-review-workspace-body" onClick={()=>setCollapsed(v=>!v)}>{t(collapsed?'aiReviewWorkspace.expand':'aiReviewWorkspace.collapse')}</button>
-    </header>
-    {!collapsed&&<div className="ai-review-workspace-body" id="ai-review-workspace-body">
+  return <AiReviewWindow title={t('aiReviewWorkspace.title')} progress={t('aiReviewWorkspace.progress',progress)} meaning={t('aiReviewWorkspace.progressMeaning')}
+    scope={`${project.id}:${pageNumber}`} bodyId="ai-review-workspace-body" selectedId={selectedId}>
       <nav className="ai-review-queue" aria-label={t('aiReviewWorkspace.pending',{count:pending.length})}>
         <div className="ai-review-queue-head">
           <strong>{t('aiReviewWorkspace.pending',{count:pending.length})}</strong>
@@ -60,7 +45,7 @@ export default function AiReviewWorkspace(){
         <ul>
           {pending.map(c=>{
             const count=aiWarnings(c.localAi!,t).filter(w=>!c.reviewedWarningIds?.includes(w.id)).length;
-            return <li key={c.id}><button ref={c.id===selectedId?selectedRow:undefined} className={`ai-review-queue-row${c.id===selectedId?' active':''}`} aria-current={c.id===selectedId?'true':undefined} onClick={()=>select(c.id)}>
+            return <li key={c.id}><button className={`ai-review-queue-row${c.id===selectedId?' active':''}`} aria-current={c.id===selectedId?'true':undefined} onClick={()=>select(c.id)}>
               <span className="ai-review-queue-name" dir="auto">{aiCandidateLabel(c,t)}</span>
               <small dir="ltr">{c.localAi!.spaceId}</small>
               <span className="ai-review-queue-state">{c.validationProblems?.length?<span className="ai-review-hard-error"><Icon name="alert" size={12}/>{t('aiReviewWorkspace.blocked')}</span>
@@ -103,6 +88,5 @@ export default function AiReviewWorkspace(){
           }}>{t('aiReviewWorkspace.rejectAll')}</button>
         </div>
       </footer>
-    </div>}
-  </section>;
+  </AiReviewWindow>;
 }

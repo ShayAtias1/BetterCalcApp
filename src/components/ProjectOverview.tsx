@@ -1,3 +1,5 @@
+import { PLAN_FILE_ACCEPT, planFileKind, PlanImportError } from '../lib/planFileImport';
+import { promptDialog, confirmDialog } from '../lib/appDialogs';
 import { ProjectConcreteTable, ProjectRebarTable } from './ProjectStructuralTables';
 import { buildProjectStructural } from '../lib/structuralQuantities';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
@@ -90,7 +92,7 @@ export default function ProjectOverview() {
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   // The project export asks what to include: Finishes, Concrete, Rebar (no plan drawings here).
-  const [exportDialog, setExportDialog] = useState<{ kind: 'excel' | 'pdf'; content: ExportContent } | null>(null);
+  const [exportDialog, setExportDialog] = useState<{ kind: 'excel' | 'pdf'; content: ExportContent; includeOpeningDetails?: boolean } | null>(null);
   const exportAvailable: ExportContent = {
     plan: false,
     // Finishes is offered whenever there are rooms - and for a project with nothing at all, so the old empty report still exports.
@@ -130,23 +132,23 @@ export default function ProjectOverview() {
     }
   };
 
-  const onRename = (planId: string, current: string) => {
-    const next = window.prompt(t('projectOverview.renamePlanPrompt'), current);
+  const onRename = async (planId: string, current: string) => {
+    const next = await promptDialog(t('projectOverview.renamePlanPrompt'), current);
     if (next && next.trim() && next.trim() !== current) void renamePlan(planId, next.trim());
   };
 
-  const onDelete = (planId: string, name: string) => {
-    if (!confirm(t('projectOverview.deletePlanConfirm', { name }))) return;
+  const onDelete = async (planId: string, name: string) => {
+    if (!await confirmDialog(t('projectOverview.deletePlanConfirm', { name }), { destructive: true })) return;
     void deletePlan(planId);
   };
 
-  const onRenameComparison = (comparisonId: string, current: string) => {
-    const next = window.prompt(t('projectOverview.renameComparisonPrompt'), current);
+  const onRenameComparison = async (comparisonId: string, current: string) => {
+    const next = await promptDialog(t('projectOverview.renameComparisonPrompt'), current);
     if (next && next.trim() && next.trim() !== current) void renameComparison(comparisonId, next.trim());
   };
 
-  const onDeleteComparison = (comparisonId: string, name: string) => {
-    if (!confirm(t('projectOverview.deleteComparisonConfirm', { name }))) return;
+  const onDeleteComparison = async (comparisonId: string, name: string) => {
+    if (!await confirmDialog(t('projectOverview.deleteComparisonConfirm', { name }), { destructive: true })) return;
     void deleteComparison(comparisonId);
   };
 
@@ -381,6 +383,7 @@ export default function ProjectOverview() {
                   </tbody>
                 </table>
               )}
+              {quantities.openingTotalsIncomplete && <div className="warning-box">{t('openingQuantities.partialNote')}</div>}
               {quantities.uncalibratedRoomCount > 0 && (
                 <div className="warning-box">
                   {t('projectOverview.uncalibratedRooms', { count: quantities.uncalibratedRoomCount })}
@@ -407,6 +410,7 @@ export default function ProjectOverview() {
               available={exportAvailable}
               onChange={(content) => setExportDialog({ ...exportDialog, content })}
             />
+            {exportDialog.kind === 'pdf' && exportDialog.content.finishes && <label className="opening-review-check"><input type="checkbox" checked={exportDialog.includeOpeningDetails??false} onChange={e=>setExportDialog({...exportDialog,includeOpeningDetails:e.target.checked})}/>{t('openingQuantities.includeDetails')}</label>}
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setExportDialog(null)}>
                 {t('common.cancel')}
@@ -415,12 +419,12 @@ export default function ProjectOverview() {
                 className="btn-primary"
                 disabled={!hasAnyContent(exportDialog.content)}
                 onClick={() => {
-                  const { kind, content } = exportDialog;
+                  const { kind, content, includeOpeningDetails = false } = exportDialog;
                   setExportDialog(null);
                   void run(kind, () =>
                     kind === 'excel'
                       ? runProjectExport('project_excel', () => exportProjectToExcel(project, plans, content, language))
-                      : runProjectExport('project_pdf', () => exportProjectToPdf(project, plans, content, language))
+                      : runProjectExport('project_pdf', () => exportProjectToPdf(project, plans, content, language, {includeOpeningDetails}))
                   );
                 }}
               >
@@ -440,21 +444,36 @@ function AddPlanDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (file: 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState('');
+  const importLock = useRef(false);
 
   const pick = (f: File | null | undefined) => {
     if (!f) return;
-    if (!(f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'))) {
-      alert(t('projectOverview.addPlan.notPdf'));
+    if (!planFileKind(f)) {
+      setError(t('projectOverview.addPlan.notPdf'));
       return;
     }
+    setError('');
     setFile(f);
-    if (!name.trim()) setName(f.name.replace(/\.pdf$/i, ''));
+    if (!name.trim()) setName(f.name.replace(/\.(pdf|png|jpe?g)$/i, ''));
   };
 
   const confirm = async () => {
-    if (!file) return;
-    onClose();
-    await onAdd(file, name.trim() || t('projectOverview.addPlan.defaultName'));
+    if (!file || importLock.current) return;
+    importLock.current = true;
+    setImporting(true);
+    setError('');
+    try {
+      await onAdd(file, name.trim() || t('projectOverview.addPlan.defaultName'));
+      onClose();
+    } catch (err) {
+      const code = err instanceof PlanImportError ? err.code : 'importFailed';
+      setError(t(`projectOverview.addPlan.${code}`));
+    } finally {
+      importLock.current = false;
+      setImporting(false);
+    }
   };
 
   return (
@@ -463,14 +482,15 @@ function AddPlanDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (file: 
         <h3>{t('projectOverview.addPlan.title')}</h3>
         <div className="form-row">
           <label>{t('projectOverview.addPlan.fileLabel')}</label>
-          <button className="btn-secondary file-pick" onClick={() => fileInputRef.current?.click()}>
+          <button className="btn-secondary file-pick" disabled={importing} onClick={() => fileInputRef.current?.click()}>
             <Icon name={file ? 'check' : 'file'} />
             {file ? file.name : t('projectOverview.addPlan.pickPdf')}
           </button>
           <input
             ref={fileInputRef}
             type="file"
-            accept="application/pdf,.pdf"
+            accept={PLAN_FILE_ACCEPT}
+            disabled={importing}
             hidden
             onChange={(e) => {
               pick(e.target.files?.[0]);
@@ -480,14 +500,15 @@ function AddPlanDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (file: 
         </div>
         <div className="form-row">
           <label>{t('projectOverview.addPlan.nameLabel')}</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('projectOverview.addPlan.namePlaceholder')} />
+          <input disabled={importing} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('projectOverview.addPlan.namePlaceholder')} />
         </div>
+        {error && <p role="alert" className="form-hint">{error}</p>}
         <div className="modal-actions">
-          <button className="btn-secondary" onClick={onClose}>
+          <button className="btn-secondary" disabled={importing} onClick={onClose}>
             {t('common.cancel')}
           </button>
-          <button className="btn-primary" onClick={() => void confirm()} disabled={!file}>
-            {t('projectOverview.addPlan.add')}
+          <button className="btn-primary" onClick={() => void confirm()} disabled={!file || importing}>
+            {t(importing ? 'projectOverview.addPlan.importing' : 'projectOverview.addPlan.add')}
           </button>
         </div>
       </div>

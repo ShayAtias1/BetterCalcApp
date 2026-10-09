@@ -1,3 +1,7 @@
+import { roomOpeningDisplay } from '../lib/openingQuantityReport';
+import { exportContext } from '../lib/exportLanguage';
+import { useLanguage } from '../i18n';
+import OpeningQuantitySummary from './OpeningQuantitySummary';
 import { useMemo } from 'react';
 import { useT } from '../i18n';
 import { useAppStore } from '../store/appStore';
@@ -31,6 +35,7 @@ const DASH = '-';
  */
 export default function QuantityTable({ showDefaults = false }: { showDefaults?: boolean }) {
   const t = useT();
+  const language = useLanguage();
   const project = useAppStore((s) => s.project);
   const updateProjectMeta = useAppStore((s) => s.updateProjectMeta);
 
@@ -49,6 +54,7 @@ export default function QuantityTable({ showDefaults = false }: { showDefaults?:
 
   return (
     <div className="quantity-table-wrap">
+      <OpeningQuantitySummary plan={project} />
       {showDefaults && (
         <div className="defaults-panel">
           <p className="defaults-note">
@@ -194,8 +200,9 @@ export default function QuantityTable({ showDefaults = false }: { showDefaults?:
                 {summaries.map((s) => {
                   const room = roomsById.get(s.roomId);
                   const openings = room?.openings ?? [];
-                  const openingsText = openingCountsText(openings);
-                  const openingsArea = round(openings.reduce((sum, o) => sum + openingAreaM2(o), 0), 2);
+                  const canonicalDisplay = project.openings?.length ? roomOpeningDisplay(project,s.roomId,exportContext(language)) : null;
+                  const openingsText = canonicalDisplay?.text ?? openingCountsText(openings);
+                  const openingsArea = canonicalDisplay ? canonicalDisplay.areaM2 : round(openings.reduce((sum, o) => sum + openingAreaM2(o), 0), 2);
                   return (
                     <tr key={s.roomId}>
                       <td className="sticky-col col-apt">{s.apartmentNumber || DASH}</td>
@@ -271,7 +278,7 @@ export default function QuantityTable({ showDefaults = false }: { showDefaults?:
                           <>
                             <span className="qty-main">{openingsText}</span>
                             <span className="qty-sub">
-                              {openingsArea} {t('units.m2')}
+                              {openingsArea === null ? DASH : openingsArea} {t('units.m2')}{canonicalDisplay?.partial ? ` · ${t('openingQuantities.partial')}` : ''}
                             </span>
                           </>
                         ) : (

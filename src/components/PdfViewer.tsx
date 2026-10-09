@@ -1,3 +1,5 @@
+import OpeningsOverlay from './OpeningsOverlay';
+import { confirmDialog, useAppDialogs } from '../lib/appDialogs';
 import { useAiWorkflow, cancelOneClick, startAiDetection } from '../lib/ai/workflow';
 import { aiCandidateLabel } from '../lib/localAiReview';
 import { FIELD_OPERATION_CANCEL } from '../lib/fieldLifecycle';
@@ -211,6 +213,8 @@ export default function PdfViewer() {
   const markupFontScale = useAppStore((s) => s.markupFontScale);
   const undo = useAppStore((s) => s.undo);
   const redo = useAppStore((s) => s.redo);
+  const openingPlacement = useAppStore((s) => s.openingPlacement);
+  const selectedOpeningId = useAppStore((s) => s.selectedOpeningId);
   const selectedRoomId = useAppStore((s) => s.selectedRoomId);
   const setSelectedRoomId = useAppStore((s) => s.setSelectedRoomId);
   const calibrationPoints = useAppStore((s) => s.calibrationPoints);
@@ -524,8 +528,8 @@ export default function PdfViewer() {
   };
 
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (reviewOnly || fieldDraft) return;
+    const onKeyDown = async (e: KeyboardEvent) => {
+      if (reviewOnly || fieldDraft || useAppDialogs.getState().queue.length) return;
       // Anything typed into a field (including the text-note dialog and the contenteditable case)
       // must never reach the shortcuts below that delete or undo.
       const target = e.target as HTMLElement | null;
@@ -538,8 +542,10 @@ export default function PdfViewer() {
         !!target?.closest?.('input, textarea, select, [contenteditable="true"]');
 
       if (e.code === 'Space') spaceHeld.current = true;
+      if (e.key === 'Escape' && useAppStore.getState().openingPlacement) { useAppStore.getState().cancelOpeningPlacement(); return; }
       if (e.key === 'Escape' && useAiWorkflow.getState().oneClickArmed) { cancelOneClick();return; }
       if (e.key === 'Escape') {
+        useAppStore.getState().cancelOpeningPlacement();
         structuralDrag.current = null;
         barDrag.current = null;
         setStructuralPreview(null);
@@ -577,7 +583,10 @@ export default function PdfViewer() {
       // room confirmation) as the sidebar's ✕ buttons — so it lands in undo history identically.
       // A selected markup wins over a selected room: it is the more recent selection on the plan.
       if ((e.key === 'Delete' || e.key === 'Backspace') && !isEditingField && !textDraft) {
-        if (drawTarget === 'rebar' && overlayVisible.rebar && selectedRebarId && selectedStirrupPlacementId) {
+        if (selectedOpeningId && overlayVisible.finishes) {
+          e.preventDefault();
+          if (await confirmDialog(t('openingTools.deleteConfirm'), { destructive: true })) useAppStore.getState().removePlanOpening(selectedOpeningId);
+        } else if (drawTarget === 'rebar' && overlayVisible.rebar && selectedRebarId && selectedStirrupPlacementId) {
           e.preventDefault();
           useAppStore.getState().deleteStirrupPlacement(selectedRebarId, selectedStirrupPlacementId);
         } else if (drawTarget === 'rebar' && overlayVisible.rebar && selectedRebarId && selectedDrawnBarId) {
@@ -587,7 +596,7 @@ export default function PdfViewer() {
           const selected = rebarOf(project).find((item) => item.id === selectedRebarId);
           if (selected?.kind === 'stirrup') {
             e.preventDefault();
-            if (confirm(t('rebar.deleteConfirm', { mark: markLabel(selected, t) }))) useAppStore.getState().deleteRebarItem(selected.id);
+            if (await confirmDialog(t('rebar.deleteConfirm', { mark: markLabel(selected, t) }), { destructive: true })) useAppStore.getState().deleteRebarItem(selected.id);
           }
         } else if (selectedMarkupId) {
           e.preventDefault();
@@ -596,7 +605,7 @@ export default function PdfViewer() {
           const room = project?.rooms.find((r) => r.id === selectedRoomId);
           if (room) {
             e.preventDefault();
-            if (confirm(t('viewer.deleteRoomConfirm', { name: room.name }))) deleteRoom(selectedRoomId);
+            if (await confirmDialog(t('viewer.deleteRoomConfirm', { name: room.name }), { destructive: true })) deleteRoom(selectedRoomId);
           }
         }
       }
@@ -623,11 +632,12 @@ export default function PdfViewer() {
     markupPoints,
     selectedMarkupId,
     selectedRoomId,
+    selectedOpeningId,
     selectedRebarId,
     selectedDrawnBarId,
     selectedStirrupPlacementId,
     drawTarget,
-    overlayVisible.rebar,
+    overlayVisible.rebar, overlayVisible.finishes,
     clearDetectionCandidates, selectDetectionCandidate,
     project,
     textDraft,
@@ -665,6 +675,7 @@ export default function PdfViewer() {
       return;
     }
     suppressStructuralClick.current = false;
+    if (openingPlacement) return;
     if(useAiWorkflow.getState().oneClickArmed)return;
     const addEdge = !touchInput && toolMode === 'select' && drawTarget === 'room'
       ? (e.target as Element).closest?.('[data-suggestion-edge]') : null;
@@ -757,6 +768,7 @@ export default function PdfViewer() {
     if (isPanning.current && updatePanDrag(e.clientX, e.clientY)) {
       return;
     }
+    if (openingPlacement) { setHoverPoint(screenToNative(e.clientX,e.clientY)); return; }
     if (barDrag.current) {
       const drag = barDrag.current;
       const native = screenToNative(e.clientX, e.clientY);
@@ -966,6 +978,10 @@ export default function PdfViewer() {
     }
     if (isPanning.current || structuralDrag.current) return;
     const native = screenToNative(e.clientX, e.clientY);
+    if (openingPlacement) {
+      if (e.button !== 0 || spaceHeld.current || oneClickPanGesture.current) { oneClickPanGesture.current = false; return; }
+      useAppStore.getState().placeOpeningPoint(native); return;
+    }
     if(useAiWorkflow.getState().oneClickArmed){
       if(e.button!==0||spaceHeld.current||oneClickPanGesture.current){oneClickPanGesture.current=false;return;}
       void startAiDetection(native);return;
@@ -1116,6 +1132,9 @@ export default function PdfViewer() {
       setStructuralPreview(null); setBarPreview(null); setRegionDraft(null);
     },
     onTap: (x, y, target) => {
+      if (openingPlacement && !reviewOnly) { useAppStore.getState().placeOpeningPoint(screenToNative(x,y)); return; }
+      const openingId = target instanceof Element ? target.closest('[data-opening-id]')?.getAttribute('data-opening-id') : null;
+      if (openingId && overlayVisible.finishes && !reviewOnly && toolMode === 'select') { useAppStore.getState().selectPlanOpening(openingId); return; }
       if (meshTouch.tap(x, y) || touch.tap(x, y)) return;
       const markupId = target instanceof Element ? target.closest('[data-markup-id]')?.getAttribute('data-markup-id') : null;
       if (overlayVisible.markups && markupId) { setSelectedMarkupId(markupId); return; }
@@ -1132,7 +1151,7 @@ export default function PdfViewer() {
   return (
     <div
       ref={containerRef}
-      className={`pdf-viewport tool-${toolMode}${oneClickArmed?' one-click-ai-armed':''}`}
+      className={`pdf-viewport tool-${toolMode}${oneClickArmed?' one-click-ai-armed':''}${openingPlacement?' opening-placement-active':''}`}
       {...navigation}
       onPointerCancelCapture={(event) => {
         if (navigation.onPointerCancelCapture(event) && event.pointerType !== 'mouse') { touch.cancel(); meshTouch.editing.cancel(); }
@@ -1149,6 +1168,11 @@ export default function PdfViewer() {
       onClick={handleClick}
     >
       {(reviewOnly || touchInput || fieldDraft || layout === 'compact' || geometryAction !== 'browse') && <FieldTools controls={touch} />}
+      {openingPlacement && <div className="opening-viewer-cancel" role="status"
+        onMouseDown={event=>event.stopPropagation()} onMouseUp={event=>event.stopPropagation()} onClick={event=>event.stopPropagation()}>
+        <span>{t(openingPlacement.start ? 'openingTools.second' : 'openingTools.first')}</span>
+        <button type="button" className="btn-secondary" onClick={()=>useAppStore.getState().cancelOpeningPlacement()}>{t('common.cancel')} · Esc</button>
+      </div>}
       {selectedArea?.kind === 'suggestion' && <div className="ai-suggestion-edit-help" role="status">
         AI draft · Drag vertices · Edge + adds a vertex · Double-click vertex deletes · Esc deselects
       </div>}
@@ -1511,6 +1535,9 @@ export default function PdfViewer() {
                   </g>
                 );
               })()}
+            {overlayVisible.finishes && <OpeningsOverlay zoom={zoom} screenToNative={screenToNative}
+              hoverPoint={hoverPoint} editable={!reviewOnly && toolMode === 'select'}
+              isPanGesture={() => spaceHeld.current} />}
           </svg>
         )}
 

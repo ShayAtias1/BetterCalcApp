@@ -33,6 +33,7 @@ export type IconName =
   | 'settings'
   | 'globe'
   | 'copy'
+  | 'edit'
   | 'trash'
   | 'plus'
   | 'check'
@@ -64,6 +65,7 @@ export type IconName =
 
 /** Path data only — every icon shares the same stroke setup below. */
 const PATHS: Record<IconName, string> = {
+  edit: 'M15 4l5 5M4 20l5-1L20 8a2 2 0 00-5-5L4 14z',
   select: 'M5 3l6.5 16 2.2-6.3L20 10.5z',
   pan: 'M9 11V5.5a1.5 1.5 0 013 0V11m0-1.5a1.5 1.5 0 013 0V12m0-1a1.5 1.5 0 013 0v4a5 5 0 01-5 5h-2a5 5 0 01-4.2-2.3L6 14.5a1.6 1.6 0 012.6-1.8L9 13.5V5.5',
   ruler: 'M3.5 14.5l11-11 5 5-11 11zM7 11l2 2M10 8l2 2M13 5l2 2',

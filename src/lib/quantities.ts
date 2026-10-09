@@ -1,3 +1,4 @@
+import { canonicalOpeningDeduction, duplicateOpeningIds, type OpeningAudit } from './openingQuantities';
 import type {
   Calibration,
   ExtraReportCategory,
@@ -77,6 +78,7 @@ export function itemDeductsOpenings(item: WorkItem): boolean {
 /** Everything one work item works out to, before waste. All values are ≥ 0. */
 export interface WorkItemCalc {
   /** m² before openings. */
+  openingAudit?: OpeningAudit[];
   grossM2: number;
   /** m² taken off for openings; always `grossM2 - netM2`. */
   deductedM2: number;
@@ -102,6 +104,12 @@ export function calculateWorkItem(item: WorkItem, room: Room, areaM2: number, pe
     ? (room.openings ?? []).filter((o) => def.deductedOpeningTypes.includes(o.type))
     : [];
 
+  const duplicateIds = duplicateOpeningIds(project);
+  const canonical = (def.deductedOpeningTypes.length ? project.openings ?? [] : []).filter(o => o.pageNumber === room.pageNumber && o.roomIds.includes(room.id));
+  const audit = canonical.map(o => canonicalOpeningDeduction(project,room,item,heightM,o,duplicateIds));
+  if (canonical.length) none.openingAudit = audit;
+  const canonicalArea = audit.reduce((sum,o)=>sum+o.areaM2,0);
+  const canonicalLength = audit.reduce((sum,o)=>sum+o.lengthM,0);
   switch (def.basis) {
     case 'floorArea':
       return { ...none, grossM2: areaM2, netM2: areaM2 };
@@ -113,19 +121,22 @@ export function calculateWorkItem(item: WorkItem, room: Room, areaM2: number, pe
       const grossM2 = perimeterM * heightM;
       // An opening taller than the work (a 2.1 m door in 1.5 m cladding) only removes the part
       // that the work actually covers.
-      const openingM2 = openings.reduce(
+      const openingM2 = canonicalArea + openings.reduce(
         (sum, o) => sum + nonNegative(o.widthM) * Math.min(nonNegative(o.heightM), heightM) * nonNegative(o.quantity),
         0
       );
+      if (canonicalArea > 0 && openingM2 > grossM2) audit.push({ openingId: '', reason: 'capped', incomplete: true, areaM2: 0, lengthM: 0 });
       const netM2 = Math.max(0, grossM2 - openingM2);
       return { ...none, grossM2, deductedM2: grossM2 - netM2, netM2 };
     }
     case 'perimeter': {
-      const doorWidthsM = openings.reduce((sum, o) => sum + nonNegative(o.widthM) * nonNegative(o.quantity), 0);
+      const doorWidthsM = canonicalLength + openings.reduce((sum, o) => sum + nonNegative(o.widthM) * nonNegative(o.quantity), 0);
+      if (canonicalLength > 0 && doorWidthsM > perimeterM) audit.push({ openingId: '', reason: 'capped', incomplete: true, areaM2: 0, lengthM: 0 });
       const lengthM = Math.max(0, perimeterM - doorWidthsM);
       const grossM2 = perimeterM * heightM;
       const netM2 = lengthM * heightM;
       return {
+        ...none,
         grossM2,
         deductedM2: grossM2 - netM2,
         netM2,

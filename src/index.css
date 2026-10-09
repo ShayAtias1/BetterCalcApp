@@ -1495,6 +1495,49 @@ button:disabled,
   gap: 8px;
   flex-wrap: wrap;
 }
+.room-list-collapse-toggle {
+  justify-content: flex-start;
+  min-height: 36px;
+  padding: var(--s-2);
+  font: var(--t-label);
+  font-weight: 600;
+}
+.room-list-chevron {
+  font-size: 11px;
+  color: var(--muted);
+  transform: rotate(-90deg);
+  transition: transform 160ms ease;
+}
+.room-list-collapse-toggle:dir(rtl) .room-list-chevron {
+  transform: rotate(90deg);
+}
+.room-list-collapse-toggle[aria-expanded='true'] .room-list-chevron {
+  transform: rotate(0deg);
+}
+.room-list-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition: grid-template-rows 160ms ease, opacity 160ms ease, visibility 0s 160ms;
+}
+.room-list-body.expanded {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition: grid-template-rows 160ms ease, opacity 160ms ease, visibility 0s;
+}
+.room-list-body-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+  .room-list-chevron,
+  .room-list-body,
+  .room-list-body.expanded {
+    transition: none;
+  }
+}
 .room-apartment-assignment {
   margin-block: var(--s-2) var(--s-3);
   padding: var(--s-3);
@@ -1549,7 +1592,10 @@ button:disabled,
   align-items: center;
   gap: var(--s-2);
   padding: 6px var(--s-2);
-  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  margin-block-end: 4px;
   cursor: pointer;
   font: var(--t-body);
   transition: background 0.1s ease;
@@ -1587,13 +1633,13 @@ button:disabled,
   font-weight: 500;
   white-space: nowrap;
 }
-/* Row actions stop competing with the room name: they appear on hover, and on keyboard
-   focus (focus-within), so tabbing through the list still reaches them. */
+/* Row actions and selection stay visible. */
 .room-row-actions {
   display: flex;
   gap: 2px;
   flex: none;
-  opacity: 0;
+  align-items: center;
+  opacity: 1;
 }
 .room-list li:hover .room-row-actions,
 .room-list li:focus-within .room-row-actions {
@@ -3562,10 +3608,22 @@ html[dir='rtl'] .qty-table .col-room {
 .ai-job-status { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; }
 .ai-job-status progress { width: 48px; flex-shrink: 0; }
 
-/* AI review is a full-width dock in normal flow, leaving the plan visible above. */
-.ai-review-workspace { flex: none; min-height: 0; background: var(--bg-surface); border-top: 1px solid var(--border); }
+/* Each AI review opens within its own half of the shared row, leaving the plan visible above. */
+.ai-review-workspaces-row { position: relative; z-index: 40; display: flex; align-items: flex-start; flex: none; min-height: 0; }
+.ai-review-workspaces-row:empty { display: none; }
+.ai-review-workspaces-row > .ai-review-workspace { flex: 0 1 50%; max-width: 50%; min-width: 0; height: 34px; container-type: inline-size; }
+.ai-review-workspaces-row > .ai-review-workspace + .ai-review-workspace { border-inline-start: 1px solid var(--border); }
+.ai-review-workspace { position: relative; flex: none; min-height: 0; background: var(--bg-surface); border-top: 1px solid var(--border); }
+.ai-review-launcher { min-height: 0; box-sizing: border-box; }
+.ai-review-launcher > button { margin-inline-start: 0 !important; }
+.ai-review-window { position: absolute; bottom: 100%; inset-inline: 0; z-index: 45; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-md) var(--r-md) 0 0; box-shadow: var(--shadow-md); }
+.ai-review-window-actions { display: flex; gap: var(--s-1); margin-inline-start: auto; }
+.ai-review-window.extended .ai-review-workspace-body { height: min(55vh, 560px); max-height: calc(100dvh - 180px); }
 .ai-review-workspace-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2); padding: var(--s-2) var(--s-3); font-size: 13px; }
 .ai-review-workspace-head > button { margin-inline-start: auto; }
+.ai-review-launcher { height: 33px; padding: 0 var(--s-4); flex-wrap: nowrap; }
+.ai-review-launcher > button { flex: 1; min-width: 0; text-align: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ai-review-launcher > span { max-width: 40%; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ai-review-workspace-body { height: clamp(240px, 35vh, 380px); max-height: 45vh; display: grid; grid-template-columns: minmax(210px, 28%) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
 .ai-review-queue { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-inline-end: 1px solid var(--border); }
 .ai-review-queue-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1); padding: var(--s-2); }
@@ -3589,6 +3647,12 @@ html[dir='rtl'] .qty-table .col-room {
 .ai-review-warning-details { margin-top: var(--s-2); }
 .ai-review-workspace .ai-review-type { flex-wrap: wrap; margin-block: var(--s-2); }
 .ai-review-workspace .ai-review-type label { flex: 1 1 240px; }
+@container (max-width: 600px) {
+  .ai-review-workspace-body { grid-template-columns: minmax(130px, 35%) minmax(0, 1fr); }
+  .ai-review-workspace-footer > .muted { display: none; }
+  .ai-review-workspace-footer { max-height: 90px; overflow: auto; }
+  .ai-review-detail { padding: var(--s-2); }
+}
 @media (max-width: 760px) {
   .ai-review-workspace-body { grid-template-columns: minmax(130px, 35%) minmax(0, 1fr); max-height: 42vh; }
   .ai-review-workspace-footer > .muted { display: none; }

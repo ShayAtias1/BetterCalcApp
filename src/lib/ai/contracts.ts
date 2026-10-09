@@ -21,7 +21,15 @@ export interface AiJobRecord {
   resultSummary?:string;
   error?:string; metrics?:AiMetrics;
 }
-export interface AiMetrics { latencySeconds?:number; estimatedCostUsd?:number|null; usage?:unknown; model?:string; serviceTier?:string }
+export interface AiMetrics {
+  latencySeconds?:number|null; estimatedCostUsd?:number|null; usage?:unknown; model?:string; serviceTier?:string;
+  requestId?:string; providerRequestId?:string; detectionType?:'rooms'|'openings';
+  mode?:'full-page-v1'|'one-click-v1'|'openings-v1'; status?:AiJobStatus;
+  startedAt?:number; finishedAt?:number|null; usageSource?:'provider'|null;
+  inputTokens?:number|null; outputTokens?:number|null; cachedTokens?:number|null; reasoningTokens?:number|null;
+  settings?:{reasoning?:{effort?:string};serviceTier?:string;maxOutputTokens?:number;store?:boolean;timeoutSeconds?:number;maxRetries?:number;
+    imageDetails?:string[];outputFormat?:string;outputSchema?:string};
+}
 export interface AiJobResponse { id:string; requestId:string; status:AiJobStatus; error?:string; result?:unknown; metrics?:AiMetrics }
 export interface AiReviewRecord {
   key:string; planId:string; pageNumber:number; sourceHash:string;

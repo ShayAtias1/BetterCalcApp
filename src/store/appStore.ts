@@ -1,3 +1,10 @@
+import { importOpeningReview } from '../lib/ai/openingsImport';
+import type { AiOpeningReview } from '../types/aiOpenings';
+import { buildOpeningSchedule } from '../lib/openingQuantities';
+import { openingClassification, measuredOpeningWidth, openingGeometryPatch, recalibrateOpeningWidths, type OpeningPreset } from '../lib/manualOpenings';
+import { addPlanOpening as addCanonicalOpening, updatePlanOpening as updateCanonicalOpening, removePlanOpening as removeCanonicalOpening, reviewPlanOpening, cloneOpeningsForRooms, withOpeningRoomChanges } from '../lib/planOpenings';
+import type { NewPlanOpening, PlanOpeningPatch } from '../types';
+import { normalizePlanFile, PlanImportError } from '../lib/planFileImport';
 import { planBulkTakeoff, materializeBulkTakeoff, type BulkWorkConfig, type BulkConflictPolicy } from '../lib/bulkTakeoff';
 import { aiWarnings, aiCandidateTypeKey, aiCandidateLabel } from '../lib/localAiReview';
 import { candidateGeometryProblems, overlapNotes } from '../lib/ai/oneClick';
@@ -255,6 +262,16 @@ interface AppState {
   currentPage: number;
   numPages: number;
   toolMode: ToolMode;
+  selectedOpeningId: string | null;
+  openingPlacement: { preset: OpeningPreset; start: Point | null; openingId?: string } | null;
+  selectPlanOpening: (id: string | null) => void;
+  beginOpeningPlacement: (preset: OpeningPreset) => void;
+  beginQuantityOpening: (preset: OpeningPreset) => string | null;
+  beginOpeningEndpointEdit: (id: string) => void;
+  cancelOpeningPlacement: () => void;
+  placeOpeningPoint: (point: Point) => void;
+  duplicatePlanOpening: (id: string) => string | null;
+  draftPlanOpening: (id: string) => void;
   selectedRoomId: string | null;
   /**
    * The room the user just finished drawing by hand (polygon or rectangle), so the sidebar can open
@@ -523,10 +540,20 @@ interface AppState {
    */
   duplicateApartment: (sourceApartmentNumber: string, targetApartmentNumber: string) => number;
   deleteRoom: (id: string) => void;
+  deleteRooms: (ids: string[]) => void;
   applyBulkTakeoff: (expectedPlan: Plan, roomIds: string[], configs: BulkWorkConfig[], policy: BulkConflictPolicy, updateConfirmed: boolean) => 'applied' | 'stale' | 'blocked' | 'no-change';
   addWorkItem: (roomId: string, type: WorkType) => void;
   updateWorkItem: (roomId: string, itemId: string, patch: Partial<WorkItem>) => void;
   removeWorkItem: (roomId: string, itemId: string) => void;
+  /** Phase 1 canonical records: never modify Room.openings or quantities. */
+  importAiOpeningReview: (review: AiOpeningReview) => void;
+  addPlanOpening: (input: NewPlanOpening) => string | null;
+  addApprovedQuantityOpening: (input: NewPlanOpening) => string | null;
+  updatePlanOpening: (id: string, patch: PlanOpeningPatch) => void;
+  removePlanOpening: (id: string) => void;
+  removePlanOpenings: (ids: string[]) => void;
+  approvePlanOpening: (id: string) => void;
+  rejectPlanOpening: (id: string) => void;
   addOpening: (roomId: string, type: OpeningType) => void;
   /** Debounced into one undo step per burst, like typing in a work item. */
   updateOpening: (roomId: string, openingId: string, patch: Partial<Opening>) => void;
@@ -607,7 +634,7 @@ function commitStructuralZone(get: () => AppState, set: (patch: Partial<AppState
       project: { ...addRebarItem(project, mesh), updatedAt: Date.now() },
       drawingPoints: [],
       selectedRebarId: mesh.id,
-      selectedRoomId: null,
+      selectedRoomId: null, selectedOpeningId: null, openingPlacement: null,
       toolMode: 'select',
     });
   } else {
@@ -616,7 +643,7 @@ function commitStructuralZone(get: () => AppState, set: (patch: Partial<AppState
       project: { ...addConcreteElement(project, element), updatedAt: Date.now() },
       drawingPoints: [],
       selectedConcreteId: element.id,
-      selectedRoomId: null,
+      selectedRoomId: null, selectedOpeningId: null, openingPlacement: null,
       toolMode: 'select',
     });
   }
@@ -680,7 +707,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentPage: 1,
   numPages: 1,
   toolMode: 'select',
-  selectedRoomId: null,
+  selectedRoomId: null, selectedOpeningId: null, openingPlacement: null,
   manuallyCreatedRoomId: null,
   calibrationPoints: [],
   drawingPoints: [],
@@ -748,7 +775,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       dirty: false,
       saveError: null,
       currentPage: 1,
-      selectedRoomId: null,
+      selectedRoomId: null, selectedOpeningId: null, openingPlacement: null,
       selectedMarkupId: null,
       selectedConcreteId: null,
       selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null,
@@ -833,11 +860,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   addPlan: async (file, name) => {
     const { currentProject } = get();
     if (!currentProject) return null;
-    const plan = createEmptyPlan(name, file.name, currentProject.id);
-    await savePdfBlob(plan.id, file);
+    const blob = await normalizePlanFile(file);
+    const destination = get().currentProject;
+    if (destination?.id !== currentProject.id) throw new PlanImportError('projectChanged');
+    const plan = createEmptyPlan(name, file.name, destination.id);
+    await savePdfBlob(plan.id, blob);
     await dbSavePlan(plan);
-    await dbSaveProject({ ...currentProject, planIds: [...currentProject.planIds, plan.id], updatedAt: Date.now() });
-    trackPlanCreated(plan, 'upload', file.size, currentProject.planIds.length + 1);
+    await dbSaveProject({ ...destination, planIds: [...destination.planIds, plan.id], updatedAt: Date.now() });
+    trackPlanCreated(plan, 'upload', file.size, destination.planIds.length + 1);
     await get().refreshProjectPlans();
     return plan;
   },
@@ -972,7 +1002,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { project, currentPage, detectionCandidates } = get();
     const candidate = detectionCandidates.find(c => c.id === id && c.pageNumber === currentPage && c.localAi?.planId === project?.id);
     set({ selectedDetectionCandidateId: candidate?.id ?? null,
-      ...(candidate ? { selectedRoomId: null, selectedMarkupId: null } : {}) });
+      ...(candidate ? { selectedRoomId: null, selectedOpeningId: null, openingPlacement: null, selectedMarkupId: null } : {}) });
   },
   editDetectionCandidate: (id, points) => {
     if (!canAuthorTakeoff()) return;
@@ -1059,7 +1089,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedDetectionCandidateId: accepted.some(c => c.id === get().selectedDetectionCandidateId) ? null : get().selectedDetectionCandidateId,
       detectionCandidates: detectionCandidates.filter(c => !accepted.some(a => a.id === c.id)),
       detectionCandidatesPage: detectionCandidates.length > accepted.length ? currentPage : null,
-      selectedRoomId: null,
+      selectedRoomId: null, selectedOpeningId: null, openingPlacement: null,
     });
     scheduleSave(get, set);
     return rooms.length;
@@ -1098,7 +1128,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { project, history, future } = get();
     if (!project || history.length === 0) return;
     const previous = history[history.length - 1];
-    set({ project: previous, history: history.slice(0, -1), future: [project, ...future], selectedRoomId: null, selectedConcreteId: null, selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null });
+    set({ project: previous, history: history.slice(0, -1), future: [project, ...future], selectedRoomId: null, selectedOpeningId: null, openingPlacement: null, selectedConcreteId: null, selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null });
     scheduleSave(get, set);
   },
   redo: () => {
@@ -1109,7 +1139,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { project, history, future } = get();
     if (!project || future.length === 0) return;
     const next = future[0];
-    set({ project: next, history: [...history, project], future: future.slice(1), selectedRoomId: null, selectedConcreteId: null, selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null });
+    set({ project: next, history: [...history, project], future: future.slice(1), selectedRoomId: null, selectedOpeningId: null, openingPlacement: null, selectedConcreteId: null, selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null });
     scheduleSave(get, set);
   },
   setCurrentPage: (n) => {
@@ -1120,7 +1150,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       currentPage: n,
       ...(pageChanged ? { selectedDetectionCandidateId: null, detectionCandidates: [], detectionCandidatesPage: null } : {}),
-      selectedRoomId: null,
+      selectedRoomId: null, selectedOpeningId: null, openingPlacement: null,
       selectedMarkupId: null,
       selectedConcreteId: null,
       selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null,
@@ -1140,6 +1170,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       selectedDetectionCandidateId: null,
       toolMode: m,
+      openingPlacement: null,
+      ...(m !== 'select' && m !== 'pan' ? { selectedOpeningId: null } : {}),
       barsDrawing: null, stirrupDrawing: null,
       calibrationPoints: [],
       drawingPoints: [],
@@ -1148,7 +1180,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
     ensureOverlayVisible(overlayForTool(m, get().drawTarget), get, set);
   },
-  setSelectedRoomId: (id) => set({ selectedRoomId: id, ...(id ? { selectedDetectionCandidateId: null } : {}) }),
+  setSelectedRoomId: (id) => set({ selectedRoomId: id, selectedOpeningId: null, openingPlacement: null, ...(id ? { selectedDetectionCandidateId: null } : {}) }),
 
   addCalibrationPoint: (p) => {
     if (!canAuthorTakeoff()) return;
@@ -1173,7 +1205,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       [currentPage]: { pageNumber: currentPage, calibration },
     };
     historyTracker.push(get, set, project);
-    const updated = { ...project, pages, updatedAt: Date.now() };
+    const updated = recalibrateOpeningWidths({ ...project, pages, updatedAt: Date.now() }, currentPage, Date.now());
     set({ project: updated, calibrationPoints: [], toolMode: 'select' });
     trackCalibrationCompleted(updated, !!project.pages[currentPage]?.calibration, get().numPages);
     scheduleSave(get, set);
@@ -1184,10 +1216,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Changing the target drops a shape in progress: it was started for the previous target.
   setDrawTarget: (target) => {
     if (get().drawTarget === target) return;
-    set({ drawTarget: target, drawingPoints: [], barsDrawing: null, stirrupDrawing: null });
+    set({ drawTarget: target, selectedOpeningId: null, openingPlacement: null, drawingPoints: [], barsDrawing: null, stirrupDrawing: null });
     ensureOverlayVisible(overlayForTool(get().toolMode, target), get, set);
   },
-  setSelectedConcreteId: (id) => set({ selectedConcreteId: id }),
+  setSelectedConcreteId: (id) => set({ selectedConcreteId: id, ...(id ? { selectedOpeningId: null, openingPlacement: null } : {}) }),
   setConcreteKind: (kind) => set({ concreteKind: kind }),
   updateConcreteElement: (id, patch) => {
     if (!canAuthorTakeoff()) return;
@@ -1251,7 +1283,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const item = project && rebarOf(project).find((i) => i.id === id);
     if (!item || item.kind !== 'stirrup') return;
     ensureOverlayVisible('rebar', get, set);
-    set({ selectedRebarId: id, selectedStirrupPlacementId: null, selectedDrawnBarId: null,
+    set({ selectedRebarId: id, ...(id ? { selectedOpeningId: null, openingPlacement: null } : {}), selectedStirrupPlacementId: null, selectedDrawnBarId: null,
       drawTarget: 'rebar', barsDrawing: null, stirrupDrawing: kind, toolMode: kind === 'line' ? 'draw' : 'draw-rect', drawingPoints: [] });
   },
   finishStirrupLine: (start, end) => {
@@ -1306,9 +1338,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     const placement = item?.kind === 'stirrup' ? item.placements.find((p) => p.id === placementId) : undefined;
     if (!placement) return;
     get().setCurrentPage(placement.pageNumber);
-    set({ selectedRebarId: id, selectedStirrupPlacementId: placementId, drawTarget: 'rebar', toolMode: 'select' });
+    set({ selectedRebarId: id, ...(id ? { selectedOpeningId: null, openingPlacement: null } : {}), selectedStirrupPlacementId: placementId, drawTarget: 'rebar', toolMode: 'select' });
   },
-  setSelectedDrawnBarId: (id) => set({ selectedDrawnBarId: id }),
+  setSelectedDrawnBarId: (id) => set({ selectedDrawnBarId: id, ...(id ? { selectedOpeningId: null, openingPlacement: null } : {}) }),
   editDrawnBar: (itemId, bar) => {
     if (!canAuthorTakeoff()) return;
     const { project } = get();
@@ -1373,7 +1405,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     ensureOverlayVisible('rebar', get, set);
     useFieldWorkflowStore.getState().setGeometryAction('browse');
     useFieldWorkflowStore.getState().setDraft(isTouchInput());
-    set({ selectedRebarId: id, selectedDrawnBarId: null, selectedStirrupPlacementId: null, drawTarget: 'rebar', barsDrawing: 'line', toolMode: 'draw', drawingPoints: [] });
+    set({ selectedRebarId: id, ...(id ? { selectedOpeningId: null, openingPlacement: null } : {}), selectedDrawnBarId: null, selectedStirrupPlacementId: null, drawTarget: 'rebar', barsDrawing: 'line', toolMode: 'draw', drawingPoints: [] });
   },
   finishDrawnBar: (start, end) => {
     if (!canAuthorTakeoff()) return;
@@ -1421,7 +1453,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const item = project && rebarOf(project).find((i) => i.id === id);
     if (!item || item.kind !== 'bars' || item.drawnBars !== undefined) return;
     ensureOverlayVisible('rebar', get, set);
-    set({ selectedRebarId: id, selectedDrawnBarId: null, selectedStirrupPlacementId: null, drawTarget: 'rebar', barsDrawing: 'zone', toolMode: 'draw-rect', drawingPoints: [] });
+    set({ selectedRebarId: id, ...(id ? { selectedOpeningId: null, openingPlacement: null } : {}), selectedDrawnBarId: null, selectedStirrupPlacementId: null, drawTarget: 'rebar', barsDrawing: 'zone', toolMode: 'draw-rect', drawingPoints: [] });
   },
   removeBarsZone: (id) => {
     if (!canAuthorTakeoff()) return;
@@ -1520,7 +1552,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
     return created.length;
   },
-  setSelectedRebarId: (id) => set({ selectedRebarId: id, selectedDrawnBarId: null, selectedStirrupPlacementId: null, barsDrawing: null, stirrupDrawing: null, drawingPoints: [] }),
+  setSelectedRebarId: (id) => set({ selectedRebarId: id, ...(id ? { selectedOpeningId: null, openingPlacement: null } : {}), selectedDrawnBarId: null, selectedStirrupPlacementId: null, barsDrawing: null, stirrupDrawing: null, drawingPoints: [] }),
   editMeshLayout: (id, level, edit) => {
     if (!canAuthorTakeoff()) return;
     const { project } = get();
@@ -1787,7 +1819,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ project: { ...project, markups, updatedAt: Date.now() }, selectedMarkupId: copy.id });
     scheduleSave(get, set);
   },
-  setSelectedMarkupId: (id) => set({ selectedMarkupId: id }),
+  setSelectedMarkupId: (id) => set({ selectedMarkupId: id, ...(id ? { selectedOpeningId: null, openingPlacement: null } : {}) }),
 
   updateRoom: (id, patch) => {
     if (!canAuthorTakeoff()) return;
@@ -1795,7 +1827,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
     const rooms = project.rooms.map((r) => (r.id === id ? { ...r, ...patch } : r));
-    set({ project: { ...project, rooms, updatedAt: Date.now() } });
+    set({ project: { ...withOpeningRoomChanges(project, rooms, Date.now()), updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
   assignRoomsToApartment: (roomIds, apartmentNumber) => {
@@ -1809,7 +1841,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const rooms = project.rooms.map((room) =>
       selected.has(room.id) && room.apartmentNumber !== target ? { ...room, apartmentNumber: target } : room
     );
-    set({ project: { ...project, rooms, updatedAt: Date.now() } });
+    set({ project: { ...withOpeningRoomChanges(project, rooms, Date.now()), updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
   setRoomType: (roomId, roomType) => {
@@ -1855,7 +1887,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       color: nextColor(project.rooms.length),
     });
 
-    const updated = { ...project, rooms: [...project.rooms, copy], updatedAt: Date.now() };
+    const now = Date.now();
+    const openingCopies = cloneOpeningsForRooms(project, [{ source: original, copy }], project.id, uuid, now, { offset: ROOM_DUPLICATE_OFFSET });
+    const updated = { ...project, rooms: [...project.rooms, copy],
+      ...(project.openings ? { openings: [...project.openings, ...openingCopies] } : {}), updatedAt: now };
     set({ project: updated, selectedRoomId: copy.id });
     trackRoomsCreated(updated, 'duplicate', [copy]);
     scheduleSave(get, set);
@@ -1880,7 +1915,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       })
     );
 
-    const updated = { ...project, rooms: [...project.rooms, ...copies], updatedAt: Date.now() };
+    const now = Date.now();
+    const openingCopies = cloneOpeningsForRooms(project, sourceRooms.map((source, i) => ({ source, copy: copies[i] })), project.id, uuid, now,
+      { apartment: { source: sourceApartmentNumber, target: targetApartmentNumber }, offset: 0 });
+    const updated = { ...project, rooms: [...project.rooms, ...copies],
+      ...(project.openings ? { openings: [...project.openings, ...openingCopies] } : {}), updatedAt: now };
     set({ project: updated, selectedRoomId: copies[0].id });
     trackRoomsCreated(updated, 'apartment_duplicate', copies);
     scheduleSave(get, set);
@@ -1893,9 +1932,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     historyTracker.push(get, set, project);
     const rooms = project.rooms.filter((r) => r.id !== id);
     set({
-      project: { ...project, rooms, updatedAt: Date.now() },
+      project: { ...withOpeningRoomChanges(project, rooms, Date.now()), updatedAt: Date.now() },
       selectedRoomId: selectedRoomId === id ? null : selectedRoomId,
     });
+    scheduleSave(get, set);
+  },
+  deleteRooms: (ids) => {
+    if (!canAuthorTakeoff()) return;
+    const { project, selectedRoomId } = get();
+    if (!project) return;
+    const selected = new Set(ids);
+    const rooms = project.rooms.filter(room => !selected.has(room.id));
+    if (rooms.length === project.rooms.length) return;
+    const now = Date.now();
+    const updated = withOpeningRoomChanges(project, rooms, now);
+    // The entire batch, including affected opening associations, is one undoable operation.
+    historyTracker.push(get, set, project);
+    set({ project: { ...updated, updatedAt: now }, selectedRoomId: selectedRoomId && selected.has(selectedRoomId) ? null : selectedRoomId });
     scheduleSave(get, set);
   },
   applyBulkTakeoff: (expectedPlan, roomIds, configs, policy, updateConfirmed) => {
@@ -1955,6 +2008,173 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ project: { ...project, rooms, updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
+  selectPlanOpening: (id) => {
+    const o = get().project?.openings?.find(o => o.id === id && o.pageNumber === get().currentPage);
+    set({ selectedRoomId: null, selectedOpeningId: o?.id ?? null, openingPlacement: null,
+      selectedDetectionCandidateId: null, selectedMarkupId: null, selectedConcreteId: null,
+      selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null });
+  },
+  beginOpeningPlacement: (preset) => {
+    if (!canAuthorTakeoff() || !get().project) return;
+    get().setToolMode('select');
+    get().selectPlanOpening(null);
+    get().setOverlayVisible('finishes', true);
+    set({ openingPlacement: { preset, start: null } });
+  },
+  beginQuantityOpening: (preset) => {
+    if (!canAuthorTakeoff()) return null;
+    const { project, currentPage } = get();
+    if (!project) return null;
+    // Same canonical draft/editor as placement; only drawing geometry is omitted.
+    const id = get().addPlanOpening({ pageNumber: currentPage, entryMethod: 'takeoff', geometry: null,
+      ...openingClassification(preset), roomIds: [], legacyRefs: [], source: 'manual',
+      widthM: null, widthSource: 'manual', heightM: null, sillHeightM: null, quantity: 1 });
+    if (id) {
+      get().setToolMode('select');
+      get().selectPlanOpening(id);
+      get().setOverlayVisible('finishes', true);
+    }
+    return id;
+  },
+  beginOpeningEndpointEdit: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const o = get().project?.openings?.find(o => o.id === id && o.pageNumber === get().currentPage);
+    if (!o) return;
+    get().setToolMode('select'); get().selectPlanOpening(id); get().setOverlayVisible('finishes', true);
+    set({ openingPlacement: { preset: 'unknown', start: null, openingId: id } });
+  },
+  cancelOpeningPlacement: () => set({ openingPlacement: null }),
+  placeOpeningPoint: (point) => {
+    if (!canAuthorTakeoff() || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+    const { project, openingPlacement, currentPage } = get();
+    if (!project || !openingPlacement) return;
+    if (!openingPlacement.start) { set({ openingPlacement: { ...openingPlacement, start: point } }); return; }
+    if (Math.hypot(point.x-openingPlacement.start.x, point.y-openingPlacement.start.y) < 0.001) return;
+    const geometry = { endpointA: openingPlacement.start, endpointB: point };
+    if (openingPlacement.openingId) {
+      get().updatePlanOpening(openingPlacement.openingId, { geometry });
+      get().selectPlanOpening(openingPlacement.openingId); return;
+    }
+    const id = get().addPlanOpening({ pageNumber: currentPage, geometry, entryMethod: 'plan',
+      ...openingClassification(openingPlacement.preset), roomIds: [], legacyRefs: [], source: 'manual',
+      widthM: measuredOpeningWidth(project, currentPage, geometry), widthSource: 'calibration',
+      heightM: null, sillHeightM: null, quantity: 1 });
+    if (id) get().selectPlanOpening(id);
+  },
+  duplicatePlanOpening: (id) => {
+    if (!canAuthorTakeoff()) return null;
+    const o = get().project?.openings?.find(o => o.id === id);
+    if (!o) return null;
+    const { id: _id, planId: _planId, createdAt: _created, updatedAt: _updated, approval: _approval, ...input } = structuredClone(o);
+    if (input.geometry) for (const p of [input.geometry.endpointA, input.geometry.endpointB]) { p.x += 30; p.y += 30; }
+    // Offset copies need their own explicit room confirmation. Never copy legacy links.
+    delete input.aiDetection;
+    delete input.roomSides;
+    input.roomIds = []; input.legacyRefs = []; input.quantityReview = { associationsConfirmed: false, distinctLegacyRoomIds: [] }; delete input.apartmentNumber;
+    const copyId = get().addPlanOpening(input);
+    if (copyId) get().selectPlanOpening(copyId);
+    return copyId;
+  },
+  draftPlanOpening: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const project = get().project;
+    if (!project) return;
+    const updated = reviewPlanOpening(project, id, 'draft', Date.now());
+    if (updated === project) return;
+    historyTracker.push(get, set, project); set({ project: updated }); scheduleSave(get, set);
+  },
+  importAiOpeningReview: (review) => {
+    if (!canAuthorTakeoff()) return;
+    const project=get().project;
+    if (!project || project.id!==review.planId) return;
+    const updated=importOpeningReview(project,review,Date.now());
+    if(updated===project)return;
+    historyTracker.push(get,set,project);set({project:updated});scheduleSave(get,set);
+  },
+  addPlanOpening: (input) => {
+    if (!canAuthorTakeoff()) return null;
+    const project = get().project;
+    if (!project) return null;
+    const id = uuid();
+    const updated = addCanonicalOpening(project, input, id, Date.now());
+    historyTracker.push(get, set, project);
+    set({ project: updated });
+    scheduleSave(get, set);
+    return id;
+  },
+  // Explicit final approval in the quantity-only form: validate before one history/save step.
+  addApprovedQuantityOpening: (input) => {
+    if (!canAuthorTakeoff()) return null;
+    const project = get().project;
+    if (!project) return null;
+    const id = uuid(), now = Date.now();
+    const draft = addCanonicalOpening(project, input, id, now);
+    if (input.entryMethod !== 'takeoff' || input.geometry !== null || input.roomIds.length !== 1 || !input.quantityReview?.associationsConfirmed)
+      throw new Error('Quantity opening requires explicit room review');
+    const updated = reviewPlanOpening(draft, id, 'approved', now);
+    const reasons = buildOpeningSchedule(updated).find(row => row.id === id)!.reasons.filter(reason => reason !== 'legacyPrecedence');
+    if (reasons.length) throw new Error(reasons.join('; '));
+    historyTracker.push(get, set, project);
+    set({ project: updated, selectedOpeningId: null, openingPlacement: null });
+    scheduleSave(get, set);
+    return id;
+  },
+  updatePlanOpening: (id, patch) => {
+    if (!canAuthorTakeoff()) return;
+    const project = get().project;
+    if (!project) return;
+    const opening = project.openings?.find(o => o.id === id);
+    if (opening && patch.geometry && !Object.hasOwn(patch, 'widthM'))
+      patch = { ...openingGeometryPatch(project, opening, patch.geometry), ...patch };
+    const updated = updateCanonicalOpening(project, id, patch, Date.now());
+    if (updated === project) return;
+    historyTracker.pushDebounced(get, set, project);
+    set({ project: updated });
+    scheduleSave(get, set);
+  },
+  removePlanOpening: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const project = get().project;
+    if (!project) return;
+    const updated = removeCanonicalOpening(project, id, Date.now());
+    if (updated === project) return;
+    historyTracker.push(get, set, project);
+    set({ project: updated, selectedOpeningId: get().selectedOpeningId === id ? null : get().selectedOpeningId });
+    scheduleSave(get, set);
+  },
+  removePlanOpenings: (ids) => {
+    if (!canAuthorTakeoff()) return;
+    const { project, selectedOpeningId, openingPlacement } = get();
+    if (!project?.openings) return;
+    const selected = new Set(ids);
+    const openings = project.openings.filter(o => !selected.has(o.id));
+    if (openings.length === project.openings.length) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...project, openings, updatedAt: Date.now() },
+      selectedOpeningId: selectedOpeningId && selected.has(selectedOpeningId) ? null : selectedOpeningId,
+      openingPlacement: openingPlacement?.openingId && selected.has(openingPlacement.openingId) ? null : openingPlacement });
+    scheduleSave(get, set);
+  },
+  approvePlanOpening: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const project = get().project;
+    if (!project) return;
+    const updated = reviewPlanOpening(project, id, 'approved', Date.now());
+    if (updated === project) return;
+    historyTracker.push(get, set, project);
+    set({ project: updated });
+    scheduleSave(get, set);
+  },
+  rejectPlanOpening: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const project = get().project;
+    if (!project) return;
+    const updated = reviewPlanOpening(project, id, 'rejected', Date.now());
+    if (updated === project) return;
+    historyTracker.push(get, set, project);
+    set({ project: updated });
+    scheduleSave(get, set);
+  },
   addOpening: (roomId, type) => {
     if (!canAuthorTakeoff()) return;
     const { project } = get();
@@ -1962,7 +2182,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     historyTracker.push(get, set, project);
     const opening: Opening = { id: uuid(), type, ...OPENING_DEFAULT_SIZES[type], quantity: 1 };
     const rooms = project.rooms.map((r) => (r.id === roomId ? { ...r, openings: [...(r.openings ?? []), opening] } : r));
-    set({ project: { ...project, rooms, updatedAt: Date.now() } });
+    set({ project: { ...withOpeningRoomChanges(project, rooms, Date.now()), updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
   updateOpening: (roomId, openingId, patch) => {
@@ -1974,7 +2194,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (r.id !== roomId) return r;
       return { ...r, openings: (r.openings ?? []).map((o) => (o.id === openingId ? { ...o, ...patch } : o)) };
     });
-    set({ project: { ...project, rooms, updatedAt: Date.now() } });
+    set({ project: { ...withOpeningRoomChanges(project, rooms, Date.now()), updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
   removeOpening: (roomId, openingId) => {
@@ -1986,7 +2206,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (r.id !== roomId) return r;
       return { ...r, openings: (r.openings ?? []).filter((o) => o.id !== openingId) };
     });
-    set({ project: { ...project, rooms, updatedAt: Date.now() } });
+    set({ project: { ...withOpeningRoomChanges(project, rooms, Date.now()), updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
   moveRoomPoint: (roomId, pointIndex, p) => {
@@ -1999,7 +2219,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const points = r.points.map((pt, i) => (i === pointIndex ? p : pt));
       return { ...r, points };
     });
-    set({ project: { ...project, rooms, updatedAt: Date.now() } });
+    set({ project: { ...withOpeningRoomChanges(project, rooms, Date.now()), updatedAt: Date.now() } });
     markDirty(set);
   },
   deleteRoomPoint: (roomId, pointIndex) => {
@@ -2012,7 +2232,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (r.points.length <= 3) return r;
       return { ...r, points: r.points.filter((_, i) => i !== pointIndex) };
     });
-    set({ project: { ...project, rooms, updatedAt: Date.now() } });
+    set({ project: { ...withOpeningRoomChanges(project, rooms, Date.now()), updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
 
