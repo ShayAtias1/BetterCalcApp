@@ -1,3 +1,4 @@
+import { notify } from './appDialogs';
 import { t } from '../i18n';
 
 /**
@@ -7,5 +8,5 @@ import { t } from '../i18n';
  */
 export function notifyExportFailed(err: unknown): void {
   console.error('Export failed', err);
-  alert(t('exports.common.exportFailed'));
+  notify(t('exports.common.exportFailed'));
 }

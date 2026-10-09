@@ -1,3 +1,4 @@
+import { confirmDialog } from '../lib/appDialogs';
 import ReviewFields from './ReviewFields';
 import { useT, formatNumber } from '../i18n';
 import { useAppStore } from '../store/appStore';
@@ -62,8 +63,8 @@ export default function ConcretePanel({ readOnly = false }: { readOnly?: boolean
           <button
             className="icon-btn danger"
             title={t('concrete.delete')}
-            onClick={() => {
-              if (confirm(t('concrete.deleteConfirm', { mark: markLabel(selected, t) }))) deleteElement(selected.id);
+            onClick={async () => {
+              if (await confirmDialog(t('concrete.deleteConfirm', { mark: markLabel(selected, t) }), { destructive: true })) deleteElement(selected.id);
             }}
           >
             <Icon name="trash" />

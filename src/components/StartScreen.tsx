@@ -1,3 +1,4 @@
+import { confirmDialog } from '../lib/appDialogs';
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/appStore';
 import { deleteProject, listProjects, type ProjectWithPlans } from '../db/database';
@@ -41,7 +42,7 @@ export default function StartScreen() {
   const handleDelete = async (id: string) => {
     const entry = projects.find((p) => p.project.id === id);
     const count = (entry?.plans.length ?? 0) + (entry?.comparisons.length ?? 0);
-    if (!confirm(count > 0 ? t('startScreen.deleteConfirmWithContents') : t('startScreen.deleteConfirm'))) return;
+    if (!await confirmDialog(count > 0 ? t('startScreen.deleteConfirmWithContents') : t('startScreen.deleteConfirm'), { destructive: true })) return;
     await deleteProject(id);
     refresh();
   };

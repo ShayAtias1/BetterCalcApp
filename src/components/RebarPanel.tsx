@@ -1,3 +1,4 @@
+import { confirmDialog } from '../lib/appDialogs';
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { useState } from 'react';
 import ReviewFields from './ReviewFields';
@@ -95,8 +96,8 @@ export default function RebarPanel({ readOnly = false }: { readOnly?: boolean })
           <button
             className="icon-btn danger"
             title={t('rebar.delete')}
-            onClick={() => {
-              if (confirm(t('rebar.deleteConfirm', { mark: markLabel(selected, t) }))) deleteItem(selected.id);
+            onClick={async () => {
+              if (await confirmDialog(t('rebar.deleteConfirm', { mark: markLabel(selected, t) }), { destructive: true })) deleteItem(selected.id);
             }}
           >
             <Icon name="trash" />
@@ -565,7 +566,7 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
             {t(barsDrawing === 'line' && toolMode === 'draw' ? 'rebar.spatial.finishDrawing' : 'rebar.spatial.drawBar')}
           </button>
           {!touchInput && bars.drawnBars.length > 0 && <button className="btn-ghost small" onClick={() => { selectBar(null); setToolMode('select'); }}>{t('rebar.spatial.moveGroup')}</button>}
-          <button className="btn-ghost small danger" onClick={() => { if (confirm(t('rebar.spatial.removeLayoutConfirm'))) removeLayout(bars.id); }}>{t('rebar.spatial.removeLayout')}</button>
+          <button className="btn-ghost small danger" onClick={async () => { if (await confirmDialog(t('rebar.spatial.removeLayoutConfirm'), { destructive: true })) removeLayout(bars.id); }}>{t('rebar.spatial.removeLayout')}</button>
         </div>
         {!selectedBar && bars.drawnBars.length > 0 && <p className="muted">{t('rebar.spatial.groupHint')}</p>}
         <p className="muted">{t('rebar.spatial.count', { count: calc.count ?? '-' })}</p>

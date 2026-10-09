@@ -1,3 +1,4 @@
+import { notify } from '../../lib/appDialogs';
 import { useWorkspaceLayout } from '../../hooks/useWorkspaceLayout';
 import AdaptiveInspector from '../AdaptiveInspector';
 import CompareCompactHeader from './CompareCompactHeader';
@@ -105,11 +106,11 @@ export default function CompareWorkspace() {
       }
 
       if (composites.length === 0) {
-        alert(skipped.length > 0 ? t('compare.exportNothingSkipped', { skipped: skipped.join(', ') }) : t('compare.exportNothing'));
+        notify(skipped.length > 0 ? t('compare.exportNothingSkipped', { skipped: skipped.join(', ') }) : t('compare.exportNothing'));
         return null;
       }
       if (skipped.length > 0) {
-        alert(t('compare.exportSkipped', { skipped: skipped.join(', ') }));
+        notify(t('compare.exportSkipped', { skipped: skipped.join(', ') }));
       }
       const exportT = exportContext(language).t;
       const scopeName = pageScope === 'all' ? exportT('compare.exportScopeAll') : exportT('compare.exportScopePage', { page: restorePageKey });

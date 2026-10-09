@@ -1,3 +1,4 @@
+import { notify } from '../../lib/appDialogs';
 import { useRef, useState } from 'react';
 import Icon from '../Icon';
 import { useT } from '../../i18n';
@@ -33,7 +34,7 @@ export default function NewComparisonDialog({
   const pickOriginal = (file: File | null | undefined) => {
     if (!file) return;
     if (!isPdf(file)) {
-      alert(t('compare.newComparison.notPdf'));
+      notify(t('compare.newComparison.notPdf'));
       return;
     }
     setOriginalFile(file);
@@ -44,7 +45,7 @@ export default function NewComparisonDialog({
     if (!files || files.length === 0) return;
     const picked = Array.from(files);
     if (picked.some((f) => !isPdf(f))) {
-      alert(t('compare.newComparison.notPdfs'));
+      notify(t('compare.newComparison.notPdfs'));
       return;
     }
     setRevisedFiles((prev) => [...prev, ...picked]);
