@@ -289,7 +289,7 @@ function stirrupShapeBlocks(rows: { planName?: string; row: RebarLevelRow }[], x
     const data = row.parts[0].stirrup;
     if (row.kind !== 'stirrup' || !data) continue;
     const part = row.parts[0];
-    const segmentDimension = (label: string, index: number) => {
+    const segmentDimension = (label: 'leftLeg' | 'base' | 'rightLeg' | 'shapeWidth' | 'shapeHeight' | 'horizontalLeg' | 'verticalLeg', index: number) => {
       const segment = data.shape.segments[index];
       return `${x.t(`rebar.stirrup.${label}`)}: ${segment ? fmt(segment.lengthM * 100) : '-'} ${x.t('units.cm')}`;
     };

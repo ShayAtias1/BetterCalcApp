@@ -80,7 +80,7 @@ test('plan/project Excel and PDF table data share counts, schedules, dimensions,
   const workbook=buildQuantitiesWorkbook(buildRoomSummaries(p),[],language,undefined,p,new Set([1]));
   const schedule=workbook.getWorksheet(x.t('openingQuantities.schedule'))!;assert.equal(schedule.getRow(2).getCell(3).value,1);assert.equal(schedule.getRow(2).getCell(6).value,1);assert.equal(schedule.views[0].rightToLeft,language==='he');
   const bytes=await workbook.xlsx.writeBuffer();const loaded=new (await import('exceljs')).default.Workbook();await loaded.xlsx.load(bytes);assert.equal(loaded.getWorksheet(schedule.name)!.getRow(2).getCell(7).value,1);
-  const project=buildProjectWorkbook({id:'project-1',name:'Project',createdAt:1,updatedAt:1},[p,p2],language);
+  const project=buildProjectWorkbook({id:'project-1',name:'Project',createdAt:1,updatedAt:1,planIds:[p.id,p2.id]},[p,p2],language);
   assert.equal(project.getWorksheet(x.t('openingQuantities.counts'))!.getRow(4).getCell(2).value,2);
   assert.deepEqual(openingReportTables([p],x,undefined,new Set([2])),[]);
  }

@@ -34,7 +34,8 @@ export function useTouchMeshLayout(transform: CanvasTransform) {
     const old = drag.current; drag.current = null;
     if (old) useMeshLayoutPreviewStore.getState().resetLevel(old.planId, old.meshId, old.level);
   };
-  useEffect(() => { cancel(); return cancel; }, [mesh?.id, page, active, view.level, automatic?.sourceKey]);
+  const automaticSourceKey = automatic?.status === 'ready' ? automatic.sourceKey : undefined;
+  useEffect(() => { cancel(); return cancel; }, [mesh?.id, page, active, view.level, automaticSourceKey]);
   useEffect(() => {
     window.addEventListener(FIELD_OPERATION_CANCEL, cancel);
     return () => window.removeEventListener(FIELD_OPERATION_CANCEL, cancel);

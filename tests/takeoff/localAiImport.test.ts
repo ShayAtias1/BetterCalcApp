@@ -216,6 +216,7 @@ test('semantic labels reuse exact profiles; confirmation is separate and never c
 test('One-Click target containment remains an approval gate after edits and normal Room approval preserves point provenance',context=>{
   context.after(()=>store().setProject(null));
   open();const candidate=store().detectionCandidates[0];
+  assert.ok(candidate.localAi);
   candidate.localAi.targetPoint={x:60,y:60};candidate.localAi.detectionMode='one-click-v1';
   const original=candidate.points.map(p=>({...p}));
   store().editDetectionCandidate(candidate.id,[{x:10,y:10},{x:20,y:10},{x:20,y:20},{x:10,y:20}]);

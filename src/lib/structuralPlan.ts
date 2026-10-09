@@ -60,7 +60,7 @@ export function withStructuralPages(plan: Plan, pages: ReadonlySet<number>): Pla
 /** Report filtering keeps one Stirrup type with only the placements on requested pages. */
 export function rebarItemsOnPages(plan: Pick<Plan, 'rebarItems'>, pages?: ReadonlySet<number>): RebarItem[] {
   if (!pages) return rebarOf(plan);
-  return rebarOf(plan).flatMap((item) => {
+  return rebarOf(plan).flatMap<RebarItem>((item) => {
     if (item.kind !== 'stirrup') return pages.has(item.pageNumber) ? [item] : [];
     const placements = item.placements.filter((p) => pages.has(p.pageNumber));
     if (!placements.length && !(item.placements.length === 0 && pages.has(item.pageNumber))) return [];

@@ -74,7 +74,7 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
   };
   const custom = shape.template === 'custom';
   const chooseSegment = (index: number) => { selectSegment(index); selectPoint(null); };
-  const semanticFields = shape.template === 'u'
+  const semanticFields: { key: 'leftLeg' | 'base' | 'rightLeg' | 'horizontalLeg' | 'verticalLeg' | 'shapeWidth' | 'shapeHeight'; segment: number }[] = shape.template === 'u'
     ? [{ key: 'leftLeg', segment: 0 }, { key: 'base', segment: 1 }, { key: 'rightLeg', segment: 2 }]
     : shape.template === 'l'
       ? [{ key: 'horizontalLeg', segment: 1 }, { key: 'verticalLeg', segment: 0 }]

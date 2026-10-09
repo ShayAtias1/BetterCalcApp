@@ -104,6 +104,7 @@ const BarsOverlay = memo(function BarsOverlay({ item, selected, selectedBarId, c
   pages: Plan['pages']; pageNumber: number; zoom: number; strokeW: number;
 }) {
   const t = useT();
+  const language = useLanguage();
         const overlay = prepareStraightBarsOverlay(item, calibration, t, formatNumber, pageNumber, pages);
         return <g>
           {overlay.points.length >= 3 && <polygon points={overlay.points.map((p) => `${p.x},${p.y}`).join(' ')} fill={REBAR_COLOR} fillOpacity={selected ? 0.09 : 0.03}

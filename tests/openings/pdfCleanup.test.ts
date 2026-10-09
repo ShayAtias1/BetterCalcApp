@@ -28,7 +28,7 @@ test('actual plan/project PDF exporters default to no opening schedule; opt-in a
  const p=structuredClone(PLAN_A);p.rooms=p.rooms.filter(r=>r.id==='r-master');
  const summaries=buildRoomSummaries(p),totals=buildReportCategoryTotals(p,summaries);
  const content={plan:false,finishes:true,concrete:false,rebar:false};
- const project={id:'project-1',name:'Test',createdAt:1,updatedAt:1};
+ const project={id:'project-1',name:'Test',createdAt:1,updatedAt:1,planIds:[p.id]};
  for(const language of ['en','he'] as const){
   const x=exportContext(language);
   for(const details of [false,true]){
