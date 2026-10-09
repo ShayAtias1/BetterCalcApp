@@ -155,14 +155,13 @@ function RoomsAndAreasPanel({ readOnly = false }: { readOnly?: boolean }) {
   const duplicateRoom = useAppStore((s) => s.duplicateRoom);
   const deleteRoom = useAppStore((s) => s.deleteRoom);
   const deleteRooms = useAppStore((s) => s.deleteRooms);
-  const [deletionRoomIds, setDeletionRoomIds] = useState<string[]>([]);
-  useEffect(() => { setDeletionRoomIds([]); }, [project?.id, readOnly]);
+  const deletionRoomIds = useAppStore(s => s.selectedRoomIds);
+  const setDeletionRoomIds = (ids: string[]) => useAppStore.getState().setPlanSelection(ids, []);
+  const selectionPlanId = useRef(project?.id);
   useEffect(() => {
-    setDeletionRoomIds(ids => {
-      const next = ids.filter(id => project?.rooms.some(room => room.id === id));
-      return next.length === ids.length ? ids : next;
-    });
-  }, [project?.rooms]);
+    if (selectionPlanId.current !== project?.id || readOnly) useAppStore.getState().setPlanSelection([], []);
+    selectionPlanId.current = project?.id;
+  }, [project?.id, readOnly]);
   const addWorkItem = useAppStore((s) => s.addWorkItem);
   const updateWorkItem = useAppStore((s) => s.updateWorkItem);
   const removeWorkItem = useAppStore((s) => s.removeWorkItem);
@@ -201,7 +200,7 @@ function RoomsAndAreasPanel({ readOnly = false }: { readOnly?: boolean }) {
   const room = project.rooms.find((r) => r.id === selectedRoomId) ?? null;
   const selectedAssignmentIds = project.rooms.filter((r) => assignmentRoomIds.includes(r.id)).map((r) => r.id);
   const selectedDeletionIds = project.rooms.filter(r => deletionRoomIds.includes(r.id)).map(r => r.id);
-  const toggleDeletionRoom = (id: string) => setDeletionRoomIds(ids => ids.includes(id) ? ids.filter(selected => selected !== id) : [...ids, id]);
+  const toggleDeletionRoom = (id: string) => { setToolMode('select'); useAppStore.getState().setOverlayVisible('finishes', true); setDeletionRoomIds(deletionRoomIds.includes(id) ? deletionRoomIds.filter(selected => selected !== id) : [...deletionRoomIds, id]); };
   const toggleAssignmentRoom = (id: string) => {
     setAssignmentRoomIds((ids) => ids.includes(id) ? ids.filter((selected) => selected !== id) : [...ids, id]);
   };

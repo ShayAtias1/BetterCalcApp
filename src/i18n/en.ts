@@ -819,6 +819,7 @@ export const en: Dictionary = {
   },
 
   aiReviewWindow: { extend: 'Extend view', reduce: 'Reduce view', close: 'Close window' },
+  planSelection: { deleteConfirm: 'Delete the {count} selected rooms and openings?', hint: 'Drag a rectangle to select rooms and openings · Shift to add to selection · Backspace to delete' },
   openingListSelection: { selectAll: 'Select all', delete: 'Delete selected', selected: '{count} openings selected', select: 'Select "{name}" for deletion', confirm: 'Delete the {count} selected openings? You can restore them using Undo.', edit: 'Edit' },
   openingAiReview: {
     title: 'Review AI doors and windows',

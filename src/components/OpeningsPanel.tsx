@@ -22,14 +22,8 @@ export default function OpeningsPanel({ readOnly = false, editorOnly = false, hi
   const aiScope = useOpeningsAiUi();
   const [preset, setPreset] = useState<OpeningPreset>('hinged');
   const [error, setError] = useState('');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  useEffect(() => { setSelectedIds([]); }, [state.project?.id, state.currentPage, readOnly, editorOnly]);
-  useEffect(() => {
-    setSelectedIds(ids => {
-      const next = ids.filter(id => state.project?.openings?.some(o => o.id === id));
-      return next.length === ids.length ? ids : next;
-    });
-  }, [state.project?.openings]);
+  const selectedIds = state.selectedOpeningIds;
+  const setSelectedIds = (ids: string[]) => state.setPlanSelection([], ids);
   useEffect(() => {
     const cancel = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
@@ -48,7 +42,10 @@ export default function OpeningsPanel({ readOnly = false, editorOnly = false, hi
   if (!plan) return null;
   const openings = (plan.openings ?? []).filter(o => o.pageNumber === state.currentPage);
   const selection = openings.filter(o => selectedIds.includes(o.id)).map(o => o.id);
-  const toggleSelection = (id: string) => setSelectedIds(ids => ids.includes(id) ? ids.filter(selected => selected !== id) : [...ids, id]);
+  const toggleSelection = (id: string) => {
+    state.setToolMode('select'); state.setOverlayVisible('finishes', true);
+    setSelectedIds(selectedIds.includes(id) ? selectedIds.filter(selected => selected !== id) : [...selectedIds, id]);
+  };
   const editOpening = (item: PlanOpening) => {
     setError(''); state.selectPlanOpening(item.id); state.setToolMode('select'); state.setOverlayVisible('finishes', true);
     if (hideAiEditor && item.aiDetection && aiScope.planId === plan.id && aiScope.pageNumber === state.currentPage && aiScope.sourceHash === item.aiDetection.sourceHash) {

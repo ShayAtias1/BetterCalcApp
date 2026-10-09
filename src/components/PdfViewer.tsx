@@ -1,3 +1,4 @@
+import { selectionBox, polygonInSelection, segmentInSelection, type SelectionBox } from '../lib/planSelection';
 import OpeningsOverlay from './OpeningsOverlay';
 import { confirmDialog, useAppDialogs } from '../lib/appDialogs';
 import { useAiWorkflow, cancelOneClick, startAiDetection } from '../lib/ai/workflow';
@@ -214,6 +215,11 @@ export default function PdfViewer() {
   const undo = useAppStore((s) => s.undo);
   const redo = useAppStore((s) => s.redo);
   const openingPlacement = useAppStore((s) => s.openingPlacement);
+  const selectedOpeningIds = useAppStore(s => s.selectedOpeningIds);
+  const selectedRoomIds = useAppStore(s => s.selectedRoomIds);
+  const marquee = useRef<{ start: Point; end: Point; additive: boolean } | null>(null);
+  const [selectionDraft, setSelectionDraft] = useState<SelectionBox | null>(null);
+  useEffect(() => { marquee.current = null; setSelectionDraft(null); }, [project?.id, currentPage, toolMode, drawTarget]);
   const selectedOpeningId = useAppStore((s) => s.selectedOpeningId);
   const selectedRoomId = useAppStore((s) => s.selectedRoomId);
   const setSelectedRoomId = useAppStore((s) => s.setSelectedRoomId);
@@ -535,16 +541,18 @@ export default function PdfViewer() {
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName;
       const isEditingField =
-        tag === 'INPUT' ||
+        (tag === 'INPUT' && !['checkbox', 'radio', 'button', 'submit'].includes((target as HTMLInputElement).type)) ||
         tag === 'TEXTAREA' ||
         tag === 'SELECT' ||
         !!target?.isContentEditable ||
-        !!target?.closest?.('input, textarea, select, [contenteditable="true"]');
+        !!target?.closest?.('textarea, select, [contenteditable="true"]');
 
       if (e.code === 'Space') spaceHeld.current = true;
       if (e.key === 'Escape' && useAppStore.getState().openingPlacement) { useAppStore.getState().cancelOpeningPlacement(); return; }
       if (e.key === 'Escape' && useAiWorkflow.getState().oneClickArmed) { cancelOneClick();return; }
       if (e.key === 'Escape') {
+        marquee.current = null; setSelectionDraft(null);
+        useAppStore.getState().setPlanSelection([], []);
         useAppStore.getState().cancelOpeningPlacement();
         structuralDrag.current = null;
         barDrag.current = null;
@@ -583,7 +591,17 @@ export default function PdfViewer() {
       // room confirmation) as the sidebar's ✕ buttons — so it lands in undo history identically.
       // A selected markup wins over a selected room: it is the more recent selection on the plan.
       if ((e.key === 'Delete' || e.key === 'Backspace') && !isEditingField && !textDraft) {
-        if (selectedOpeningId && overlayVisible.finishes) {
+        const latest = useAppStore.getState();
+        const count = latest.selectedRoomIds.length + latest.selectedOpeningIds.length;
+        if (count && overlayVisible.finishes) {
+          e.preventDefault();
+          const snapshot = latest.project;
+          const rooms = [...latest.selectedRoomIds], openings = [...latest.selectedOpeningIds];
+          if (await confirmDialog(t('planSelection.deleteConfirm', { count }), { destructive: true })) {
+            const current = useAppStore.getState();
+            if (current.project === snapshot && JSON.stringify(current.selectedRoomIds) === JSON.stringify(rooms) && JSON.stringify(current.selectedOpeningIds) === JSON.stringify(openings)) current.deletePlanSelection();
+          }
+        } else if (selectedOpeningId && overlayVisible.finishes) {
           e.preventDefault();
           if (await confirmDialog(t('openingTools.deleteConfirm'), { destructive: true })) useAppStore.getState().removePlanOpening(selectedOpeningId);
         } else if (drawTarget === 'rebar' && overlayVisible.rebar && selectedRebarId && selectedStirrupPlacementId) {
@@ -677,6 +695,18 @@ export default function PdfViewer() {
     suppressStructuralClick.current = false;
     if (openingPlacement) return;
     if(useAiWorkflow.getState().oneClickArmed)return;
+    if (e.button === 0 && toolMode === 'select' && drawTarget === 'room' && overlayVisible.finishes && !touchInput) {
+      const native = screenToNative(e.clientX, e.clientY);
+      const child = (e.target as Element).closest?.('[data-markup-id], [data-handle-markup-id], [data-opening-id], [data-suggestion-edge]');
+      const hitRoom = project?.rooms.some(r => r.pageNumber === currentPage && pointInPolygon(native, r.points));
+      const hitSuggestion = detectionCandidates.some(c => c.pageNumber === currentPage && pointInPolygon(native, c.points));
+      if (!child && (e.shiftKey || (!hitRoom && !hitSuggestion))) {
+        marquee.current = { start: native, end: native, additive: e.shiftKey };
+        setSelectionDraft(selectionBox(native, native));
+        e.preventDefault(); return;
+      }
+    }
+
     const addEdge = !touchInput && toolMode === 'select' && drawTarget === 'room'
       ? (e.target as Element).closest?.('[data-suggestion-edge]') : null;
     if (e.button === 0 && selectedArea?.kind === 'suggestion' && addEdge) {
@@ -768,6 +798,10 @@ export default function PdfViewer() {
     if (isPanning.current && updatePanDrag(e.clientX, e.clientY)) {
       return;
     }
+    if (marquee.current) {
+      marquee.current.end = screenToNative(e.clientX, e.clientY);
+      setSelectionDraft(selectionBox(marquee.current.start, marquee.current.end)); return;
+    }
     if (openingPlacement) { setHoverPoint(screenToNative(e.clientX,e.clientY)); return; }
     if (barDrag.current) {
       const drag = barDrag.current;
@@ -842,6 +876,22 @@ export default function PdfViewer() {
   };
 
   const handleMouseUp = () => {
+    if (marquee.current) {
+      const drag = marquee.current, box = selectionBox(drag.start, drag.end);
+      marquee.current = null; setSelectionDraft(null);
+      if (Math.max(box.width, box.height) * zoom >= 4 && project) {
+        const roomIds = project.rooms.filter(r => r.pageNumber === currentPage && polygonInSelection(r.points, box)).map(r => r.id);
+        const openingIds = (project.openings ?? []).filter(o => {
+          if (o.pageNumber !== currentPage) return false;
+          if (o.geometry) return segmentInSelection(o.geometry.endpointA, o.geometry.endpointB, box);
+          const b = o.aiDetection?.bbox;
+          return !!b && b.x1 <= box.x + box.width && b.x2 >= box.x && b.y1 <= box.y + box.height && b.y2 >= box.y;
+        }).map(o => o.id);
+        useAppStore.getState().setPlanSelection(drag.additive ? [...selectedRoomIds, ...roomIds] : roomIds, drag.additive ? [...selectedOpeningIds, ...openingIds] : openingIds);
+        suppressStructuralClick.current = true;
+      }
+      return;
+    }
     if (barDrag.current) {
       const drag = barDrag.current;
       barDrag.current = null;
@@ -1197,6 +1247,7 @@ export default function PdfViewer() {
             viewBox={`0 0 ${pageSize.width} ${pageSize.height}`}
             direction="rtl"
           >
+            {selectionDraft && <rect data-plan-selection-box="true" x={selectionDraft.x} y={selectionDraft.y} width={selectionDraft.width} height={selectionDraft.height} fill="#2563eb" fillOpacity={0.12} stroke="#2563eb" strokeWidth={1.5 / zoom} strokeDasharray={`${5 / zoom} ${3 / zoom}`} pointerEvents="none" />}
             {/* Measurement grid: first child, so everything else draws over it. Native pixels like the
                 rest of the overlay, so it pans and zooms with the plan; the spacing is the real-world
                 one over the page's own scale and does not depend on zoom or UI direction. */}
@@ -1205,7 +1256,7 @@ export default function PdfViewer() {
               (structuralPlan ?? project).rooms
                 .filter((r) => r.pageNumber === currentPage)
                 .map((r) => {
-                const isSelected = r.id === selectedRoomId;
+                const isSelected = r.id === selectedRoomId || selectedRoomIds.includes(r.id);
                 const pts = r.points.map((p) => `${p.x},${p.y}`).join(' ');
                 return (
                   <g key={r.id}>

@@ -78,6 +78,8 @@ export default function AiOpeningsReviewWorkspace() {
           </div>
         </> : <p className="muted">{t(pending.length ? 'openingAiReview.choose' : 'aiReviewWorkspace.complete')}</p>}
       </div>
-      <footer className="ai-review-workspace-footer"><span className="muted">{t('openingAiReview.progressMeaning')}</span></footer>
+      <footer className="ai-review-workspace-footer"><span className="muted">{t('openingAiReview.progressMeaning')}</span>
+        <button className="btn-secondary small" disabled={!pending.length} onClick={() => { actions().rejectPlanOpenings(pending.map(o => o.id)); select(null); }}>{t('aiReviewWorkspace.rejectAll')}</button>
+      </footer>
   </AiReviewWindow>;
 }

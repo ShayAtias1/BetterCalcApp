@@ -52,6 +52,7 @@ export default function Toolbar() {
   return (
     <div className="toolbar">
       {NAVIGATE_TOOLS.map(toolButton)}
+      {toolMode === 'select' && <span className="draw-hint">{t('planSelection.hint')}</span>}
 
       <span className="toolbar-sep" />
 

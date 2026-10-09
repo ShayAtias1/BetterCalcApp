@@ -95,7 +95,7 @@ function Workspace() {
         <AiReviewWorkspace key={planId} />
         <AiOpeningsReviewWorkspace key={planId} />
       </div>}
-      <QuantitiesPanel mobileOpen={destination === 'quantities'} onMobileClose={() => setDestination('plan')} />
+      <QuantitiesPanel onMobileOpen={() => setDestination('quantities')} mobileOpen={destination === 'quantities'} onMobileClose={() => setDestination('plan')} />
       {layout === 'narrow' && <nav className="mobile-destinations" aria-label={t('adaptive.plan')}>
         {(['plan', 'items', 'quantities'] as const).map((next) => <button key={next} aria-current={destination === next ? 'page' : undefined} onClick={() => setDestination(next)}>{t(`adaptive.${next}`)}</button>)}
       </nav>}

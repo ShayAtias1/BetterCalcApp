@@ -263,6 +263,11 @@ interface AppState {
   numPages: number;
   toolMode: ToolMode;
   selectedOpeningId: string | null;
+  selectedOpeningIds: string[];
+  selectedRoomIds: string[];
+  setPlanSelection: (roomIds: string[], openingIds: string[]) => void;
+  deletePlanSelection: () => void;
+  rejectPlanOpenings: (ids: string[]) => void;
   openingPlacement: { preset: OpeningPreset; start: Point | null; openingId?: string } | null;
   selectPlanOpening: (id: string | null) => void;
   beginOpeningPlacement: (preset: OpeningPreset) => void;
@@ -634,7 +639,7 @@ function commitStructuralZone(get: () => AppState, set: (patch: Partial<AppState
       project: { ...addRebarItem(project, mesh), updatedAt: Date.now() },
       drawingPoints: [],
       selectedRebarId: mesh.id,
-      selectedRoomId: null, selectedOpeningId: null, openingPlacement: null,
+      selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null,
       toolMode: 'select',
     });
   } else {
@@ -643,7 +648,7 @@ function commitStructuralZone(get: () => AppState, set: (patch: Partial<AppState
       project: { ...addConcreteElement(project, element), updatedAt: Date.now() },
       drawingPoints: [],
       selectedConcreteId: element.id,
-      selectedRoomId: null, selectedOpeningId: null, openingPlacement: null,
+      selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null,
       toolMode: 'select',
     });
   }
@@ -707,7 +712,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentPage: 1,
   numPages: 1,
   toolMode: 'select',
-  selectedRoomId: null, selectedOpeningId: null, openingPlacement: null,
+  selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null,
   manuallyCreatedRoomId: null,
   calibrationPoints: [],
   drawingPoints: [],
@@ -775,7 +780,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       dirty: false,
       saveError: null,
       currentPage: 1,
-      selectedRoomId: null, selectedOpeningId: null, openingPlacement: null,
+      selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null,
       selectedMarkupId: null,
       selectedConcreteId: null,
       selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null,
@@ -1002,7 +1007,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { project, currentPage, detectionCandidates } = get();
     const candidate = detectionCandidates.find(c => c.id === id && c.pageNumber === currentPage && c.localAi?.planId === project?.id);
     set({ selectedDetectionCandidateId: candidate?.id ?? null,
-      ...(candidate ? { selectedRoomId: null, selectedOpeningId: null, openingPlacement: null, selectedMarkupId: null } : {}) });
+      ...(candidate ? { selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null, selectedMarkupId: null } : {}) });
   },
   editDetectionCandidate: (id, points) => {
     if (!canAuthorTakeoff()) return;
@@ -1089,7 +1094,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedDetectionCandidateId: accepted.some(c => c.id === get().selectedDetectionCandidateId) ? null : get().selectedDetectionCandidateId,
       detectionCandidates: detectionCandidates.filter(c => !accepted.some(a => a.id === c.id)),
       detectionCandidatesPage: detectionCandidates.length > accepted.length ? currentPage : null,
-      selectedRoomId: null, selectedOpeningId: null, openingPlacement: null,
+      selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null,
     });
     scheduleSave(get, set);
     return rooms.length;
@@ -1128,7 +1133,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { project, history, future } = get();
     if (!project || history.length === 0) return;
     const previous = history[history.length - 1];
-    set({ project: previous, history: history.slice(0, -1), future: [project, ...future], selectedRoomId: null, selectedOpeningId: null, openingPlacement: null, selectedConcreteId: null, selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null });
+    set({ project: previous, history: history.slice(0, -1), future: [project, ...future], selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null, selectedConcreteId: null, selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null });
     scheduleSave(get, set);
   },
   redo: () => {
@@ -1139,7 +1144,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { project, history, future } = get();
     if (!project || future.length === 0) return;
     const next = future[0];
-    set({ project: next, history: [...history, project], future: future.slice(1), selectedRoomId: null, selectedOpeningId: null, openingPlacement: null, selectedConcreteId: null, selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null });
+    set({ project: next, history: [...history, project], future: future.slice(1), selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null, selectedConcreteId: null, selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null });
     scheduleSave(get, set);
   },
   setCurrentPage: (n) => {
@@ -1150,7 +1155,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       currentPage: n,
       ...(pageChanged ? { selectedDetectionCandidateId: null, detectionCandidates: [], detectionCandidatesPage: null } : {}),
-      selectedRoomId: null, selectedOpeningId: null, openingPlacement: null,
+      selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null,
       selectedMarkupId: null,
       selectedConcreteId: null,
       selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null,
@@ -1171,7 +1176,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedDetectionCandidateId: null,
       toolMode: m,
       openingPlacement: null,
-      ...(m !== 'select' && m !== 'pan' ? { selectedOpeningId: null } : {}),
+      ...(m !== 'select' && m !== 'pan' ? { selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [] } : {}),
       barsDrawing: null, stirrupDrawing: null,
       calibrationPoints: [],
       drawingPoints: [],
@@ -1180,7 +1185,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
     ensureOverlayVisible(overlayForTool(m, get().drawTarget), get, set);
   },
-  setSelectedRoomId: (id) => set({ selectedRoomId: id, selectedOpeningId: null, openingPlacement: null, ...(id ? { selectedDetectionCandidateId: null } : {}) }),
+  setSelectedRoomId: (id) => set({ selectedRoomIds: [], selectedOpeningIds: [], selectedRoomId: id, selectedOpeningId: null, openingPlacement: null, ...(id ? { selectedDetectionCandidateId: null } : {}) }),
 
   addCalibrationPoint: (p) => {
     if (!canAuthorTakeoff()) return;
@@ -1934,6 +1939,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       project: { ...withOpeningRoomChanges(project, rooms, Date.now()), updatedAt: Date.now() },
       selectedRoomId: selectedRoomId === id ? null : selectedRoomId,
+      selectedRoomIds: get().selectedRoomIds.filter(selected => selected !== id),
     });
     scheduleSave(get, set);
   },
@@ -1948,7 +1954,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const updated = withOpeningRoomChanges(project, rooms, now);
     // The entire batch, including affected opening associations, is one undoable operation.
     historyTracker.push(get, set, project);
-    set({ project: { ...updated, updatedAt: now }, selectedRoomId: selectedRoomId && selected.has(selectedRoomId) ? null : selectedRoomId });
+    set({ project: { ...updated, updatedAt: now }, selectedRoomId: selectedRoomId && selected.has(selectedRoomId) ? null : selectedRoomId, selectedRoomIds: get().selectedRoomIds.filter(id => !selected.has(id)) });
     scheduleSave(get, set);
   },
   applyBulkTakeoff: (expectedPlan, roomIds, configs, policy, updateConfirmed) => {
@@ -2010,9 +2016,43 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   selectPlanOpening: (id) => {
     const o = get().project?.openings?.find(o => o.id === id && o.pageNumber === get().currentPage);
-    set({ selectedRoomId: null, selectedOpeningId: o?.id ?? null, openingPlacement: null,
+    set({ selectedRoomIds: [], selectedOpeningIds: [], selectedRoomId: null, selectedOpeningId: o?.id ?? null, openingPlacement: null,
       selectedDetectionCandidateId: null, selectedMarkupId: null, selectedConcreteId: null,
       selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null });
+  },
+  setPlanSelection: (roomIds, openingIds) => {
+    const { project, currentPage } = get();
+    set({ selectedRoomIds: [...new Set(roomIds)].filter(id => project?.rooms.some(r => r.id === id)),
+      selectedOpeningIds: [...new Set(openingIds)].filter(id => project?.openings?.some(o => o.id === id && o.pageNumber === currentPage)),
+      selectedRoomId: null, selectedOpeningId: null, selectedMarkupId: null, selectedDetectionCandidateId: null, openingPlacement: null });
+  },
+  deletePlanSelection: () => {
+    if (!canAuthorTakeoff()) return;
+    const { project, selectedRoomIds, selectedOpeningIds } = get();
+    if (!project) return;
+    const roomIds = new Set(selectedRoomIds), openingIds = new Set(selectedOpeningIds);
+    const rooms = project.rooms.filter(r => !roomIds.has(r.id));
+    const openings = project.openings?.filter(o => !openingIds.has(o.id));
+    if (rooms.length === project.rooms.length && openings?.length === project.openings?.length) return;
+    const now = Date.now();
+    const updated = withOpeningRoomChanges({ ...project, openings }, rooms, now);
+    historyTracker.push(get, set, project);
+    set({ project: { ...updated, updatedAt: now }, selectedRoomIds: [], selectedOpeningIds: [], selectedRoomId: null, selectedOpeningId: null });
+    scheduleSave(get, set);
+  },
+  rejectPlanOpenings: (ids) => {
+    if (!canAuthorTakeoff()) return;
+    const project = get().project;
+    if (!project) return;
+    const now = Date.now();
+    let updated = project;
+    for (const id of new Set(ids)) {
+      if (updated.openings?.some(o => o.id === id && o.approval.status === 'draft')) updated = reviewPlanOpening(updated, id, 'rejected', now);
+    }
+    if (updated === project) return;
+    historyTracker.push(get, set, project);
+    set({ project: updated });
+    scheduleSave(get, set);
   },
   beginOpeningPlacement: (preset) => {
     if (!canAuthorTakeoff() || !get().project) return;
@@ -2139,7 +2179,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const updated = removeCanonicalOpening(project, id, Date.now());
     if (updated === project) return;
     historyTracker.push(get, set, project);
-    set({ project: updated, selectedOpeningId: get().selectedOpeningId === id ? null : get().selectedOpeningId });
+    set({ project: updated, selectedOpeningId: get().selectedOpeningId === id ? null : get().selectedOpeningId, selectedOpeningIds: get().selectedOpeningIds.filter(selected => selected !== id) });
     scheduleSave(get, set);
   },
   removePlanOpenings: (ids) => {
@@ -2152,6 +2192,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     historyTracker.push(get, set, project);
     set({ project: { ...project, openings, updatedAt: Date.now() },
       selectedOpeningId: selectedOpeningId && selected.has(selectedOpeningId) ? null : selectedOpeningId,
+      selectedOpeningIds: get().selectedOpeningIds.filter(id => !selected.has(id)),
       openingPlacement: openingPlacement?.openingId && selected.has(openingPlacement.openingId) ? null : openingPlacement });
     scheduleSave(get, set);
   },

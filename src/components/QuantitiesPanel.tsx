@@ -27,7 +27,7 @@ const MAXIMIZED_RESERVED = 140;
  *
  * Its height lives in session UI state; nothing here is persisted with the project.
  */
-export default function QuantitiesPanel({ mobileOpen = false, onMobileClose }: { mobileOpen?: boolean; onMobileClose?: () => void }) {
+export default function QuantitiesPanel({ mobileOpen = false, onMobileClose, onMobileOpen }: { mobileOpen?: boolean; onMobileClose?: () => void; onMobileOpen?: () => void }) {
   const { layout, reviewOnly } = useWorkspaceLayout();
   const desktop = layout === 'expanded';
   const t = useT();
@@ -94,12 +94,10 @@ export default function QuantitiesPanel({ mobileOpen = false, onMobileClose }: {
   const counts = { finishes: roomCount, concrete: concreteOf(project).length, rebar: rebarOf(project).length };
   const domainLabel = { finishes: 'workspace.tabs.rooms', concrete: 'workspace.tabs.concrete', rebar: 'workspace.tabs.rebar' } as const;
 
-  if (!desktop && !mobileOpen) return null;
-
-  if (desktop && !open) {
+  if (desktop ? !open : !mobileOpen) {
     return (
       <div className="qty-panel-collapsed">
-        <button className="btn-ghost small qty-open-btn" onClick={() => setOpen(true)} title={t('quantitiesPanel.open')}>
+        <button className="btn-ghost small qty-open-btn" onClick={() => desktop ? setOpen(true) : onMobileOpen?.()} title={t('quantitiesPanel.open')}>
           <Icon name="table" />
           {t('quantitiesPanel.title')}
         </button>

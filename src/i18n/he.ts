@@ -822,6 +822,7 @@ export const he = {
   },
 
   aiReviewWindow: { extend: 'הארכת תצוגה', reduce: 'צמצם תצוגה', close: 'סגירת החלונית' },
+  planSelection: { deleteConfirm: 'למחוק את {count} החללים והפתחים שנבחרו?', hint: 'גררו מלבן לבחירת חללים ופתחים · Shift להוספה לבחירה · Backspace למחיקה' },
   openingListSelection: { selectAll: 'בחר הכל', delete: 'מחק נבחרים', selected: '{count} פתחים נבחרו', select: 'בחירת "{name}" למחיקה', confirm: 'למחוק את {count} הפתחים שנבחרו? ניתן לשחזר באמצעות ביטול הפעולה.', edit: 'עריכה' },
   openingAiReview: {
     title: 'בדיקת דלתות וחלונות AI',

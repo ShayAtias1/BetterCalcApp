@@ -17,6 +17,7 @@ export default function OpeningsOverlay({ zoom, screenToNative, hoverPoint, edit
   const page = useAppStore(s=>s.currentPage);
   const aiScope=useOpeningsAiUi();
   const selected = useAppStore(s=>s.selectedOpeningId);
+  const selectedIds = useAppStore(s => s.selectedOpeningIds);
   const placement = useAppStore(s=>s.openingPlacement);
   const drag = useRef<Drag | null>(null);
   const ownsGesture = useRef(false);
@@ -57,11 +58,11 @@ export default function OpeningsOverlay({ zoom, screenToNative, hoverPoint, edit
   };
   const stopMouse=(e:React.MouseEvent<SVGElement>)=>{if(ownsGesture.current&&e.button===0)e.stopPropagation();};
   return <g data-opening-overlay="true">
-    {(project?.openings??[]).filter(o=>o.pageNumber===page&&(!o.aiDetection||(aiScope.planId===project?.id&&aiScope.sourceHash===o.aiDetection.sourceHash))).map(o=>{
+    {(project?.openings??[]).filter(o=>o.pageNumber===page&&(!o.aiDetection||selectedIds.includes(o.id)||selected===o.id||(aiScope.planId===project?.id&&aiScope.sourceHash===o.aiDetection.sourceHash))).map(o=>{
       if(!o.geometry){
         const b=o.aiDetection?.bbox;if(!b)return null;
         return <g key={o.id} data-opening-id={o.id} data-plan-child-interaction="true">
-          <rect x={b.x1} y={b.y1} width={b.x2-b.x1} height={b.y2-b.y1} fill="#d9770618" stroke={selected===o.id?'#2563eb':'#d97706'} strokeWidth={2*scale} strokeDasharray={`${4*scale} ${3*scale}`} pointerEvents={placement?'none':'all'}
+          <rect x={b.x1} y={b.y1} width={b.x2-b.x1} height={b.y2-b.y1} fill="#d9770618" stroke={selected===o.id||selectedIds.includes(o.id)?'#2563eb':'#d97706'} strokeWidth={2*scale} strokeDasharray={`${4*scale} ${3*scale}`} pointerEvents={placement?'none':'all'}
             onMouseDown={e=>{if(editable&&!placement&&!isPanGesture()){e.preventDefault();e.stopPropagation();}}}
             onMouseUp={e=>{if(editable&&!placement&&!isPanGesture())e.stopPropagation();}}
             onPointerDown={e=>{if(!editable||isPanGesture()||placement||e.button!==0)return;e.preventDefault();e.stopPropagation();useAppStore.getState().selectPlanOpening(o.id);}}
@@ -73,7 +74,7 @@ export default function OpeningsOverlay({ zoom, screenToNative, hoverPoint, edit
       const g=preview?.id===o.id?preview.geometry:o.geometry!;
       const a=g.endpointA,b=g.endpointB,dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy);
       const angle=Math.atan2(dy,dx)*180/Math.PI;
-      const preset=presetOf(o),color=colors[preset],active=selected===o.id;
+      const preset=presetOf(o),color=colors[preset],active=selected===o.id||selectedIds.includes(o.id);
       const uncertain=o.kind==='unknown'||o.mechanism==='unknown'||o.walkableAccess==='unknown'||o.approval.status==='rejected';
       const status=t(`openingTools.${o.approval.status}`)+(uncertain?` · ${t('openingTools.uncertain')}`:'');
       const type=o.kind==='door' && o.mechanism==='unknown' ? t('openingTools.unclassifiedDoor') : o.kind==='custom'?t('openingTools.custom'):t(`openingTools.${preset}`);
