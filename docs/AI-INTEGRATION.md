@@ -1,6 +1,6 @@
 # Local One-Click + Multi-Plan integration
 
-Worktree: `/Users/ADMIN/Documents/BetterCalc-ai-integrated`
+Worktree: `/Users/ADMIN/Documents/BetterCalc/app`
 Branch: `integration/ai-oneclick-multiplan`
 Base: exact checkpoint `a7c2162d60416c071108a0224bc7740b7c2c4704`.
 
@@ -82,14 +82,14 @@ is local to this worktree; retain it between runs. Use one local AI service proc
 Terminal 1:
 
 ```sh
-cd /Users/ADMIN/Documents/BetterCalc-ai-integrated
+cd /Users/ADMIN/Documents/BetterCalc/app
 npm run dev:ai
 ```
 
 Terminal 2:
 
 ```sh
-cd /Users/ADMIN/Documents/BetterCalc-ai-integrated
+cd /Users/ADMIN/Documents/BetterCalc/app
 npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
 ```
 

@@ -1,6 +1,6 @@
 # Stage 5 — Multi-plan AI MVP
 
-Implemented locally from checkpoint `a7c2162d60416c071108a0224bc7740b7c2c4704` on `feat/multi-plan-ai`, in `/Users/ADMIN/Documents/BetterCalc-multiplan`. No work depends on the One-Click branch.
+Implemented locally from checkpoint `a7c2162d60416c071108a0224bc7740b7c2c4704` on `feat/multi-plan-ai`, in `/Users/ADMIN/Documents/BetterCalc/archive/worktrees/multiplan`. No work depends on the One-Click branch.
 
 ## Architecture inspected
 

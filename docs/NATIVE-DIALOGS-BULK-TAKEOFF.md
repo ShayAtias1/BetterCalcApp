@@ -1,6 +1,6 @@
 # Application dialogs and Bulk Takeoff
 
-Implemented in `/Users/ADMIN/Documents/BetterCalc-ai-integrated`, branch `integration/ai-oneclick-multiplan`.
+Implemented in `/Users/ADMIN/Documents/BetterCalc/app`, branch `integration/ai-oneclick-multiplan`.
 
 ## Phase A
 

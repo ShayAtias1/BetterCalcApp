@@ -1,6 +1,6 @@
 # Stage 4.1 — One-Click AI (experimental)
 
-Implemented from checkpoint `a7c2162` on branch `feat/one-click-ai` in `/Users/ADMIN/Documents/BetterCalc-oneclick`. No merge, push or deployment.
+Implemented from checkpoint `a7c2162` on branch `feat/one-click-ai` in `/Users/ADMIN/Documents/BetterCalc/archive/worktrees/oneclick`. No merge, push or deployment.
 
 ## Behavior
 
@@ -18,7 +18,7 @@ The localhost service reuses its API key isolation, exact origin checks, body/im
 
 ## Local manual test
 
-Use two terminals in `/Users/ADMIN/Documents/BetterCalc-oneclick`:
+Use two terminals in `/Users/ADMIN/Documents/BetterCalc/archive/worktrees/oneclick`:
 
 1. Provide the existing server key/settings through your shell environment, or create ignored `.env.ai.local` in this worktree. Configure `OPENAI_API_KEY`, optionally `AI_MAX_REQUESTS` and `AI_SPEND_LIMIT_USD`, using the AI section of `.env.example`. Never put the key in a `VITE_*` setting. Keys are not copied into this worktree automatically.
 2. Start the existing localhost service with `npm run dev:ai`. If your existing service occupies port 4781, stop that service manually first; no service was started or stopped during implementation.
