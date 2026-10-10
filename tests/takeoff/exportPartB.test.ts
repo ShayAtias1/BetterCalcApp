@@ -174,7 +174,7 @@ test('plan Excel Rebar: Mesh per level and Bars as items; sheet count, size and 
   assert.equal(total.getCell(2).value, 'Total');
   assert.equal(total.getCell(6).value, '');
   assert.equal((total.getCell(9).value as { formula: string }).formula, 'ROUND(SUM(I2:I7),2)');
-  assert.equal((total.getCell(11).value as { formula: string }).formula, 'ROUND(SUM(K2:K7),2)');
+  assert.equal(total.getCell(11).value, '-'); // irregular Mesh has no physical purchase weight
   assert.equal(total.getCell(12).value, 'Includes estimate · Missing data: 1');
   const all = texts(sheet);
   assert.ok(!all.some((t) => /Summary|diameter|By plan|Bar lines|not a bar count/i.test(t)));
@@ -285,8 +285,9 @@ test('project PDF: Mesh levels and Straight Bars items with plan context, procur
   const levels = [a, b].flatMap((p) => buildStructuralReport(p).rebar!.levels);
   for (const [kind, table] of [['mesh', meshes], ['bars', straight]] as const) {
     for (const [field, column] of [['netWeightKg', 8], ['orderWeightKg', 9]] as const) {
-      const expected = levels.filter((d) => d.kind === kind).reduce((total, d) => total + (d[field] ?? 0), 0);
-      assert.equal(table.rows.at(-1)!.cells[column], exportContext('en').number(Math.round(expected * 100) / 100));
+      const included = levels.filter((d) => d.kind === kind && d.netWeightKg !== null);
+      const expected = included.reduce((total, d) => total + (d[field] ?? 0), 0);
+      assert.equal(table.rows.at(-1)!.cells[column], (field === 'orderWeightKg' && kind === 'mesh' ? levels.filter((d) => d.kind === kind) : included).some((d) => d[field] === null) ? '-' : exportContext('en').number(Math.round(expected * 100) / 100));
     }
   }
   const printed = JSON.stringify(blocks);
@@ -333,9 +334,10 @@ test('project PDF: directional and legacy Mesh reuse level rows; missing items s
   assert.equal(straight.rows.at(-1)!.cells[7], '7.5');
   assert.equal(straight.rows.at(-1)!.cells[10], 'Exact · Missing data: 1');
   for (const [kind, table] of [['mesh', meshes], ['bars', straight]] as const) {
-    const levels = [a, b].flatMap((p) => buildStructuralReport(p).rebar!.levels).filter((d) => d.kind === kind);
+    const levels = [a, b].flatMap((p) => buildStructuralReport(p).rebar!.levels).filter((d) => d.kind === kind && d.netWeightKg !== null);
     for (const [field, column] of [['netWeightKg', 8], ['orderWeightKg', 9]] as const) {
-      assert.equal(table.rows.at(-1)!.cells[column], x.number(Math.round(levels.reduce((n, d) => n + (d[field] ?? 0), 0) * 100) / 100));
+      const unknownPurchase = kind === 'mesh' && field === 'orderWeightKg' && [a, b].flatMap((p) => buildStructuralReport(p).rebar!.levels).some((d) => d.kind === kind && d.orderWeightKg === null);
+      assert.equal(table.rows.at(-1)!.cells[column], unknownPurchase ? '-' : x.number(Math.round(levels.reduce((n, d) => n + (d[field] ?? 0), 0) * 100) / 100));
     }
   }
   const missingOnly = plan('c', 'Missing only', [], [mesh({ bottom: u(0, 0) }), bars({ diameterMm: 0 })]);

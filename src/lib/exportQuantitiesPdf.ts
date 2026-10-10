@@ -1,3 +1,5 @@
+import { ReportWriter } from './exportProjectPdf';
+import { openingPdfSchedule, roomOpeningDisplay, type OpeningPdfOptions } from './openingQuantityReport';
 import { PDFDocument } from 'pdf-lib';
 import { drawLogo, embedReportFonts, logoWidth, PdfPainter, REPORT_LOGO_HEIGHT, type ReportFonts } from './pdfText';
 import { saveAs } from 'file-saver';
@@ -12,7 +14,6 @@ import {
   groupSummariesByApartment,
   openingAreaM2,
   openingCountsText,
-  roomOpeningDetails,
   usedReportCategories,
 } from './quantities';
 import { categoryPrimaryUnit, roomCategoryQuantity } from './projectQuantities';
@@ -67,8 +68,8 @@ export function drawStructuralOverlays(
     if (elements.length > 0) drawConcreteZonesOnCanvas(ctx, elements, mult, headerH, exportContext(language));
   }
   if (overlays.rebar) {
-    const meshes = rebarOf(project).filter((i): i is Extract<typeof i, { kind: 'mesh' }> => i.kind === 'mesh' && i.pageNumber === pageNumber);
-    if (meshes.length > 0) drawRebarZonesOnCanvas(ctx, meshes, mult, headerH, exportContext(language));
+    const items = rebarOf(project).filter((i) => i.kind === 'stirrup' ? i.placements.some((p) => p.pageNumber === pageNumber) : i.pageNumber === pageNumber);
+    if (items.length > 0) drawRebarZonesOnCanvas(ctx, items, mult, headerH, exportContext(language), project.pages[pageNumber]?.calibration ?? null, pageNumber, project.pages);
   }
 }
 
@@ -395,8 +396,9 @@ function drawQuantityTablePages(
 
   const roomCells = (s: RoomQuantitySummary): Cell[] => {
     const openings = roomsById.get(s.roomId)?.openings ?? [];
-    const openingsText = openingCountsText(openings, t);
-    const openingsArea = Math.round(openings.reduce((sum, o) => sum + openingAreaM2(o), 0) * 100) / 100;
+    const canonicalDisplay = project.openings?.length ? roomOpeningDisplay(project,s.roomId,x) : null;
+    const openingsText = canonicalDisplay?.text ?? openingCountsText(openings, t);
+    const openingsArea = canonicalDisplay ? canonicalDisplay.areaM2 : Math.round(openings.reduce((sum, o) => sum + openingAreaM2(o), 0) * 100) / 100;
     return [
       { main: s.apartmentNumber || DASH },
       { main: s.roomName },
@@ -420,7 +422,7 @@ function drawQuantityTablePages(
           { main: num(q.orderM2), sub: waste },
         ];
       }),
-      openingsText ? { main: openingsText, sub: `${openingsArea} ${t('units.m2')}` } : { main: DASH, color: C_NONE },
+      openingsText ? { main: openingsText, sub: `${openingsArea===null?DASH:openingsArea} ${t('units.m2')}${canonicalDisplay?.partial ? ' · ' + t('openingQuantities.partial') : ''}` } : { main: DASH, color: C_NONE },
       { main: s.notes || DASH, color: s.notes ? undefined : C_NONE },
     ];
   };
@@ -494,50 +496,9 @@ function drawQuantityTablePages(
     0.6
   );
 
-  // Openings: which doors, windows and other openings each room has, and which of its work they
-  // were taken off. Only what the room stores — type, size, count; no wall position is recorded,
-  // so none is printed. A plan without openings prints no such block at all.
-  const openingRows = summaries.flatMap((s) => {
-    const room = roomsById.get(s.roomId);
-    return room ? roomOpeningDetails(room).map((d) => ({ s, d })) : [];
-  });
-  if (openingRows.length > 0) {
-    drawBlock(
-      { text: t('exports.quantityPdf.openingsBlock'), bg: C_TOTAL },
-      [
-        t('exports.common.apartment'),
-        t('exports.common.room'),
-        t('exports.quantityPdf.openingHeaders.type'),
-        t('exports.quantityPdf.openingHeaders.width'),
-        t('exports.quantityPdf.openingHeaders.height'),
-        t('exports.quantityPdf.openingHeaders.quantity'),
-        t('exports.quantityPdf.openingHeaders.area'),
-        t('exports.quantityPdf.openingHeaders.deductedFrom'),
-      ],
-      [7, 16, 10, 8, 8, 6, 9, 26],
-      openingRows.map(({ s, d }, i) => ({
-        cells: [
-          s.apartmentNumber || DASH,
-          s.roomName,
-          t(`openingTypes.${d.opening.type}`),
-          num(d.opening.widthM),
-          num(d.opening.heightM),
-          num(d.opening.quantity),
-          `${d.areaM2}`,
-          d.deductedFrom.length === 0
-            ? t('exports.quantityPdf.notDeducted')
-            : d.deductedFrom.map((c) => (c === 'panels' ? t('exports.quantityPdf.panelsWidth') : t(`reportCategories.${c}`))).join(', '),
-        ],
-        bg: i % 2 === 0 ? C_ZEBRA_A : C_ZEBRA_B,
-      })),
-      1,
-      2
-    );
-  }
-
   // Gross − openings = net per room and work type, only where something was actually deducted.
   const deductionRows = summaries.flatMap((s) => [
-    ...s.openingDeductions.map((d) => ({
+    ...s.openingDeductions.filter(d=>d.deductedM2>0).map((d) => ({
       s,
       label: t(`reportCategories.${d.category}`),
       gross: d.grossM2,
@@ -578,14 +539,7 @@ function drawQuantityTablePages(
       0.8,
       2
     );
-    ensure(BLOCK_ROW_H, false);
-    pt.fillText(
-      t('exports.quantityPdf.deductionNote'),
-      startX,
-      y + 8,
-      { size: 11, color: C_SUB }
-    );
-    y += BLOCK_ROW_H;
+
   }
 
   // Say plainly that rooms which could not be calculated are missing from those totals.
@@ -607,6 +561,7 @@ export function getExportablePageNumbers(project: Plan): number[] {
   return Array.from(
     new Set([
       ...project.rooms.map((r) => r.pageNumber),
+      ...(project.openings ?? []).map(o=>o.pageNumber),
       ...(project.markups ?? []).map((m) => m.pageNumber),
       ...(project.measurements ?? []).map((m) => m.pageNumber),
       // A page that carries only concrete or rebar is a page of the report too.
@@ -628,7 +583,8 @@ export async function exportQuantitiesToPdf(
   overlays: OverlayVisibility,
   pageNumbers: number[] | undefined,
   content: ExportContent,
-  language: Language
+  language: Language,
+  options: OpeningPdfOptions = {}
 ) {
   const x = exportContext(language);
   const { t } = x;
@@ -675,6 +631,12 @@ export async function exportQuantitiesToPdf(
       if (pageAreas.length > 0) drawAreaMeasurementTable(pdfDoc, fonts, t('exports.quantityPdf.planPageTitle', { name: project.name, page: pageNumber }), pageAreas, { showLogo: true }, language);
     }
     if (summaries.length > 0) drawQuantityTablePages(pdfDoc, fonts, project, summaries, totals, x);
+    const schedule=openingPdfSchedule([project],x,options,new Set(pagesInScope));
+    if(schedule){
+      const writer=new ReportWriter(pdfDoc,fonts,project.name,schedule.title,x);
+      writer.section(schedule.title,4);
+      writer.table(schedule.headers,schedule.widths,schedule.rows.map(cells=>({cells})));
+    }
   }
 
   // 3-4. Concrete and rebar: one BOQ each (items, then a total row), independent of the View menu.
@@ -686,7 +648,7 @@ export async function exportQuantitiesToPdf(
   }
 
   // A selection that matches nothing on the chosen pages would save an empty file.
-  if (pdfDoc.getPageCount() === 0) throw new Error('The selected content has nothing to export on the selected pages.');
+  if (pdfDoc.getPageCount() === 0) throw new Error('The selected content has nothing to export on the selected sheets.');
 
   const bytes = await pdfDoc.save();
   const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], {

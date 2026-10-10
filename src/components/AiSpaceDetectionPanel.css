@@ -1,0 +1,8 @@
+/* A single quiet entry section; job/review messages appear only when relevant. */
+.ai-tools-section { margin-block-start: var(--s-4); padding-block-start: var(--s-3); border-block-start: 1px solid var(--border); }
+.ai-tools-section > h3 { font: var(--t-value); margin: 0 0 var(--s-2); }
+.ai-tools-actions { display: grid; gap: var(--s-2); }
+.ai-tool-button { width: 100%; justify-content: flex-start; min-height: 36px; padding: var(--s-2) var(--s-3); font: var(--t-body); text-align: start; }
+.ai-tool-button > svg { flex: none; }
+.ai-tool-button > span { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.ai-tools-section > .auto-detect-hint, .ai-tools-section > .cal-missing { margin-block-start: var(--s-2); }

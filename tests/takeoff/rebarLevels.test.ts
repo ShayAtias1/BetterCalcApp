@@ -228,7 +228,7 @@ test('every character the level texts print has a glyph in the report fonts', ()
   const p = planWith([mesh({ bottom: uniform(12, 0.2), top: directional([12, 0.2], [10, 0.125]) })]);
   for (const lang of ['he', 'en'] as const) {
     const blocks = buildStructuralPdfLayout(buildStructuralReport(p), exportContext(lang));
-    const printed = blocks.flatMap((blk) => (blk.type === 'section' ? [blk.title] : blk.type === 'note' ? [blk.text] : [...blk.headers, ...blk.rows.flatMap((r) => r.cells)]));
+    const printed = blocks.flatMap((blk) => (blk.type === 'section' ? [blk.title] : blk.type === 'note' ? [blk.text] : blk.type === 'shape' ? [blk.card.title, ...blk.card.details] : [...blk.headers, ...blk.rows.flatMap((r) => r.cells)]));
     for (const text of printed) for (const ch of text) assert.ok(covered(ch), `U+${ch.codePointAt(0)!.toString(16)} (${ch}) in "${text}" [${lang}]`);
   }
 });

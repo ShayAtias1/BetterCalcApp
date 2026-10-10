@@ -1,3 +1,5 @@
+import { resolveMeshProcurement } from '../../src/lib/meshSheets.ts';
+import { calculateRebar } from '../../src/lib/rebar.ts';
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
@@ -6,6 +8,9 @@ import ts from 'typescript';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { PLAN_A } from './fixtures.ts';
+import { useMeshLayoutPreviewStore } from '../../src/store/meshLayoutPreviewStore.ts';
+import { prepareMeshLayoutPreview } from '../../src/lib/meshLayoutPreview.ts';
+import { calculateMeshSheetPlacements } from '../../src/lib/meshSheetPlacement.ts';
 import { buildProjectStructural, buildRebarLevelRows } from '../../src/lib/structuralQuantities.ts';
 import { useLanguageStore, translatorFor, formatNumber } from '../../src/i18n/index.ts';
 import type { Plan } from '../../src/types/index.ts';
@@ -32,14 +37,17 @@ const { useAppStore } = await import('../../src/store/appStore.ts');
 const importUi = (name: string) => import(`../../src/components/${name}.tsx`);
 const { default: RebarPanel } = await importUi('RebarPanel');
 const { default: ConcretePanel } = await importUi('ConcretePanel');
+const { MeshLayoutControl, MeshLayoutOverlay, MeshSheetPreviewLayer } = await importUi('MeshLayoutPreview');
 const { ProjectRebarTable } = await importUi('ProjectStructuralTables');
 const { RebarQuantityTable, ConcreteQuantityTable } = await importUi('StructuralQuantityTables');
 // Server rendering reads Zustand's initial snapshot; refresh it before rendering each test view.
 const initialAppState = useAppStore.getInitialState();
 const initialLanguageState = useLanguageStore.getInitialState();
+const initialMeshPreviewState = useMeshLayoutPreviewStore.getInitialState();
 const render = (element: ReturnType<typeof createElement>) => {
   Object.assign(initialAppState, useAppStore.getState());
   Object.assign(initialLanguageState, useLanguageStore.getState());
+  Object.assign(initialMeshPreviewState, useMeshLayoutPreviewStore.getState());
   return renderToStaticMarkup(element);
 };
 after(() => useAppStore.getState().setProject(null));
@@ -70,7 +78,7 @@ for (const language of ['en', 'he'] as const) {
     assert.ok(printed.includes(`${t('rebar.levelTop')}: ${t('quantitiesPanel.sheetsQty', { count: 4 })}`));
     assert.ok(printed.includes(`${t('rebar.sheets.total')}: ${t('quantitiesPanel.sheetsQty', { count: 8 })}`));
     assert.ok(printed.includes(t('quantitiesPanel.cols.netWeight')));
-    assert.ok(printed.includes(t('rebar.order')));
+    assert.ok(printed.includes(t('rebar.purchaseWeight')));
     useAppStore.getState().setSelectedRebarId('bars');
     const barHtml = render(createElement(RebarPanel));
     assert.ok(text(barHtml).includes(t('rebar.totalLength')));
@@ -124,7 +132,7 @@ for (const language of ['en', 'he'] as const) {
     assert.ok(rows[3].includes(t('exports.structural.basis.estimate')) && rows[3].includes('≈'));
     assert.ok(rows[4].includes(t('exports.structural.status.invalidInput')));
     const footer = text(html.match(/<tfoot>(.*?)<\/tfoot>/s)![1]);
-    assert.ok(footer.includes(formatNumber(summary.weightKg)) && footer.includes(formatNumber(summary.orderWeightKg)));
+    assert.ok(footer.includes(formatNumber(summary.weightKg)) && footer.includes(summary.orderWeightKg === null ? '-' : formatNumber(summary.orderWeightKg)));
     assert.ok(footer.includes(t('exports.structural.basis.includesEstimate')));
     assert.ok(footer.includes(t('exports.structural.missingShort', { count: 1 })));
     assert.ok(!footer.includes(t('rebar.totalLength')) && !footer.includes(t('exports.structural.sheetsQty', { count: 8 })));
@@ -132,5 +140,258 @@ for (const language of ['en', 'he'] as const) {
     const missingHtml = render(createElement(ProjectRebarTable, { rebar: buildProjectStructural([missing]).rebar!, plans: [missing] }));
     assert.ok(text(missingHtml).includes(t('exports.structural.missingShort', { count: 1 })));
     assert.ok(missingHtml.match(/<tfoot>(.*?)<\/tfoot>/s)![1].includes('>-<'));
+  });
+}
+
+
+test('Mesh preview controls and overlay: OFF, ON, Top/Bottom selection and Rebar master visibility', () => {
+  useLanguageStore.getState().setLanguage('en');
+  useMeshLayoutPreviewStore.setState({ views: {} });
+  const p = plan();
+  useAppStore.getState().setProject(p);
+  useAppStore.getState().setSelectedRebarId('mesh');
+  const before = structuredClone(useAppStore.getState().project);
+  const history = useAppStore.getState().history;
+  const calibration = p.pages[1].calibration;
+  const control = () => render(createElement(MeshLayoutControl, { planId: p.id, mesh, calibration }));
+  const overlay = (selectedId: string | null = 'mesh', pageNumber = 1) => render(createElement(MeshLayoutOverlay, { plan: p, pageNumber, selectedId, zoom: 1, visible: useAppStore.getState().overlayVisible.rebar }));
+  useAppStore.getState().setOverlayVisible('rebar', true);
+  assert.ok(control().includes('Show mesh layout'));
+  assert.ok(!control().includes('checked'));
+  assert.equal(overlay(), '');
+  useMeshLayoutPreviewStore.getState().setEnabled(p.id, mesh.id, true);
+  assert.ok(control().includes('checked'));
+  assert.ok(control().includes('Layout viewing level'));
+  const bottom = overlay();
+  const placements = calculateMeshSheetPlacements(mesh, calibration);
+  assert.equal(placements.status, 'ok');
+  assert.equal((bottom.match(/<polygon /g) ?? []).length, placements.placementsByLevel.bottom!.length);
+  assert.ok(bottom.includes('data-level="bottom"'));
+  assert.ok(bottom.includes('pointer-events="none"'));
+  assert.ok(!/tabindex|draggable|clip-path|onClick|onPointer|onMouse/i.test(bottom));
+  useMeshLayoutPreviewStore.getState().setLevel(p.id, mesh.id, 'top');
+  const top = overlay();
+  assert.ok(top.includes('data-level="top"'));
+  assert.equal((top.match(/<polygon /g) ?? []).length, placements.placementsByLevel.top!.length);
+  assert.ok(!top.includes('&quot;bottom&quot;'));
+  useAppStore.getState().setOverlayVisible('rebar', false);
+  assert.equal(overlay(), '');
+  useAppStore.getState().setOverlayVisible('rebar', true);
+  assert.equal(overlay(), top);
+  assert.equal(overlay('bars'), '');
+  assert.equal(overlay(null), '');
+  assert.equal(overlay('mesh', 2), '');
+  assert.deepEqual(useAppStore.getState().project, before);
+  assert.equal(useAppStore.getState().history, history);
+  useMeshLayoutPreviewStore.getState().setEnabled(p.id, mesh.id, false);
+  assert.equal(overlay(), '');
+});
+
+test('Mesh preview single-level fallback, unreadable labels, and unavailable layouts render no sheet targets', () => {
+  useLanguageStore.getState().setLanguage('en');
+  const onlyTop = { ...mesh, bottom: undefined };
+  useMeshLayoutPreviewStore.setState({ views: {} });
+  useMeshLayoutPreviewStore.getState().setEnabled('a', mesh.id, true);
+  const calibration = plan().pages[1].calibration;
+  const control = render(createElement(MeshLayoutControl, { planId: 'a', mesh: onlyTop, calibration }));
+  assert.ok(!control.includes('Layout viewing level'));
+  const preview = prepareMeshLayoutPreview(onlyTop, calibration);
+  const draw = (zoom: number) => render(createElement(MeshSheetPreviewLayer, { preview, level: 'bottom', visible: true, zoom }));
+  assert.ok(draw(1).includes('data-level="top"'));
+  assert.equal((draw(1).match(/<text /g) ?? []).length, 4);
+  assert.equal((draw(0.01).match(/<text /g) ?? []).length, 0);
+  assert.equal((draw(0.01).match(/<polygon /g) ?? []).length, 4);
+  const unavailable = prepareMeshLayoutPreview({ ...mesh, sheets: { widthM: 0 } }, calibration);
+  assert.equal(render(createElement(MeshSheetPreviewLayer, { preview: unavailable, level: 'bottom', visible: true, zoom: 1 })), '');
+});
+
+for (const language of ['en', 'he'] as const) {
+  test(`Mesh preview messages for irregular polygons, Manual Size and large layouts [${language}]`, () => {
+    useLanguageStore.getState().setLanguage(language);
+    const t = translatorFor(language);
+    useMeshLayoutPreviewStore.setState({ views: {} });
+    useMeshLayoutPreviewStore.getState().setEnabled('a', mesh.id, true);
+    const calibration = plan().pages[1].calibration;
+    const irregular = { ...mesh, points: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 40, y: 80 }] };
+    for (const [item, cal, message] of [
+      [irregular, calibration, 'rebar.layout.rectangularOnly'],
+      [{ ...irregular, sizeOverride: { lengthM: 10, widthM: 4 } }, calibration, 'rebar.layout.noGeometry'],
+      [{ ...mesh, sizeOverride: { lengthM: 10, widthM: 4 } }, null, 'rebar.layout.noGeometry'],
+      [{ ...mesh, sizeOverride: { lengthM: 4000, widthM: 4 } }, calibration, 'rebar.layout.tooLarge'],
+      [{ ...mesh, sheets: { widthM: 0 } }, calibration, 'rebar.layout.unavailable'],
+    ] as const) {
+      const html = render(createElement(MeshLayoutControl, { planId: 'a', mesh: item, calibration: cal }));
+      assert.ok(text(html).includes(t(message)));
+      assert.ok(html.includes('role="status"'));
+      assert.ok(html.includes('aria-describedby'));
+      assert.equal(render(createElement(MeshLayoutOverlay, { plan: { ...plan(), rebarItems: [item], pages: { 1: { pageNumber: 1, calibration: cal } } }, pageNumber: 1, selectedId: 'mesh', visible: true, zoom: 1 })), '');
+    }
+    const p = { ...plan(), rebarItems: [{ ...irregular, sizeOverride: { lengthM: 10, widthM: 4 } }] };
+    useAppStore.getState().setProject(p);
+    useAppStore.getState().setSelectedRebarId('mesh');
+    assert.ok(text(render(createElement(RebarPanel))).includes(t('rebar.sheets.total')));
+  });
+}
+
+for (const language of ['en', 'he'] as const) {
+  test(`Mesh editor renders selection/rotation/reset, restores session edits, and gates hit targets [${language}]`, () => {
+    useLanguageStore.getState().setLanguage(language);
+    const t = translatorFor(language);
+    useMeshLayoutPreviewStore.setState({ views: {} });
+    const p = plan(), calibration = p.pages[1].calibration;
+    useAppStore.getState().setProject(p);
+    useAppStore.getState().setOverlayVisible('rebar', true);
+    const before = structuredClone(p);
+    const history = useAppStore.getState().history;
+    const quantities = buildProjectStructural([p]);
+    const actions = useMeshLayoutPreviewStore.getState();
+    actions.setEnabled(p.id, mesh.id, true);
+    const preview = prepareMeshLayoutPreview(mesh, calibration);
+    assert.equal(preview.status, 'ready');
+    const first = preview.automatic.placementsByLevel.bottom![0];
+    const control = () => render(createElement(MeshLayoutControl, { planId: p.id, mesh, calibration }));
+    const overlay = (visible = true, interactionAllowed = true) => render(createElement(MeshLayoutOverlay, {
+      plan: p, pageNumber: 1, selectedId: mesh.id, zoom: 1, visible, interactionAllowed,
+      screenToNative: (x: number, y: number) => ({ x, y }),
+    }));
+    assert.ok(text(control()).includes(t('rebar.layout.edit')));
+    assert.ok(!text(control()).includes(t('rebar.layout.rotate')));
+    actions.setEditing(p.id, mesh.id, true, preview, true);
+    assert.ok(text(control()).includes(t('rebar.layout.exitEdit')));
+    assert.ok(text(control()).includes(t('rebar.layout.add')));
+    assert.ok(!text(control()).includes('Layout edits do not affect quantities yet'));
+    assert.ok(text(control()).includes(t('rebar.layout.settingsNotice')));
+    assert.match(control(), /disabled=""[^>]*>[^<]*<\/button>/);
+    assert.ok(overlay().includes('pointer-events="auto"'));
+    assert.ok(overlay(true, false).includes('pointer-events="none"'));
+    actions.select(p.id, mesh.id, first.id);
+    assert.ok(text(control()).includes(t('rebar.layout.selectedSheet', { number: 1, count: preview.automatic.sheetsPerLevel })));
+    assert.ok(text(control()).includes(t('rebar.layout.rotate')));
+    assert.ok(overlay().includes('fill-opacity="0.14"'));
+    actions.setOverride(p.id, mesh.id, 'bottom', { placementId: first.id, x: -4, y: 9, rotation: 90 });
+    const moved = overlay();
+    assert.ok(control().includes('disabled=""'));
+    assert.equal(overlay(false), '');
+    useAppStore.getState().setOverlayVisible('rebar', false);
+    assert.ok(!text(control()).includes(t('rebar.layout.edit')));
+    useAppStore.getState().setOverlayVisible('rebar', true);
+    assert.equal(overlay(), moved);
+    actions.setLevel(p.id, mesh.id, 'top');
+    assert.ok(!text(control()).includes(t('rebar.layout.rotate')));
+    assert.ok(control().includes('disabled=""'));
+    actions.setLevel(p.id, mesh.id, 'bottom');
+    actions.select(p.id, mesh.id, first.id);
+    assert.equal(overlay(), moved);
+    actions.setEnabled(p.id, mesh.id, false);
+    assert.equal(overlay(), '');
+    actions.setEnabled(p.id, mesh.id, true);
+    assert.ok(overlay().includes('pointer-events="none"'));
+    actions.setEditing(p.id, mesh.id, true, preview, true);
+    actions.select(p.id, mesh.id, first.id);
+    assert.equal(overlay(), moved);
+    actions.resetLevel(p.id, mesh.id, 'bottom');
+    assert.ok(control().includes('disabled=""'));
+    assert.notEqual(overlay(), moved);
+    const unavailable = render(createElement(MeshLayoutControl, { planId: p.id, mesh: { ...mesh, sheets: { widthM: 0 } }, calibration }));
+    assert.ok(!text(unavailable).includes(t('rebar.layout.edit')));
+    assert.deepEqual(p, before);
+    assert.deepEqual(useAppStore.getState().project, before);
+    assert.equal(useAppStore.getState().history, history);
+    assert.deepEqual(buildProjectStructural([p]), quantities);
+  });
+}
+
+test('saved layout actions use the existing plan undo/redo history, including dimensions reset', () => {
+  const p = plan();
+  useAppStore.getState().setProject(p);
+  const automatic = calculateMeshSheetPlacements(mesh, p.pages[1].calibration);
+  assert.equal(automatic.status, 'ok');
+  const id = automatic.placementsByLevel.bottom![0].id;
+  const state = () => useAppStore.getState();
+  const current = () => state().project!;
+  const actions = [
+    { type: 'move', id, x: -10, y: 5 },
+    { type: 'rotate', id }, { type: 'add' }, { type: 'remove', id }, { type: 'reset' },
+  ] as const;
+  for (const action of actions) {
+    const before = current();
+    state().editMeshLayout(mesh.id, 'bottom', action);
+    const after = current();
+    assert.notEqual(after, before);
+    state().undo();
+    assert.deepEqual(current(), before);
+    state().redo();
+    assert.deepEqual(current(), after);
+  }
+  state().editMeshLayout(mesh.id, 'top', { type: 'add' });
+  const before = current();
+  state().updateRebarItem(mesh.id, { sheets: { lengthM: 4 } });
+  const changed = current();
+  assert.equal((changed.rebarItems![0] as RebarMesh).manualLayouts, undefined);
+  state().undo(); assert.deepEqual(current(), before);
+  state().redo(); assert.deepEqual(current(), changed);
+  useAppStore.getState().setProject(null);
+});
+
+for (const language of ['en', 'he'] as const) {
+  test(`saved manual layout exposes resolved count, add/remove and coverage notice [${language}]`, () => {
+    useLanguageStore.getState().setLanguage(language);
+    const t = translatorFor(language);
+    const p = plan();
+    useAppStore.getState().setProject(p);
+    useAppStore.getState().setSelectedRebarId(mesh.id);
+    useAppStore.getState().setOverlayVisible('rebar', true);
+    useMeshLayoutPreviewStore.setState({ views: {} });
+    const actions = useMeshLayoutPreviewStore.getState();
+    actions.setEnabled(p.id, mesh.id, true);
+    const preview = prepareMeshLayoutPreview(mesh, p.pages[1].calibration);
+    actions.setEditing(p.id, mesh.id, true, preview, true);
+    useAppStore.getState().editMeshLayout(mesh.id, 'bottom', { type: 'add' });
+    const saved = useAppStore.getState().project!.rebarItems!.find((r) => r.id === mesh.id) as RebarMesh;
+    const control = () => render(createElement(MeshLayoutControl, { planId: p.id, mesh: saved, calibration: p.pages[1].calibration }));
+    const html = text(control());
+    assert.ok(html.includes(t('rebar.layout.manual')));
+    assert.ok(html.includes(t('rebar.layout.sheetCount', { count: 5 })));
+    assert.ok(html.includes(t('rebar.layout.coverageNotice')));
+    assert.ok(!html.includes('Layout edits do not affect quantities yet'));
+    assert.ok(!control().includes('disabled=""'));
+    const added = saved.manualLayouts!.bottom!.sheets.at(-1)!;
+    actions.select(p.id, mesh.id, added.id);
+    assert.ok(text(control()).includes(t('rebar.layout.remove')));
+    assert.ok(text(render(createElement(RebarPanel))).includes(t('quantitiesPanel.sheetsQty', { count: 5 })));
+    useAppStore.getState().editMeshLayout(mesh.id, 'bottom', { type: 'remove', id: added.id });
+    actions.setLevel(p.id, mesh.id, 'bottom');
+    assert.equal(useMeshLayoutPreviewStore.getState().views[JSON.stringify([p.id, mesh.id])].selectedPlacementId, null);
+    useAppStore.getState().setProject(null);
+  });
+}
+
+for (const language of ['en', 'he'] as const) {
+  test(`Mesh form updates Purchase weight after add/remove while Net weight stays unchanged [${language}]`, () => {
+    useLanguageStore.getState().setLanguage(language);
+    const t = translatorFor(language), p = plan(), cal = p.pages[1].calibration;
+    useAppStore.getState().setProject(p);
+    useAppStore.getState().setSelectedRebarId(mesh.id);
+    const net = calculateRebar(mesh, cal).weightKg!;
+    const kg = (v: number) => `${formatNumber(Math.round(v * 10) / 10)} ${t('units.kg')}`;
+    const form = () => text(render(createElement(RebarPanel)));
+    const before = resolveMeshProcurement(mesh, cal).procurementWeightKg!;
+    assert.ok(form().includes(kg(net)) && form().includes(kg(before)));
+    assert.ok(form().includes(t('rebar.purchaseWeight')));
+    useAppStore.getState().editMeshLayout(mesh.id, 'bottom', { type: 'add' });
+    const saved = useAppStore.getState().project!.rebarItems![0] as RebarMesh;
+    const after = resolveMeshProcurement(saved, cal).procurementWeightKg!;
+    assert.ok(after > before);
+    assert.ok(form().includes(kg(after)) && form().includes(kg(net)));
+    const id = saved.manualLayouts!.bottom!.sheets.at(-1)!.id;
+    useAppStore.getState().editMeshLayout(mesh.id, 'bottom', { type: 'remove', id });
+    assert.ok(form().includes(kg(before)) && form().includes(kg(net)));
+    const irregular = { ...p, rebarItems: [{ ...mesh, points: mesh.points.slice(0, 3) }] };
+    useAppStore.getState().setProject(irregular);
+    useAppStore.getState().setSelectedRebarId(mesh.id);
+    const html = render(createElement(RebarPanel));
+    assert.ok(text(html).includes('≈'));
+    assert.match(html, /class="metric-value cal-missing">-<\/span>/);
+    useAppStore.getState().setProject(null);
   });
 }

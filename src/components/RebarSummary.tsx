@@ -8,7 +8,7 @@ import Icon from './Icon';
 type T = ReturnType<typeof useT>;
 
 /** An estimate is shown with "≈" so it can never be read as an exact count; mixed rows say so on their own line. */
-const num = (v: number, basis: RebarBasis | null, decimals: number) => basis === null ? '-' : `${basis === 'estimated' ? '≈ ' : ''}${formatNumber(round(v, decimals))}`;
+const num = (v: number | null, basis: RebarBasis | null, decimals: number) => basis === null || v === null ? '-' : `${basis === 'estimated' ? '≈ ' : ''}${formatNumber(round(v, decimals))}`;
 
 function RowNote({ row, t }: { row: Pick<RebarSummaryRow, 'basis' | 'estimatedLengthM' | 'estimatedWeightKg'>; t: T }) {
   if (row.basis === 'exact') return null;
@@ -62,7 +62,7 @@ export default function RebarSummary({ plan }: { plan: Plan }) {
                 <span>{num(r.lengthM, r.basis, 1)}</span>
                 <span>{num(r.weightKg, r.basis, 1)}</span>
                 <span>{num(r.orderLengthM, r.basis, 1)}</span>
-                <span>{num(r.orderWeightKg, r.basis, 1)}</span>
+                <span>{num(r.orderWeightKg, r.basis === null ? null : 'exact', 1)}</span>
               </div>
               <RowNote row={r} t={t} />
             </div>
@@ -82,12 +82,12 @@ export default function RebarSummary({ plan }: { plan: Plan }) {
         <span>{num(summary.lengthM, summary.basis, 1)}</span>
         <span>{num(summary.weightKg, summary.basis, 1)}</span>
         <span>{num(summary.orderLengthM, summary.basis, 1)}</span>
-        <span>{num(summary.orderWeightKg, summary.basis, 1)}</span>
+        <span>{num(summary.orderWeightKg, summary.basis === null ? null : 'exact', 1)}</span>
       </div>
       {summary.basis && summary.basis !== 'exact' && (
         <RowNote row={{ basis: summary.basis, estimatedLengthM: summary.estimatedLengthM, estimatedWeightKg: summary.estimatedWeightKg }} t={t} />
       )}
-      {summary.orderWeightKg >= 1000 && (
+      {summary.orderWeightKg !== null && summary.orderWeightKg >= 1000 && (
         <p className="muted rebar-summary-tonnes">{t('rebar.summary.tonnes', { weight: formatNumber(round(summary.orderWeightKg / 1000, 2)) })}</p>
       )}
       {summary.missingItemCount > 0 && (

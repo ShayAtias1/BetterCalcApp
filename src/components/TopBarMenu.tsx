@@ -1,8 +1,9 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useId, useRef, type ReactNode } from 'react';
+import ResponsivePopover from './ResponsivePopover';
 import Icon, { type IconName } from './Icon';
 
 /** Ids of the top-bar dropdowns; both apps' bars pick the ones they use. */
-export type MenuId = 'view' | 'export' | 'settings' | 'plans';
+export type MenuId = 'view' | 'export' | 'settings' | 'plans' | 'tools';
 
 /**
  * A top-bar button with a popover menu under it. Only the menu whose id matches `openId` is shown,
@@ -18,6 +19,7 @@ export default function TopBarMenu({
   variant = 'secondary',
   title,
   highlighted,
+  desktopMaxWidth,
   children,
 }: {
   id: MenuId;
@@ -33,42 +35,31 @@ export default function TopBarMenu({
   variant?: 'secondary' | 'ghost' | 'primary';
   title?: string;
   highlighted?: boolean;
+  desktopMaxWidth?: number;
   children: ReactNode;
 }) {
-  const anchorRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLButtonElement>(null);
+  const menuId = useId();
   const open = openId === id;
 
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!anchorRef.current?.contains(e.target as Node)) setOpenId(null);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpenId(null);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [open, setOpenId]);
-
   return (
-    <div className="top-bar-menu-anchor" ref={anchorRef}>
+    <div className="top-bar-menu-anchor">
       <button
+        ref={anchorRef}
+        type="button"
         className={`btn-${variant} small top-bar-menu-btn ${
           variant !== 'primary' && (open || highlighted) ? 'active' : ''
         }`}
         onClick={() => setOpenId(open ? null : id)}
         title={title}
         aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
       >
         {icon && <Icon name={icon} />}
         <span className="btn-label">{label}</span>
         <span className="menu-caret">▾</span>
       </button>
-      {open && <div className="top-bar-menu">{children}</div>}
+      {open && <ResponsivePopover id={menuId} label={label} anchorRef={anchorRef} onClose={() => setOpenId(null)} desktopMaxWidth={desktopMaxWidth}>{children}</ResponsivePopover>}
     </div>
   );
 }

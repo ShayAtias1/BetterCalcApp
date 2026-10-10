@@ -1,3 +1,4 @@
+import { buildOpeningQuantityReport } from './openingQuantityReport';
 /**
  * Project-level quantities: every plan is calculated by the same single-plan engine
  * (`buildRoomSummaries` / `buildReportCategoryTotals` in lib/quantities, driven by the work-type
@@ -90,6 +91,7 @@ export interface ProjectCategoryTotal extends CategoryAmount {
 
 export interface ProjectQuantities {
   plans: PlanQuantityReport[];
+  openingTotalsIncomplete?: boolean;
   /** Only categories some room in the project actually uses. */
   totals: ProjectCategoryTotal[];
   uncalibratedRoomCount: number;
@@ -138,7 +140,7 @@ export function buildPlanQuantityReport(plan: Plan): PlanQuantityReport {
         ? 'uncalibrated'
         : !hasWork
           ? 'no-work'
-          : uncalibratedRoomCount > 0
+          : uncalibratedRoomCount > 0 || buildOpeningQuantityReport(plan).incomplete
             ? 'partial'
             : 'ready';
 
@@ -172,5 +174,5 @@ export function buildProjectQuantities(plans: Plan[], tr: TranslateFn = t): Proj
       perPlan,
     });
   }
-  return { plans: reports, totals, uncalibratedRoomCount: reports.reduce((n, r) => n + r.uncalibratedRoomCount, 0) };
+  return { plans: reports, totals, ...(plans.some(plan=>buildOpeningQuantityReport(plan).incomplete)?{openingTotalsIncomplete:true}:{}), uncalibratedRoomCount: reports.reduce((n, r) => n + r.uncalibratedRoomCount, 0) };
 }

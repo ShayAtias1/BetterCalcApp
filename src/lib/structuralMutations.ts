@@ -1,3 +1,5 @@
+import { stirrupTemplate } from './stirrupShape';
+import { resolveSheetSettings } from './meshSheets';
 /**
  * Plan → plan changes for concrete zones. Pure: the store wraps each in its history and autosave
  * pattern, exactly as it does for rooms. They always read the array through `concreteOf` and
@@ -7,7 +9,7 @@
 import { v4 as uuid } from 'uuid';
 import type { Plan, Point, Room } from '../types';
 import { polygonAreaPx } from './geometry';
-import type { ConcreteElement, ConcreteKind, MeshReinforcement, RebarBars, RebarItem, RebarLevel, RebarMesh } from '../types/structural';
+import type { ConcreteElement, ConcreteKind, MeshReinforcement, RebarBars, RebarItem, RebarLevel, RebarMesh, RebarStirrup } from '../types/structural';
 import { copyReinforcement, emptyReinforcement } from './rebarMesh';
 import { concreteOf, rebarOf } from './structuralPlan';
 import { hasManualMark, nextAutoNumber } from './structuralMarks';
@@ -117,7 +119,7 @@ export function addRebarItem(plan: Plan, item: RebarItem): Plan {
   return { ...plan, rebarItems: [...rebarOf(plan), item] };
 }
 
-export type RebarPatch = Partial<Omit<RebarMesh, 'id' | 'kind'>> & Partial<Omit<RebarBars, 'id' | 'kind'>>;
+export type RebarPatch = Partial<Omit<RebarMesh, 'id' | 'kind'>> & Partial<Omit<RebarBars, 'id' | 'kind'>> & Partial<Omit<RebarStirrup, 'id' | 'kind'>>;
 
 /** Merges `patch` into the item (id and kind never change); a field patched to `undefined` is removed. Unknown id: unchanged. */
 export function updateRebarItem(plan: Plan, id: string, patch: RebarPatch): Plan {
@@ -125,6 +127,16 @@ export function updateRebarItem(plan: Plan, id: string, patch: RebarPatch): Plan
   const current = items.find((i) => i.id === id);
   if (!current) return plan;
   const merged: Record<string, unknown> = { ...current, ...patch, id, kind: current.kind };
+  if (current.kind === 'mesh' && 'sheets' in patch) {
+    const oldSize = resolveSheetSettings(current.sheets), newSize = resolveSheetSettings(patch.sheets);
+    if (oldSize.lengthM !== newSize.lengthM || oldSize.widthM !== newSize.widthM) delete merged.manualLayouts;
+  }
+  if (current.kind === 'mesh' && merged.manualLayouts) {
+    const layouts = { ...(merged.manualLayouts as RebarMesh['manualLayouts']) };
+    if (!merged.bottom) delete layouts.bottom;
+    if (!merged.top) delete layouts.top;
+    merged.manualLayouts = Object.keys(layouts).length ? layouts : undefined;
+  }
   for (const key of Object.keys(merged)) if (merged[key] === undefined) delete merged[key];
   return { ...plan, rebarItems: items.map((i) => (i.id === id ? (merged as unknown as RebarItem) : i)) };
 }
@@ -191,4 +203,9 @@ export function addRebarMeshFromRooms(plan: Plan, rooms: Room[]): { plan: Plan; 
     next = addRebarItem(next, mesh);
   }
   return { plan: next, created };
+}
+
+export function newRebarStirrup(plan: Plan, pageNumber: number): RebarStirrup {
+  return { id: uuid(), kind: 'stirrup', pageNumber, mark: '', autoNumber: nextAutoNumber(rebarOf(plan), 'stirrup'),
+    diameterMm: 8, shape: stirrupTemplate('rectangle'), lengthMode: 'automatic', wastePercent: 0, placements: [] };
 }

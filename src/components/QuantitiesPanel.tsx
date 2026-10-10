@@ -1,6 +1,9 @@
+import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../store/appStore';
 import QuantityTable from './QuantityTable';
+import PhoneReview from './PhoneReview';
+import TopBarMenu, { type MenuId } from './TopBarMenu';
 import QuantityExportActions from './QuantityExportActions';
 import { ConcreteQuantityTable, RebarQuantityTable } from './StructuralQuantityTables';
 import { concreteOf, rebarOf } from '../lib/structuralPlan';
@@ -24,7 +27,9 @@ const MAXIMIZED_RESERVED = 140;
  *
  * Its height lives in session UI state; nothing here is persisted with the project.
  */
-export default function QuantitiesPanel() {
+export default function QuantitiesPanel({ mobileOpen = false, onMobileClose, onMobileOpen }: { mobileOpen?: boolean; onMobileClose?: () => void; onMobileOpen?: () => void }) {
+  const { layout, reviewOnly } = useWorkspaceLayout();
+  const desktop = layout === 'expanded';
   const t = useT();
   const open = useAppStore((s) => s.quantitiesOpen);
   const setOpen = useAppStore((s) => s.setQuantitiesOpen);
@@ -35,7 +40,9 @@ export default function QuantitiesPanel() {
   const project = useAppStore((s) => s.project);
 
   // Which domain the panel shows. Finishes, Concrete and Rebar stay separate tables, never one merged report.
+  const [menu, setMenu] = useState<MenuId | null>(null);
   const [domain, setDomain] = useState<'finishes' | 'concrete' | 'rebar'>('finishes');
+  useEffect(() => { if (!desktop && !mobileOpen) setMenu(null); }, [desktop, mobileOpen]);
   const [resizing, setResizing] = useState(false);
   // Calculation defaults: a secondary toggle in the header, deliberately not competing with export.
   const [showDefaults, setShowDefaults] = useState(false);
@@ -87,10 +94,10 @@ export default function QuantitiesPanel() {
   const counts = { finishes: roomCount, concrete: concreteOf(project).length, rebar: rebarOf(project).length };
   const domainLabel = { finishes: 'workspace.tabs.rooms', concrete: 'workspace.tabs.concrete', rebar: 'workspace.tabs.rebar' } as const;
 
-  if (!open) {
+  if (desktop ? !open : !mobileOpen) {
     return (
       <div className="qty-panel-collapsed">
-        <button className="btn-ghost small qty-open-btn" onClick={() => setOpen(true)} title={t('quantitiesPanel.open')}>
+        <button className="btn-ghost small qty-open-btn" onClick={() => desktop ? setOpen(true) : onMobileOpen?.()} title={t('quantitiesPanel.open')}>
           <Icon name="table" />
           {t('quantitiesPanel.title')}
         </button>
@@ -101,11 +108,11 @@ export default function QuantitiesPanel() {
 
   return (
     <section
-      className={`qty-panel ${resizing ? 'resizing' : ''} ${maximized ? 'maximized' : ''}`}
-      style={{ height: effectiveHeight }}
+      className={`qty-panel ${desktop ? '' : 'adaptive-quantity-sheet'} ${resizing ? 'resizing' : ''} ${maximized ? 'maximized' : ''}`}
+      style={desktop ? { height: effectiveHeight } : undefined}
       aria-label={t('quantitiesPanel.region')}
     >
-      <button
+      {desktop && <button
         className="qty-panel-resizer"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -114,13 +121,13 @@ export default function QuantitiesPanel() {
         onKeyDown={onResizerKeyDown}
         aria-label={t('quantitiesPanel.resize')}
         title={t('quantitiesPanel.resizeHint')}
-      />
+      />}
       <header className="qty-panel-head">
         <Icon name="table" size={18} />
         <h2 className="qty-panel-title">{t('quantitiesPanel.title')}</h2>
         <span className="qty-panel-meta">{t('quantitiesPanel.roomsInProject', { count: roomCount })}</span>
         <div className="qty-panel-actions">
-          {domain === 'finishes' && (
+          {!reviewOnly && domain === 'finishes' && (
           <button
             className={`btn-ghost small ${showDefaults ? 'active' : ''}`}
             onClick={() => setShowDefaults((v) => !v)}
@@ -131,15 +138,17 @@ export default function QuantitiesPanel() {
           </button>
           )}
           <span className="top-bar-sep" />
-          <QuantityExportActions variant="buttons" />
-          <button
+          {reviewOnly ? <TopBarMenu id="export" openId={menu} setOpenId={setMenu} icon="file" label={t('common.export')} variant="ghost">
+            <QuantityExportActions variant="menu" onPicked={() => setMenu(null)} />
+          </TopBarMenu> : <QuantityExportActions variant="buttons" />}
+          {desktop && <button
             className="icon-btn"
             onClick={toggleMaximized}
             title={maximized ? t('quantitiesPanel.restore') : t('quantitiesPanel.maximize')}
           >
             <Icon name={maximized ? 'collapse' : 'expand'} />
-          </button>
-          <button className="icon-btn" onClick={() => setOpen(false)} title={t('quantitiesPanel.close')}>
+          </button>}
+          <button className="icon-btn" onClick={() => desktop ? setOpen(false) : onMobileClose?.()} title={t('quantitiesPanel.close')}>
             <Icon name="close" />
           </button>
         </div>
@@ -153,10 +162,11 @@ export default function QuantitiesPanel() {
         ))}
       </div>
       <div className="qty-panel-body">
-        {domain === 'finishes' && <QuantityTable showDefaults={showDefaults} />}
-        {domain === 'concrete' &&
+        {reviewOnly && <PhoneReview quantities domain={domain === 'finishes' ? 'room' : domain} onShowPlan={() => onMobileClose?.()} />}
+        {!reviewOnly && domain === 'finishes' && <QuantityTable showDefaults={!reviewOnly && showDefaults} />}
+        {!reviewOnly && domain === 'concrete' &&
           (counts.concrete === 0 ? <p className="muted qty-domain-empty">{t('quantitiesPanel.emptyConcrete')}</p> : <ConcreteQuantityTable plan={project} />)}
-        {domain === 'rebar' &&
+        {!reviewOnly && domain === 'rebar' &&
           (counts.rebar === 0 ? <p className="muted qty-domain-empty">{t('quantitiesPanel.emptyRebar')}</p> : <RebarQuantityTable plan={project} />)}
       </div>
     </section>

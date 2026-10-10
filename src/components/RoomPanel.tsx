@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import OpeningsPanel from './OpeningsPanel';
+import { useBulkTakeoffDialog } from './bulkTakeoffEntry';
+import { promptDialog, confirmDialog } from '../lib/appDialogs';
+import { roomHasPendingDetectionWarning } from '../lib/localAiReview';
+import AiSpaceDetectionPanel from './AiSpaceDetectionPanel';
+import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
+import ReviewFields from './ReviewFields';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { useAppStore } from '../store/appStore';
 import type { Opening, OpeningType, Plan, TilingCategory, WorkType } from '../types';
@@ -32,9 +39,106 @@ const OPENING_TYPES: OpeningType[] = ['door', 'window', 'custom'];
  * store actions and any rooms already saved from it are untouched. Flip to true to bring it back.
  */
 const SHOW_AUTO_DETECT = false;
+// Workspace visibility only; survives panel remounts without entering project persistence.
+const apartmentListExpansionForSession = new Map<string, boolean>();
 
-export default function RoomPanel() {
+export default function RoomPanel({ readOnly = false }: { readOnly?: boolean }) {
   const t = useT();
+  const id = useId();
+  const selectedOpeningId = useAppStore(s => s.selectedOpeningId);
+  const selectedRoomId = useAppStore(s => s.selectedRoomId);
+  const placement = useAppStore(s => s.openingPlacement);
+  const planId = useAppStore(s => s.project?.id);
+  const [section, setSection] = useState<'rooms' | 'openings'>(selectedOpeningId ? 'openings' : 'rooms');
+  useEffect(() => { setSection('rooms'); }, [planId]);
+  useEffect(() => { if (selectedOpeningId || placement) setSection('openings'); }, [selectedOpeningId, placement]);
+  useEffect(() => { if (selectedRoomId) setSection('rooms'); }, [selectedRoomId]);
+  const chooseSection = (next: 'rooms' | 'openings') => {
+    if (next === section) return;
+    const state = useAppStore.getState();
+    state.cancelOpeningPlacement();
+    state.setToolMode('select');
+    if (next === 'rooms') state.selectPlanOpening(null);
+    setSection(next);
+  };
+  return <div className="rooms-finishes-workspace">
+    <div className="rooms-finishes-tabs segmented" role="tablist" aria-label={t('workspace.tabs.rooms')}
+      onKeyDown={event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === 'Home' ? 'rooms' : event.key === 'End' ? 'openings' : section === 'rooms' ? 'openings' : 'rooms';
+        chooseSection(next);
+        event.currentTarget.querySelector<HTMLButtonElement>(`[data-section="${next}"]`)?.focus();
+      }}>
+      {(['rooms', 'openings'] as const).map(tab => <button key={tab} type="button" role="tab" data-section={tab}
+        id={`${id}-${tab}-tab`} aria-controls={`${id}-${tab}-panel`} aria-selected={section === tab}
+        tabIndex={section === tab ? 0 : -1} className={`btn-ghost small ${section === tab ? 'active' : ''}`}
+        onClick={() => chooseSection(tab)}>{t(tab === 'rooms' ? 'openingTools.roomsAndAreas' : 'openingTools.title')}</button>)}
+    </div>
+    <div id={`${id}-rooms-panel`} role="tabpanel" aria-labelledby={`${id}-rooms-tab`} hidden={section !== 'rooms'}>
+      <RoomsAndAreasPanel readOnly={readOnly} />
+    </div>
+    <div id={`${id}-openings-panel`} role="tabpanel" aria-labelledby={`${id}-openings-tab`} hidden={section !== 'openings'}>
+      <OpeningsPanel readOnly={readOnly} hideAiEditor={!readOnly} />
+      <LegacyRoomOpenings readOnly={readOnly} />
+    </div>
+  </div>;
+}
+
+function LegacyRoomOpenings({ readOnly }: { readOnly: boolean }) {
+  const t = useT();
+  const id = useId();
+  const plan = useAppStore(s => s.project);
+  const page = useAppStore(s => s.currentPage);
+  const selectedRoomId = useAppStore(s => s.selectedRoomId);
+  const update = useAppStore(s => s.updateOpening);
+  const remove = useAppStore(s => s.removeOpening);
+  const activeApartmentNumber = useAppStore(s => s.activeApartmentNumber);
+  const [roomId, setRoomId] = useState<string | null>(selectedRoomId);
+  const [chosenApartment, setChosenApartment] = useState<string | null>(null);
+  useEffect(() => {
+    if (selectedRoomId) {
+      setRoomId(selectedRoomId);
+      const selected = useAppStore.getState().project?.rooms.find(room => room.id === selectedRoomId);
+      if (selected) setChosenApartment(selected.apartmentNumber);
+    }
+  }, [selectedRoomId, plan?.id]);
+  const rooms = plan?.rooms.filter(room => room.pageNumber === page && (room.openings?.length ?? 0) > 0) ?? [];
+  const apartments = [...new Set(rooms.map(room => room.apartmentNumber))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const preferredApartment = chosenApartment ?? activeApartmentNumber;
+  const apartment = apartments.includes(preferredApartment) ? preferredApartment : apartments[0] ?? '';
+  const apartmentRooms = rooms.filter(room => room.apartmentNumber === apartment);
+  const room = apartmentRooms.find(item => item.id === roomId) ?? apartmentRooms[0];
+  if (!room) return null;
+  return <details className="legacy-room-openings opening-advanced">
+    <summary>{t('openingTools.roomQuantityRows')}</summary>
+    <div className="form-row">
+      <label htmlFor={`${id}-legacy-apartment`}>{t('rooms.detail.apartment')}</label>
+      <select id={`${id}-legacy-apartment`} value={apartment} onChange={event => {
+        setChosenApartment(event.target.value);
+        setRoomId(null);
+      }}>
+        {apartments.map(number => <option key={number} value={number}>{number ? t('rooms.apartment', { apartment: number }) : t('rooms.unassigned')}</option>)}
+      </select>
+    </div>
+    <div className="form-row">
+      <label htmlFor={`${id}-legacy-room`}>{t('openingTools.quantityRoom')}</label>
+      <select id={`${id}-legacy-room`} value={room.id} onChange={event => setRoomId(event.target.value)}>
+        {apartmentRooms.map(item => <option key={item.id} value={item.id}>{item.name || t('rooms.unnamed')}</option>)}
+      </select>
+    </div>
+    <ReviewFields readOnly={readOnly}><OpeningsEditor openings={room.openings ?? []}
+      onUpdate={(openingId, patch) => update(room.id, openingId, patch)}
+      onRemove={openingId => remove(room.id, openingId)} /></ReviewFields>
+  </details>;
+}
+
+function RoomsAndAreasPanel({ readOnly = false }: { readOnly?: boolean }) {
+  const { touchInput } = useWorkspaceLayout();
+  const t = useT();
+  const roomListId = useId();
+  const [apartmentListExpansion, setApartmentListExpansion] = useState(() => new Map(apartmentListExpansionForSession));
+  const openBulk = useBulkTakeoffDialog(s => s.openFor);
   const project = useAppStore((s) => s.project);
   const selectedRoomId = useAppStore((s) => s.selectedRoomId);
   const setSelectedRoomId = useAppStore((s) => s.setSelectedRoomId);
@@ -43,22 +147,36 @@ export default function RoomPanel() {
   const toolMode = useAppStore((s) => s.toolMode);
   const setToolMode = useAppStore((s) => s.setToolMode);
   const updateRoom = useAppStore((s) => s.updateRoom);
+  const assignRoomsToApartment = useAppStore((s) => s.assignRoomsToApartment);
   const setRoomType = useAppStore((s) => s.setRoomType);
   const applyRoomTemplate = useAppStore((s) => s.applyRoomTemplate);
   const newRoomTemplate = useAppStore((s) => s.newRoomTemplate);
   const setNewRoomTemplate = useAppStore((s) => s.setNewRoomTemplate);
   const duplicateRoom = useAppStore((s) => s.duplicateRoom);
   const deleteRoom = useAppStore((s) => s.deleteRoom);
+  const deleteRooms = useAppStore((s) => s.deleteRooms);
+  const deletionRoomIds = useAppStore(s => s.selectedRoomIds);
+  const setDeletionRoomIds = (ids: string[]) => useAppStore.getState().setPlanSelection(ids, []);
+  const selectionPlanId = useRef(project?.id);
+  useEffect(() => {
+    if (selectionPlanId.current !== project?.id || readOnly) useAppStore.getState().setPlanSelection([], []);
+    selectionPlanId.current = project?.id;
+  }, [project?.id, readOnly]);
   const addWorkItem = useAppStore((s) => s.addWorkItem);
   const updateWorkItem = useAppStore((s) => s.updateWorkItem);
   const removeWorkItem = useAppStore((s) => s.removeWorkItem);
-  const addOpening = useAppStore((s) => s.addOpening);
-  const updateOpening = useAppStore((s) => s.updateOpening);
-  const removeOpening = useAppStore((s) => s.removeOpening);
   const activeApartmentNumber = useAppStore((s) => s.activeApartmentNumber);
   const setActiveApartmentNumber = useAppStore((s) => s.setActiveApartmentNumber);
   const [apartmentDialogSource, setApartmentDialogSource] = useState<string | null>(null);
   const [showDetection, setShowDetection] = useState(false);
+  const [assigningApartment, setAssigningApartment] = useState(false);
+  const [assignmentRoomIds, setAssignmentRoomIds] = useState<string[]>([]);
+  const [assignmentTarget, setAssignmentTarget] = useState('');
+  useEffect(() => {
+    setAssigningApartment(false);
+    setAssignmentRoomIds([]);
+    setAssignmentTarget('');
+  }, [project?.id, readOnly]);
   // List ⇄ detail is pure navigation: it lives here, never in the project or in the store's
   // selection. Going back to the list keeps `selectedRoomId`, so the room stays highlighted on the
   // plan and one click reopens it.
@@ -74,10 +192,18 @@ export default function RoomPanel() {
     lastOpened.current = manuallyCreatedRoomId;
   }, [manuallyCreatedRoomId]);
 
+  useEffect(() => { if ((readOnly || touchInput) && selectedRoomId) setDetailOpen(true); }, [readOnly, touchInput, selectedRoomId]);
+
   if (!project) return null;
   const apartmentNumbers = apartmentNumbersInProject(project);
   const groups = groupRoomsByApartment(project);
   const room = project.rooms.find((r) => r.id === selectedRoomId) ?? null;
+  const selectedAssignmentIds = project.rooms.filter((r) => assignmentRoomIds.includes(r.id)).map((r) => r.id);
+  const selectedDeletionIds = project.rooms.filter(r => deletionRoomIds.includes(r.id)).map(r => r.id);
+  const toggleDeletionRoom = (id: string) => { setToolMode('select'); useAppStore.getState().setOverlayVisible('finishes', true); setDeletionRoomIds(deletionRoomIds.includes(id) ? deletionRoomIds.filter(selected => selected !== id) : [...deletionRoomIds, id]); };
+  const toggleAssignmentRoom = (id: string) => {
+    setAssignmentRoomIds((ids) => ids.includes(id) ? ids.filter((selected) => selected !== id) : [...ids, id]);
+  };
   // The detail view is derived, not remembered: a room that was deleted, undone away or that lives
   // on another page (after a page change) can never leave the sidebar showing stale details.
   const detailRoom = detailOpen && room && room.pageNumber === currentPage ? room : null;
@@ -107,22 +233,22 @@ export default function RoomPanel() {
               {detailRoom.apartmentNumber ? t('rooms.apartment', { apartment: detailRoom.apartmentNumber }) : t('rooms.unassigned')}
             </span>
           </span>
-          <button className="icon-btn" title={t('rooms.duplicate')} onClick={() => duplicateRoom(detailRoom.id)}>
+          {!readOnly && <><button className="icon-btn" title={t('rooms.duplicate')} onClick={() => duplicateRoom(detailRoom.id)}>
             <Icon name="copy" />
           </button>
           <button
             className="icon-btn danger"
             title={t('rooms.delete')}
-            onClick={() => {
-              if (!confirm(t('rooms.deleteConfirm', { name: detailRoom.name }))) return;
+            onClick={async () => {
+              if (!await confirmDialog(t('rooms.deleteConfirm', { name: detailRoom.name }), { destructive: true })) return;
               deleteRoom(detailRoom.id);
               setDetailOpen(false);
             }}
           >
             <Icon name="trash" />
           </button>
-        </div>
-        <RoomDetail
+        </>}</div>
+        <ReviewFields readOnly={readOnly}><RoomDetail
           key={detailRoom.id}
           room={detailRoom}
           project={project}
@@ -133,25 +259,23 @@ export default function RoomPanel() {
           onAddWorkItem={(type) => addWorkItem(detailRoom.id, type)}
           onUpdateWorkItem={(itemId, patch) => updateWorkItem(detailRoom.id, itemId, patch)}
           onRemoveWorkItem={(itemId) => removeWorkItem(detailRoom.id, itemId)}
-          onAddOpening={(type) => addOpening(detailRoom.id, type)}
-          onUpdateOpening={(openingId, patch) => updateOpening(detailRoom.id, openingId, patch)}
-          onRemoveOpening={(openingId) => removeOpening(detailRoom.id, openingId)}
-        />
+        /></ReviewFields>
       </div>
     );
   }
 
   /** Creating an apartment is just naming one: it exists as soon as a room carries the number. */
-  const createApartment = () => {
-    const next = window.prompt(t('rooms.newApartmentPrompt'), '');
+  const createApartment = async () => {
+    const next = await promptDialog(t('rooms.newApartmentPrompt'), '');
     if (next && next.trim()) setActiveApartmentNumber(next.trim());
   };
 
   return (
     <div className="room-panel">
       {/* Suggestions awaiting review take over the top of the tab until they are handled. */}
-      {SHOW_AUTO_DETECT && <DetectionReviewPanel />}
+      {!readOnly && (SHOW_AUTO_DETECT || import.meta.env.DEV) && <DetectionReviewPanel />}
 
+      <div hidden={readOnly}>
       <div className="room-create-row">
         <button
           className={`btn-primary ${toolMode === 'draw' ? 'active' : ''}`}
@@ -195,6 +319,7 @@ export default function RoomPanel() {
           room stays fully editable afterwards. */}
       <div className="active-apartment-row">
         <label htmlFor="new-room-template">{t('rooms.newRoomTemplate')}</label>
+        <div className="room-workspace-select">
         <select
           id="new-room-template"
           value={newRoomTemplate ?? ''}
@@ -208,12 +333,15 @@ export default function RoomPanel() {
             </option>
           ))}
         </select>
+        <span className="menu-caret" aria-hidden="true">▾</span>
+        </div>
       </div>
 
       {/* Workspace state, not a form field: this is the apartment being worked in, and the sentence
           that used to repeat the selected value under it is gone — the value itself says it. */}
       <div className="active-apartment-row">
         <label htmlFor="active-apartment">{t('rooms.workingIn')}</label>
+        <div className="room-workspace-select">
         <select
           id="active-apartment"
           value={activeApartmentNumber}
@@ -234,10 +362,79 @@ export default function RoomPanel() {
           )}
           <option value="__new__">{t('rooms.newApartment')}</option>
         </select>
+        <span className="menu-caret" aria-hidden="true">▾</span>
+        </div>
       </div>
 
+      {!readOnly && <button className="btn-secondary full-width bulk-takeoff-launch" onClick={() => openBulk(project.id)}>{t('bulkTakeoff.open')}</button>}
+      </div>
       <div className="room-list">
-        <span className="section-label">{t('rooms.markedAreas', { count: project.rooms.length })}</span>
+        <div className="room-list-head">
+          {!readOnly && project.rooms.length > 0 && !assigningApartment && (
+            <button className="btn-secondary small" onClick={() => {
+              setAssignmentRoomIds([]);
+              setAssignmentTarget(activeApartmentNumber);
+              setAssigningApartment(true);
+            }}>{t('rooms.bulkAssignment.open')}</button>
+          )}
+        </div>
+        {!readOnly && selectedDeletionIds.length > 0 && !assigningApartment && <div className="room-apartment-assignment">
+          <div className="room-assignment-actions">
+            <label className="room-assignment-select-all"><input type="checkbox"
+              checked={selectedDeletionIds.length === project.rooms.length}
+              ref={input => { if (input) input.indeterminate = selectedDeletionIds.length > 0 && selectedDeletionIds.length < project.rooms.length; }}
+              onChange={event => setDeletionRoomIds(event.target.checked ? project.rooms.map(room => room.id) : [])}
+            />{t('rooms.bulkDelete.selectAll')}</label>
+            <button className="btn-secondary small danger" disabled={!selectedDeletionIds.length} onClick={async () => {
+              if (!await confirmDialog(t('rooms.bulkDelete.confirm', { count: selectedDeletionIds.length }), { destructive: true })) return;
+              // A modal may outlive navigation or an edit. Delete only the plan snapshot confirmed.
+              if (useAppStore.getState().project !== project) return;
+              deleteRooms(selectedDeletionIds);
+              setDeletionRoomIds([]);
+            }}>{t('rooms.bulkDelete.delete')}</button>
+          </div>
+          <span className="muted" role="status">{t('rooms.bulkDelete.selected', { count: selectedDeletionIds.length })}</span>
+        </div>}
+        {!readOnly && assigningApartment && (
+          <div className="room-apartment-assignment">
+            <p className="muted" aria-live="polite">{t('rooms.bulkAssignment.selected', { count: selectedAssignmentIds.length })}</p>
+            <label className="room-assignment-select-all">
+              <input type="checkbox"
+                checked={project.rooms.length > 0 && selectedAssignmentIds.length === project.rooms.length}
+                onChange={(e) => setAssignmentRoomIds(e.target.checked ? project.rooms.map((r) => r.id) : [])}
+              />
+              {t('rooms.bulkAssignment.selectAll')}
+            </label>
+            <div className="form-row">
+              <label htmlFor="room-assignment-apartment">{t('rooms.detail.apartment')}</label>
+              <select id="room-assignment-apartment" value={assignmentTarget} onChange={async (e) => {
+                const value = e.target.value;
+                if (value === '__new__') {
+                  const next = await promptDialog(t('rooms.newApartmentPrompt'), '');
+                  if (next?.trim()) setAssignmentTarget(next.trim());
+                } else setAssignmentTarget(value);
+              }}>
+                <option value="">{t('rooms.bulkAssignment.choose')}</option>
+                {apartmentNumbers.map((a) => <option key={a} value={a}>{t('rooms.apartment', { apartment: a })}</option>)}
+                {assignmentTarget && !apartmentNumbers.includes(assignmentTarget) && (
+                  <option value={assignmentTarget}>{t('rooms.apartment', { apartment: assignmentTarget })}</option>
+                )}
+                <option value="__new__">{t('rooms.newApartment')}</option>
+              </select>
+            </div>
+            <div className="room-assignment-actions">
+              <button className="btn-primary small" disabled={!assignmentTarget.trim() || selectedAssignmentIds.length === 0} onClick={() => {
+                assignRoomsToApartment(selectedAssignmentIds, assignmentTarget);
+                setAssignmentRoomIds([]);
+                setAssigningApartment(false);
+              }}>{t('rooms.bulkAssignment.assign')}</button>
+              <button className="btn-secondary small" onClick={() => {
+                setAssignmentRoomIds([]);
+                setAssigningApartment(false);
+              }}>{t('common.cancel')}</button>
+            </div>
+          </div>
+        )}
         {project.rooms.length === 0 && (
           <div className="empty-state">
             <Icon name="polygon" size={28} />
@@ -248,21 +445,32 @@ export default function RoomPanel() {
         {groups.map((group) => {
           const isActive = group.apartmentNumber === activeApartmentNumber;
           const isUnassigned = !group.apartmentNumber;
+          const expansionKey = JSON.stringify([project.id, group.apartmentNumber]);
+          const expanded = apartmentListExpansion.get(expansionKey) ?? true;
+          const groupListId = `${roomListId}-${encodeURIComponent(group.apartmentNumber || '__unassigned__')}`;
           return (
             <div key={group.apartmentNumber || '__unassigned__'} className={`apartment-group ${isActive ? 'active' : ''}`}>
               <div className="apartment-group-head">
                 {/* The active apartment is marked by the group's EDGE and a stronger header — never
                     by tinting the whole group, which is what used to swallow the selected room. */}
                 <button
-                  className="apartment-group-title"
-                  onClick={() => setActiveApartmentNumber(group.apartmentNumber)}
+                  type="button"
+                  className="apartment-group-title room-list-collapse-toggle"
+                  aria-expanded={expanded}
+                  aria-controls={groupListId}
+                  onClick={() => {
+                    if (!readOnly) setActiveApartmentNumber(group.apartmentNumber);
+                    apartmentListExpansionForSession.set(expansionKey, !expanded);
+                    setApartmentListExpansion(previous => new Map(previous).set(expansionKey, !expanded));
+                  }}
                   title={isUnassigned ? t('rooms.workUnassigned') : t('rooms.makeActive', { apartment: group.apartmentNumber })}
                 >
+                  <span className="room-list-chevron" aria-hidden="true">▾</span>
                   {isUnassigned ? t('rooms.unassigned') : t('rooms.apartment', { apartment: group.apartmentNumber })}
                   <span className="apartment-group-count">{group.rooms.length}</span>
                   {isActive && <span className="apartment-active-flag">{t('rooms.active')}</span>}
                 </button>
-                {!isUnassigned && (
+                {!readOnly && !isUnassigned && (
                   <button
                     className="icon-btn"
                     title={t('rooms.duplicateApartment', { apartment: group.apartmentNumber })}
@@ -272,21 +480,34 @@ export default function RoomPanel() {
                   </button>
                 )}
               </div>
+              <div id={groupListId} className={`room-list-body ${expanded ? 'expanded' : ''}`} aria-hidden={!expanded} inert={!expanded}>
+              <div className="room-list-body-inner">
               <ul>
                 {group.rooms.map((r) => (
-                  <li key={r.id} className={r.id === selectedRoomId ? 'active' : ''} onClick={() => selectRoom(r.id, r.pageNumber)}>
+                  <li key={r.id} className={(assigningApartment ? assignmentRoomIds.includes(r.id) : r.id === selectedRoomId || deletionRoomIds.includes(r.id)) ? 'active' : ''}
+                    onClick={() => assigningApartment ? toggleAssignmentRoom(r.id) : selectRoom(r.id, r.pageNumber)}>
+                    {!readOnly && assigningApartment && <input
+                      type="checkbox"
+                      className="room-assignment-checkbox"
+                      aria-label={t('rooms.bulkAssignment.selectRoom', { name: r.name || t('rooms.unnamed'), page: r.pageNumber })}
+                      checked={assignmentRoomIds.includes(r.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => toggleAssignmentRoom(r.id)}
+                    />}
                     <span className="color-dot" style={{ background: r.color }} />
                     <span className="room-list-name" dir="auto">{r.name || t('rooms.unnamed')}</span>
-                    {r.detectionConfidence === 'low' && (
+                    {roomHasPendingDetectionWarning(r) && (
                       <span className="room-review-flag" title={t('rooms.reviewFlag')}>
                         <Icon name="alert" size={13} />
                       </span>
                     )}
                     {/* The page number is only information when it is NOT the page on screen. */}
                     {r.pageNumber !== currentPage && <span className="room-list-page">{t('rooms.page', { page: r.pageNumber })}</span>}
-                    {/* Row actions appear on hover and on keyboard focus, so they stop competing
-                        with the room name while staying reachable by tab. */}
-                    <span className="room-row-actions">
+                    {/* Editing, deletion and selection remain visible at the inline end. */}
+                    <span className="room-row-actions" hidden={readOnly || assigningApartment}>
+                      <button className="icon-btn" title={t('openingListSelection.edit')} aria-label={`${t('openingListSelection.edit')} · ${r.name || t('rooms.unnamed')}`} onClick={event => {
+                        event.stopPropagation(); selectRoom(r.id, r.pageNumber);
+                      }}><Icon name="edit" /></button>
                       <button
                         className="icon-btn"
                         title={t('rooms.duplicate')}
@@ -300,17 +521,22 @@ export default function RoomPanel() {
                       <button
                         className="icon-btn danger"
                         title={t('rooms.delete')}
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation();
-                          if (confirm(t('rooms.deleteConfirm', { name: r.name }))) deleteRoom(r.id);
+                          if (await confirmDialog(t('rooms.deleteConfirm', { name: r.name }), { destructive: true })) deleteRoom(r.id);
                         }}
                       >
                         <Icon name="trash" />
                       </button>
+                      {!readOnly && !assigningApartment && <input type="checkbox" className="room-assignment-checkbox"
+                        aria-label={t('rooms.bulkDelete.selectRoom', { name: r.name || t('rooms.unnamed'), page: r.pageNumber })}
+                        checked={deletionRoomIds.includes(r.id)} onClick={event => event.stopPropagation()} onChange={() => toggleDeletionRoom(r.id)} />}
                     </span>
                   </li>
                 ))}
               </ul>
+              </div>
+              </div>
             </div>
           );
         })}
@@ -318,10 +544,12 @@ export default function RoomPanel() {
 
       {/* Room details are a separate view — the list stays a list, however many apartments it holds. */}
 
-      {/* Auto detection is a secondary path: its launcher only appears when asked for. */}
-      {SHOW_AUTO_DETECT && showDetection && <AutoDetectPanel />}
+      {!readOnly && import.meta.env.DEV && <AiSpaceDetectionPanel />}
 
-      {apartmentDialogSource !== null && (
+      {/* Auto detection is a secondary path: its launcher only appears when asked for. */}
+      {!readOnly && SHOW_AUTO_DETECT && showDetection && <AutoDetectPanel />}
+
+      {!readOnly && apartmentDialogSource !== null && (
         <DuplicateApartmentDialog
           project={project}
           sourceApartmentNumber={apartmentDialogSource}
@@ -342,9 +570,6 @@ function RoomDetail({
   onAddWorkItem,
   onUpdateWorkItem,
   onRemoveWorkItem,
-  onAddOpening,
-  onUpdateOpening,
-  onRemoveOpening,
 }: {
   room: import('../types').Room;
   /** The whole project, so quantities and default waste come from the shared helpers in lib/quantities. */
@@ -356,9 +581,6 @@ function RoomDetail({
   onAddWorkItem: (type: WorkType) => void;
   onUpdateWorkItem: (itemId: string, patch: Partial<import('../types').WorkItem>) => void;
   onRemoveWorkItem: (itemId: string) => void;
-  onAddOpening: (type: OpeningType) => void;
-  onUpdateOpening: (openingId: string, patch: Partial<Opening>) => void;
-  onRemoveOpening: (openingId: string) => void;
 }) {
   const t = useT();
   const { areaM2, perimeterM } = roomMetrics(room, calibration);
@@ -430,8 +652,8 @@ function RoomDetail({
       {room.roomType && ROOM_PROFILES.some((p) => p.key === room.roomType) && room.workItems.length > 0 && (
         <button
           className="btn-ghost small template-apply"
-          onClick={() => {
-            if (!confirm(t('rooms.detail.applyTemplateConfirm'))) return;
+          onClick={async () => {
+            if (!await confirmDialog(t('rooms.detail.applyTemplateConfirm'))) return;
             onApplyTemplate();
             setTypeNotice(null);
           }}
@@ -448,13 +670,6 @@ function RoomDetail({
         <label>{t('rooms.detail.notes')}</label>
         <textarea dir="auto" value={room.notes} onChange={(e) => onUpdate({ notes: e.target.value })} rows={2} />
       </div>
-
-      <OpeningsEditor
-        openings={room.openings ?? []}
-        onAdd={onAddOpening}
-        onUpdate={onUpdateOpening}
-        onRemove={onRemoveOpening}
-      />
 
       <span className="section-label">{t('rooms.detail.workTypes')}</span>
       <div className="work-item-add-row">
@@ -540,8 +755,9 @@ function RoomDetail({
                       </span>
                     </span>
                   </div>
+                  {calc.openingAudit?.filter(a=>a.reason).map((a,i)=><p className="wi-deduction" key={i}>{t(`openingQuantities.${a.reason!}`)}</p>)}
                   {/* Says in words what was taken off, so a net figure is never mistaken for the gross one. */}
-                  {deducts && (calc.deductedM2 > 0 || (calc.deductedLengthM ?? 0) > 0) && (
+                  {deducts && (calc.deductedM2 > 0 || (calc.deductedLengthM ?? 0) > 0 || !!calc.openingAudit?.length) && (
                     <p className="wi-deduction">
                       {calc.lengthM != null && calc.grossLengthM != null && calc.deductedLengthM != null
                         ? t('rooms.detail.perimeterDeduction', {
@@ -636,12 +852,10 @@ function RoomDetail({
  */
 function OpeningsEditor({
   openings,
-  onAdd,
   onUpdate,
   onRemove,
 }: {
   openings: Opening[];
-  onAdd: (type: OpeningType) => void;
   onUpdate: (openingId: string, patch: Partial<Opening>) => void;
   onRemove: (openingId: string) => void;
 }) {
@@ -660,14 +874,6 @@ function OpeningsEditor({
           ? t('rooms.openings.titleWithArea', { area: round(totalM2, 2), unit: t('units.m2') })
           : t('rooms.openings.title')}
       </span>
-      <div className="work-item-add-row">
-        {OPENING_TYPES.map((type) => (
-          <button key={type} className="btn-secondary small" onClick={() => onAdd(type)}>
-            <Icon name="plus" size={13} />
-            {t(`openingTypes.${type}`)}
-          </button>
-        ))}
-      </div>
       {openings.length > 0 && (
         <ul className="opening-list">
           {openings.map((o) => (
@@ -742,10 +948,10 @@ function DuplicateApartmentDialog({
   const targetExists = !!target.trim() && project.rooms.some((r) => r.apartmentNumber === target.trim());
   const canDuplicate = !!source && !!target.trim();
 
-  const run = () => {
+  const run = async () => {
     const targetNumber = target.trim();
     // An existing target number is not an error — it just means the rooms join that apartment.
-    if (targetExists && !confirm(t('rooms.duplicateDialog.targetExistsConfirm', { apartment: targetNumber }))) return;
+    if (targetExists && !await confirmDialog(t('rooms.duplicateDialog.targetExistsConfirm', { apartment: targetNumber }))) return;
     duplicateApartment(source, targetNumber);
     onClose();
   };

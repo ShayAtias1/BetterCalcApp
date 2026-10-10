@@ -42,8 +42,10 @@
  * Values are unrounded; rounding is the summaries' job.
  */
 
-import type { Calibration } from '../types';
+import type { Calibration, Plan } from '../types';
 import type { RebarBars, RebarItem, RebarLayer, RebarLayerDirection, RebarLevel, RebarMesh } from '../types/structural';
+import { distancePx, pxToMeters } from './geometry';
+import { resolveStirrupItem } from './stirrup';
 import { meshLayers, normalizeMesh } from './rebarMesh';
 import { finiteNonNegative, finitePositive, zoneGeometry } from './zoneGeometry';
 
@@ -180,18 +182,48 @@ function calculateLayer(layer: RebarLayer, zone: ReturnType<typeof zoneGeometry>
   return layerResult(layer.id, diameterMm, spacingM, null, null, zone.areaM2 / spacingM, true);
 }
 
-function calculateBars(item: RebarBars): RebarCalc {
-  const wastePercent = finiteNonNegative(item.wastePercent, 0);
-  const diameterMm = finitePositive(item.diameterMm);
-  const lengthM = finitePositive(item.lengthM);
-  // Zero bars is a real zero; a missing or negative count is not.
-  const count = typeof item.count === 'number' && Number.isFinite(item.count) && item.count >= 0 ? item.count : null;
-  if (diameterMm === null || lengthM === null || count === null) {
-    return finish('invalid-input', [emptyLayer(item.id, false, diameterMm)], wastePercent);
-  }
-  return finish('ok', [layerResult(item.id, diameterMm, null, count, lengthM, count * lengthM, false)], wastePercent);
+export interface StraightBarsResult extends RebarCalc {
+  mode: 'legacy' | 'zone' | 'individual';
+  count: number | null;
+  effectiveLengthM: number | null;
+  automaticLengthM: number | null;
 }
 
-export function calculateRebar(item: RebarItem, calibration: Calibration | null): RebarCalc {
-  return item.kind === 'mesh' ? calculateMesh(item, calibration) : calculateBars(item);
+/** Single quantity source for numerical Bars and spatial Bars Zones. No persisted derived lengths. */
+export function resolveStraightBars(item: RebarBars, calibration: Calibration | null, pages?: Plan['pages']): StraightBarsResult {
+  const wastePercent = finiteNonNegative(item.wastePercent, 0);
+  const diameterMm = finitePositive(item.diameterMm);
+  if (item.drawnBars !== undefined) {
+    const count = item.drawnBars.length;
+    const measured = item.drawnBars.map((bar) => {
+      const scale = finitePositive(pages ? pages[bar.pageNumber]?.calibration?.metersPerPixel : calibration?.metersPerPixel);
+      return scale ? pxToMeters(distancePx(bar.start, bar.end), scale) : null;
+    });
+    const missingScale = measured.some((length) => length === null);
+    const lengths = measured.filter((length): length is number => length !== null);
+    const valid = lengths.every((length) => Number.isFinite(length) && length > 0);
+    const status: RebarStatus = missingScale ? 'no-scale' : !valid || diameterMm === null ? 'invalid-input' : 'ok';
+    const total = lengths.reduce((sum, length) => sum + length, 0);
+    const uniform = !missingScale && valid && lengths.length > 0 && lengths.every((length) => Math.abs(length - lengths[0]) < 1e-8) ? lengths[0] : null;
+    const calc = status === 'ok'
+      ? finish('ok', [layerResult(item.id, diameterMm!, null, count, uniform, total, false)], wastePercent)
+      : finish(status, [emptyLayer(item.id, false, diameterMm)], wastePercent);
+    return { ...calc, mode: 'individual', count, effectiveLengthM: uniform, automaticLengthM: null };
+  }
+  const zone = item.barsZone;
+  const sides = zone ? zoneGeometry(zone.points, calibration?.metersPerPixel ?? 0)?.sides : null;
+  const automaticLengthM = sides ? (zone?.direction === 'short' ? sides.shortM : sides.longM) : null;
+  const lengthM = zone ? zone.lengthMode === 'manual' ? finitePositive(zone.manualLengthM) : automaticLengthM : finitePositive(item.lengthM);
+  const count = typeof item.count === 'number' && Number.isFinite(item.count) && item.count >= 0 && (!zone || Number.isSafeInteger(item.count)) ? item.count : null;
+  const status: RebarStatus = zone && zone.lengthMode !== 'manual' && !finitePositive(calibration?.metersPerPixel)
+    ? 'no-scale' : diameterMm === null || lengthM === null || count === null ? 'invalid-input' : 'ok';
+  const calc = status === 'ok'
+    ? finish('ok', [layerResult(item.id, diameterMm!, null, count, lengthM, count! * lengthM!, false)], wastePercent)
+    : finish(status, [emptyLayer(item.id, false, diameterMm)], wastePercent);
+  return { ...calc, mode: zone ? 'zone' : 'legacy', count, effectiveLengthM: lengthM, automaticLengthM };
+}
+
+export function calculateRebar(item: RebarItem, calibration: Calibration | null, pages?: Plan['pages']): RebarCalc {
+  if (item.kind === 'stirrup') return resolveStirrupItem(item, pages ?? { [item.pageNumber]: { pageNumber: item.pageNumber, calibration } });
+  return item.kind === 'mesh' ? calculateMesh(item, calibration) : resolveStraightBars(item, calibration, pages);
 }

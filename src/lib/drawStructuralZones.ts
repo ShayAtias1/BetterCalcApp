@@ -1,12 +1,15 @@
 /**
  * Concrete and rebar zones rasterized onto the exported plan page - the canvas twin of
  * ConcreteZones / RebarZones (the text comes from lib/structuralOverlay, shared with the screen).
- * Zones only: a hatched or dotted outline, the mark and a compact notation. Individual bars and
- * mesh sheets are never drawn. Points are native page pixels; `offsetY` is the header band above
+ * Concrete/Mesh keep their existing outlines and notation. Spatial Straight Bars reuse the same
+ * prepared zone and actual bar lines as the UI. Mesh sheets are not drawn here. Points are native page pixels; `offsetY` is the header band above
  * the plan, `mult` the export scale.
  */
 
-import type { ConcreteElement, RebarMesh } from '../types/structural';
+import type { ConcreteElement, RebarItem } from '../types/structural';
+import type { Calibration, Plan } from '../types';
+import { prepareStirrupPlacement } from './stirrupPlacements';
+import { prepareStraightBarsOverlay } from './straightBarsOverlay';
 import type { ExportContext } from './exportLanguage';
 import { polygonCentroid } from './geometry';
 import { labelDirection } from './textDirection';
@@ -84,8 +87,63 @@ export function drawConcreteZonesOnCanvas(ctx: CanvasRenderingContext2D, element
   }
 }
 
-export function drawRebarZonesOnCanvas(ctx: CanvasRenderingContext2D, meshes: RebarMesh[], mult: number, offsetY: number, x: ExportContext) {
-  for (const m of meshes) {
+export function drawRebarZonesOnCanvas(ctx: CanvasRenderingContext2D, items: RebarItem[], mult: number, offsetY: number, x: ExportContext, calibration: Calibration | null = null, pageNumber?: number, pages?: Plan['pages']) {
+  for (const m of items) {
+    if (m.kind === 'stirrup') {
+      const current = pageNumber ?? m.pageNumber;
+      const calibrationPages = pages ?? { [current]: { pageNumber: current, calibration } };
+      for (const placement of m.placements.filter((p) => p.pageNumber === current)) {
+        const model = prepareStirrupPlacement(m, placement, calibrationPages, x.t, x.number);
+        ctx.save(); ctx.strokeStyle = REBAR_COLOR; ctx.fillStyle = REBAR_COLOR; ctx.lineWidth = 1.5 * mult;
+        if (placement.kind === 'line') {
+          ctx.beginPath(); ctx.moveTo(placement.start.x * mult, placement.start.y * mult + offsetY);
+          ctx.lineTo(placement.end.x * mult, placement.end.y * mult + offsetY); ctx.stroke();
+        } else {
+          tracePath(ctx, placement.points, mult, offsetY); ctx.globalAlpha = 0.03; ctx.fill();
+          ctx.globalAlpha = 1; ctx.setLineDash([3 * mult, 3 * mult]); ctx.stroke(); ctx.setLineDash([]);
+        }
+        for (const anchor of model.anchors) {
+          if (model.glyphs) {
+            for (const segment of model.shape.segments) {
+              ctx.beginPath();
+              ctx.moveTo((anchor.x - 6 + segment.normalizedStart.x * 0.12) * mult, (anchor.y - 6 + segment.normalizedStart.y * 0.12) * mult + offsetY);
+              ctx.lineTo((anchor.x - 6 + segment.normalizedEnd.x * 0.12) * mult, (anchor.y - 6 + segment.normalizedEnd.y * 0.12) * mult + offsetY);
+              ctx.stroke();
+            }
+          } else { ctx.beginPath(); ctx.arc(anchor.x * mult, anchor.y * mult + offsetY, 2 * mult, 0, Math.PI * 2); ctx.fill(); }
+        }
+        haloText(ctx, model.label, model.center.x * mult, (model.center.y - 12) * mult + offsetY, 10.5 * mult, REBAR_COLOR, 600, labelDirection(model.label, x.language));
+        ctx.restore();
+      }
+      continue;
+    }
+    if (m.kind === 'bars') {
+      const overlay = prepareStraightBarsOverlay(m, calibration, x.t, x.number, pageNumber ?? m.pageNumber, pages);
+      if (!overlay.center) continue;
+      ctx.save();
+      ctx.strokeStyle = REBAR_COLOR;
+      ctx.lineWidth = 2 * mult;
+      if (overlay.points.length >= 3) {
+        tracePath(ctx, overlay.points, mult, offsetY);
+        ctx.globalAlpha = 0.03;
+        ctx.fillStyle = REBAR_COLOR;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.setLineDash([3 * mult, 3 * mult]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      for (const line of overlay.lines) {
+        ctx.beginPath();
+        ctx.moveTo(line.start.x * mult, line.start.y * mult + offsetY);
+        ctx.lineTo(line.end.x * mult, line.end.y * mult + offsetY);
+        ctx.stroke();
+      }
+      overlay.rows.forEach((row, index) => haloText(ctx, row, overlay.center!.x * mult,
+        (overlay.center!.y + index * 12) * mult + offsetY, 10.5 * mult, REBAR_COLOR, index === 0 ? 600 : 500, labelDirection(row, x.language)));
+      ctx.restore();
+      continue;
+    }
     if (m.points.length < 3) continue;
     ctx.save();
     tracePath(ctx, m.points, mult, offsetY);

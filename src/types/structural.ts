@@ -95,6 +95,19 @@ export interface MeshSheetSettings {
   overlapM?: number;
 }
 
+/** Local metres and absolute quarter-turn rotation; dimensions are snapshotted once per level. */
+export interface ManualMeshSheet {
+  id: string;
+  x: number;
+  y: number;
+  rotation: 0 | 90 | 180 | 270;
+}
+export interface ManualMeshLayout {
+  lengthM: number;
+  widthM: number;
+  sheets: ManualMeshSheet[];
+}
+
 /**
  * Area reinforcement: a marked zone plus its reinforcement levels. A level that is present is
  * enabled (Bottom, Top, or both); an absent one does not exist. Each level is specified on its own —
@@ -116,10 +129,31 @@ export interface RebarMesh extends MarkFields {
   sizeOverride?: SizeOverride;
   /** Physical sheet size and overlap for procurement (lib/meshSheets). Absent = defaults. */
   sheets?: MeshSheetSettings;
+  /** Absent level = automatic. An empty saved sheets array is a manual count of zero. */
+  manualLayouts?: Partial<Record<RebarLevel, ManualMeshLayout>>;
 }
 
 /** Bars entered by quantity — no shape on the plan: diameter, how many, how long each. */
+export interface DrawnStraightBar {
+  id: string;
+  pageNumber: number;
+  start: Point;
+  end: Point;
+}
+
+export interface BarsZone {
+  pageNumber: number;
+  points: Point[];
+  direction: RebarLayerDirection;
+  lengthMode: 'automatic' | 'manual';
+  manualLengthM?: number;
+}
+
 export interface RebarBars extends MarkFields {
+  /** Optional spatial layout. Absent on existing numerical Bars; never added on read. */
+  barsZone?: BarsZone;
+  /** Presence (including an empty array) selects Individual mode. */
+  drawnBars?: DrawnStraightBar[];
   id: string;
   kind: 'bars';
   /** The page the row was added on; only used to group the summary. */
@@ -130,4 +164,43 @@ export interface RebarBars extends MarkFields {
   wastePercent?: number;
 }
 
-export type RebarItem = RebarMesh | RebarBars;
+export type RebarItem = RebarMesh | RebarBars | RebarStirrup;
+
+export type StirrupTemplate = 'rectangle' | 'u' | 'l' | 'custom';
+/** Physical segments in local metres, independent of plan calibration. End legs are explicit vertices. */
+export interface StirrupShape {
+  template: StirrupTemplate;
+  points: Point[];
+  closed: boolean;
+}
+export interface StirrupPlacementBase {
+  id: string;
+  pageNumber: number;
+  quantityMode: 'automatic' | 'manual';
+  manualQuantity?: number;
+}
+export interface StirrupLinePlacement extends StirrupPlacementBase {
+  kind: 'line';
+  start: Point;
+  end: Point;
+  spacingM: number;
+}
+export interface StirrupAreaPlacement extends StirrupPlacementBase {
+  kind: 'area';
+  points: Point[];
+  spacingXM: number;
+  spacingYM: number;
+}
+export type StirrupPlacement = StirrupLinePlacement | StirrupAreaPlacement;
+export interface RebarStirrup extends MarkFields {
+  id: string;
+  kind: 'stirrup';
+  /** Creation page; each placement has its own page. */
+  pageNumber: number;
+  diameterMm: number;
+  shape: StirrupShape;
+  lengthMode: 'automatic' | 'manual';
+  manualLengthM?: number;
+  wastePercent?: number;
+  placements: StirrupPlacement[];
+}

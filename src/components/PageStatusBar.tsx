@@ -9,7 +9,7 @@ import { useT } from '../i18n';
  * calibration data — neither is repeated here). Visible from every tab, so "this page is not calibrated" is never
  * something the user has to go looking for — and it never blocks drawing.
  */
-export default function PageStatusBar() {
+export default function PageStatusBar({ readOnly = false }: { readOnly?: boolean }) {
   const project = useAppStore((s) => s.project);
   const currentPage = useAppStore((s) => s.currentPage);
   const toolMode = useAppStore((s) => s.toolMode);
@@ -38,12 +38,12 @@ export default function PageStatusBar() {
             {t('pageStatus.notCalibrated')}
           </span>
         )}
-        <button
+        {!readOnly && <button
           className={`${calibrated ? 'btn-ghost' : 'btn-primary'} small ${toolMode === 'calibrate' ? 'active' : ''}`}
           onClick={startCalibration}
         >
           {calibrated ? t('pageStatus.recalibrate') : t('pageStatus.calibrateNow')}
-        </button>
+        </button>}
       </div>
     </div>
   );

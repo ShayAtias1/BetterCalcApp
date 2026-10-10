@@ -13,7 +13,7 @@ const HATCH_ID = 'bc-concrete-hatch';
  * hatched, dashed outline (rooms are plain tinted fills) with a one-line label — the mark, the
  * thickness or height once entered, and the grade when there is one. Purely visual: no pointer
  * events (selecting happens through the viewer's click handler, in the Concrete tab only) and no
- * vertex handles, since zones are deleted and redrawn rather than edited.
+ * embedded vertex handles; the viewer supplies shared direct geometry handles.
  */
 export default function ConcreteZones({
   elements,

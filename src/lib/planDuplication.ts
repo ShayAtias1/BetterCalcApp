@@ -1,6 +1,8 @@
 import { v4 as uuid } from 'uuid';
 import type { Plan } from '../types';
+import { renewManualMeshSheetIds } from './manualMeshLayout';
 import { withRenewedLayerIds } from './rebarMesh';
+import { cloneAllPlanOpenings } from './planOpenings';
 
 /**
  * A fully independent copy of a plan: calibration, rooms (with openings and work items, overrides
@@ -12,18 +14,20 @@ import { withRenewedLayerIds } from './rebarMesh';
 export function clonePlanForDuplicate(source: Plan, name: string): Plan {
   const copy = structuredClone(source);
   const now = Date.now();
+  const id = uuid();
+  const rooms = copy.rooms.map((r) => ({
+    ...r, id: uuid(),
+    workItems: r.workItems.map((wi) => ({ ...wi, id: uuid() })),
+    openings: r.openings?.map((o) => ({ ...o, id: uuid() })),
+  }));
   return {
     ...copy,
-    id: uuid(),
+    id,
     name,
     createdAt: now,
     updatedAt: now,
-    rooms: copy.rooms.map((r) => ({
-      ...r,
-      id: uuid(),
-      workItems: r.workItems.map((wi) => ({ ...wi, id: uuid() })),
-      openings: r.openings?.map((o) => ({ ...o, id: uuid() })),
-    })),
+    rooms,
+    ...(Array.isArray(copy.openings) ? { openings: cloneAllPlanOpenings(copy, rooms, id, uuid, now) } : {}),
     measurements: (copy.measurements ?? []).map((m) => ({ ...m, id: uuid() })),
     markups: (copy.markups ?? []).map((m) => ({ ...m, id: uuid() })),
     // Concrete and rebar zones, only when the source has them, so a plan without them stays without.
@@ -34,8 +38,9 @@ export function clonePlanForDuplicate(source: Plan, name: string): Plan {
       ? {
           rebarItems: copy.rebarItems.map((item) =>
             item.kind === 'mesh'
-              ? { ...withRenewedLayerIds(item), id: uuid() }
-              : { ...item, id: uuid() }
+              ? { ...renewManualMeshSheetIds(withRenewedLayerIds(item), uuid), id: uuid() }
+              : item.kind === 'stirrup' ? { ...item, id: uuid(), placements: item.placements.map((p) => ({ ...p, id: uuid() })) }
+              : { ...item, id: uuid(), ...(item.kind === 'bars' && item.drawnBars !== undefined ? { drawnBars: item.drawnBars.map((bar) => ({ ...bar, id: uuid() })) } : {}) }
           ),
         }
       : {}),

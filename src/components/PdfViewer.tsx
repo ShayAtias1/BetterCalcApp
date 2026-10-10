@@ -1,6 +1,24 @@
+import { selectionBox, polygonInSelection, segmentInSelection, type SelectionBox } from '../lib/planSelection';
+import OpeningsOverlay from './OpeningsOverlay';
+import { confirmDialog, useAppDialogs } from '../lib/appDialogs';
+import { useAiWorkflow, cancelOneClick, startAiDetection } from '../lib/ai/workflow';
+import { aiCandidateLabel } from '../lib/localAiReview';
+import { FIELD_OPERATION_CANCEL } from '../lib/fieldLifecycle';
+import { useTouchMeshLayout } from '../hooks/useTouchMeshLayout';
+import { useTouchTakeoff } from '../hooks/useTouchTakeoff';
+import { useFieldWorkflowStore } from '../store/fieldWorkflowStore';
+import FieldTools from './FieldTools';
+import { usePlanFocusStore } from '../store/planFocusStore';
+import type { StirrupLinePlacement } from '../types/structural';
+import { usePlanNavigation } from '../hooks/usePlanNavigation';
+import { nativeHitRadius } from '../lib/interactionTargets';
+import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { v4 as uuid } from 'uuid';
-import { loadPdfPlanSource, type PdfPlanSource } from '../lib/planSource';
+import { isViewerRenderCancelled } from '../lib/pdfViewerSource';
+import { initialPdfScale } from '../lib/pdfRenderBudget';
+import { useMainPdfSource } from '../hooks/useMainPdfSource';
+import { usePdfDetail } from '../hooks/usePdfDetail';
 import { useAppStore } from '../store/appStore';
 import { notePlanRendered, trackError } from '../lib/analytics';
 import type { ExportRegion, Markup, Point } from '../types';
@@ -30,7 +48,6 @@ import DimensionShape from './DimensionShape';
 import TextNoteShape from './TextNoteShape';
 import TextNoteDialog from './TextNoteDialog';
 import { useCanvasTransform } from '../hooks/useCanvasTransform';
-import { loadPdfBlob } from '../db/database';
 import { useLanguage, useT } from '../i18n';
 import { labelDirection } from '../lib/textDirection';
 import { computeGrid } from '../lib/grid';
@@ -38,14 +55,23 @@ import { useGridStore } from '../store/gridStore';
 import GridLayer from './GridLayer';
 import ConcreteZones from './ConcreteZones';
 import RebarZones from './RebarZones';
+import { MeshLayoutOverlay } from './MeshLayoutPreview';
+import { markLabel } from '../lib/structuralMarks';
 import { concreteOf, rebarOf } from '../lib/structuralPlan';
+import { updateConcreteElement, updateRebarItem } from '../lib/structuralMutations';
+import type { DrawnStraightBar } from '../types/structural';
+import { hitStraightBar, translateBar } from '../lib/straightBarsGeometry';
+import { reshapeArea, translateArea, type AreaGeometryKind } from '../lib/areaGeometryEditing';
+import AreaGeometryHandles from './AreaGeometryHandles';
+import StirrupOverlay from './StirrupOverlay';
+import { CONCRETE_COLOR, REBAR_COLOR } from '../lib/structuralOverlay';
+import { useMeshLayoutView } from '../store/meshLayoutPreviewStore';
 
 const VERTEX_HIT_RADIUS_SCREEN = 9;
 /** New masks start opaque white, the colour of the paper they hide. */
 const MASK_COLOR = '#ffffff';
 /** Detection suggestions are drawn in one neutral colour — they are not rooms and have no room colour yet. */
 const CANDIDATE_COLOR = '#0ea5e9';
-const RENDER_SCALE = Math.min(4, Math.max(2, (window.devicePixelRatio || 1) * 2));
 
 function pointInPolygon(pt: Point, poly: Point[]): boolean {
   let inside = false;
@@ -153,6 +179,9 @@ function MarkupShape({ markup, strokeW, draggable }: { markup: Markup; strokeW: 
 }
 
 export default function PdfViewer() {
+  const { reviewOnly, touchInput, layout } = useWorkspaceLayout();
+  const fieldDraft = useFieldWorkflowStore((s) => s.draft);
+  const geometryAction = useFieldWorkflowStore((s) => s.geometryAction);
   const t = useT();
   const language = useLanguage();
   const project = useAppStore((s) => s.project);
@@ -161,10 +190,23 @@ export default function PdfViewer() {
   const toolMode = useAppStore((s) => s.toolMode);
   const overlayVisible = useAppStore((s) => s.overlayVisible);
   const drawTarget = useAppStore((s) => s.drawTarget);
+  const barsDrawing = useAppStore((s) => s.barsDrawing);
+  const stirrupDrawing = useAppStore((s) => s.stirrupDrawing);
+  const selectedStirrupPlacementId = useAppStore((s) => s.selectedStirrupPlacementId);
+  const finishStirrupLine = useAppStore((s) => s.finishStirrupLine);
+  const selectStirrupPlacement = useAppStore((s) => s.selectStirrupPlacement);
+  const editStirrupPlacement = useAppStore((s) => s.editStirrupPlacement);
+  const finishDrawnBar = useAppStore((s) => s.finishDrawnBar);
+  const selectedDrawnBarId = useAppStore((s) => s.selectedDrawnBarId);
+  const setSelectedDrawnBarId = useAppStore((s) => s.setSelectedDrawnBarId);
+  const editDrawnBar = useAppStore((s) => s.editDrawnBar);
   const selectedConcreteId = useAppStore((s) => s.selectedConcreteId);
   const setSelectedConcreteId = useAppStore((s) => s.setSelectedConcreteId);
   const selectedRebarId = useAppStore((s) => s.selectedRebarId);
   const setSelectedRebarId = useAppStore((s) => s.setSelectedRebarId);
+  const moveStructuralZone = useAppStore((s) => s.moveStructuralZone);
+  const editAreaGeometry = useAppStore((s) => s.editAreaGeometry);
+  const meshLayoutView = useMeshLayoutView(project?.id ?? '', selectedRebarId ?? '');
   const gridEnabled = useGridStore((s) => s.enabled);
   const gridSpacingM = useGridStore((s) => s.spacingM);
   const gridOpacity = useGridStore((s) => s.opacity);
@@ -172,6 +214,13 @@ export default function PdfViewer() {
   const markupFontScale = useAppStore((s) => s.markupFontScale);
   const undo = useAppStore((s) => s.undo);
   const redo = useAppStore((s) => s.redo);
+  const openingPlacement = useAppStore((s) => s.openingPlacement);
+  const selectedOpeningIds = useAppStore(s => s.selectedOpeningIds);
+  const selectedRoomIds = useAppStore(s => s.selectedRoomIds);
+  const marquee = useRef<{ start: Point; end: Point; additive: boolean } | null>(null);
+  const [selectionDraft, setSelectionDraft] = useState<SelectionBox | null>(null);
+  useEffect(() => { marquee.current = null; setSelectionDraft(null); }, [project?.id, currentPage, toolMode, drawTarget]);
+  const selectedOpeningId = useAppStore((s) => s.selectedOpeningId);
   const selectedRoomId = useAppStore((s) => s.selectedRoomId);
   const setSelectedRoomId = useAppStore((s) => s.setSelectedRoomId);
   const calibrationPoints = useAppStore((s) => s.calibrationPoints);
@@ -181,9 +230,7 @@ export default function PdfViewer() {
   const finishDrawing = useAppStore((s) => s.finishDrawing);
   const finishRectangle = useAppStore((s) => s.finishRectangle);
   const clearDrawingPoints = useAppStore((s) => s.clearDrawingPoints);
-  const moveRoomPoint = useAppStore((s) => s.moveRoomPoint);
   const deleteRoomPoint = useAppStore((s) => s.deleteRoomPoint);
-  const persist = useAppStore((s) => s.persist);
   const measureTool = useAppStore((s) => s.measureTool);
   const measurePoints = useAppStore((s) => s.measurePoints);
   const areaShape = useAppStore((s) => s.areaShape);
@@ -208,20 +255,70 @@ export default function PdfViewer() {
   const selectedMarkupId = useAppStore((s) => s.selectedMarkupId);
   const setSelectedMarkupId = useAppStore((s) => s.setSelectedMarkupId);
   const duplicateMarkup = useAppStore((s) => s.duplicateMarkup);
+  const oneClickArmed=useAiWorkflow(s=>s.oneClickArmed);
+  const oneClickPanGesture=useRef(false);
   const detectionCandidates = useAppStore((s) => s.detectionCandidates);
+  const selectedDetectionCandidateId = useAppStore(s => s.selectedDetectionCandidateId);
+  const selectDetectionCandidate = useAppStore(s => s.selectDetectionCandidate);
+  const editDetectionCandidate = useAppStore(s => s.editDetectionCandidate);
   const clearDetectionCandidates = useAppStore((s) => s.clearDetectionCandidates);
   const deleteMarkup = useAppStore((s) => s.deleteMarkup);
   const deleteRoom = useAppStore((s) => s.deleteRoom);
 
-  const { containerRef, zoom, pan, screenToNative, handleWheel, fitToContainer, beginPanDrag, updatePanDrag, endPanDrag } =
-    useCanvasTransform();
+  const transform = useCanvasTransform();
+  const { containerRef, zoom, pan, screenToNative, handleWheel, fitToContainer, beginPanDrag, updatePanDrag, endPanDrag } = transform;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
-  const [planSource, setPlanSource] = useState<PdfPlanSource | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const { planSource, sourceKey, loadError, setLoadError } = useMainPdfSource(
+    project?.id, project?.pdfFileName, currentPage, setNumPages, t('viewer.pdfLoadError'),
+  );
+  const baseRasterScaleRef = useRef(0);
+  const [renderedKey, setRenderedKey] = useState('');
+  const focusRequest = usePlanFocusStore((s) => s.request);
 
-  const vertexDrag = useRef<{ pointIndex: number } | null>(null);
+  const structuralDrag = useRef<{
+    kind: AreaGeometryKind | 'suggestion'; id: string; placementId?: string; start: Point; points: Point[]; offset: Point; drawnBars?: DrawnStraightBar[]; handleIndex?: number; previewPoints?: Point[];
+  } | null>(null);
+  const [structuralPreview, setStructuralPreview] = useState<{
+    kind: AreaGeometryKind | 'suggestion'; id: string; placementId?: string; points: Point[]; drawnBars?: DrawnStraightBar[];
+  } | null>(null);
+  const barDrag = useRef<{ itemId: string; bar: DrawnStraightBar; start: Point; endpoint: 'start' | 'end' | null; preview: DrawnStraightBar | null; stirrup?: boolean } | null>(null);
+  const [barPreview, setBarPreview] = useState<{ itemId: string; bar: DrawnStraightBar; stirrup?: boolean } | null>(null);
+  const suppressStructuralClick = useRef(false);
+  const structuralPlan = useMemo(() => {
+    if (!project) return project;
+    if (barPreview) {
+      const item = rebarOf(project).find((i) => i.id === barPreview.itemId);
+      if (item?.kind === 'stirrup' && barPreview.stirrup) return updateRebarItem(project, item.id, { placements: item.placements.map((p) => p.id === barPreview.bar.id && p.kind === 'line' ? { ...p, start: barPreview.bar.start, end: barPreview.bar.end } : p) });
+      if (item?.kind === 'bars' && item.drawnBars) return updateRebarItem(project, item.id, {
+        drawnBars: item.drawnBars.map((bar) => bar.id === barPreview.bar.id ? barPreview.bar : bar),
+      });
+    }
+    if (!structuralPreview || structuralPreview.kind === 'suggestion') return project;
+    if (structuralPreview.kind === 'room') return { ...project, rooms: project.rooms.map((room) =>
+      room.id === structuralPreview.id ? { ...room, points: structuralPreview.points } : room) };
+    return structuralPreview.kind === 'concrete'
+      ? updateConcreteElement(project, structuralPreview.id, { points: structuralPreview.points })
+      : (() => {
+        const item = rebarOf(project).find((i) => i.id === structuralPreview.id);
+        if (item?.kind === 'stirrup') return updateRebarItem(project, item.id, { placements: item.placements.map((p) => p.id === structuralPreview.placementId && p.kind === 'area' ? { ...p, points: structuralPreview.points } : p) });
+        if (item?.kind === 'bars' && structuralPreview.drawnBars) return updateRebarItem(project, item.id, { drawnBars: structuralPreview.drawnBars });
+        return item?.kind === 'bars' && item.barsZone
+          ? updateRebarItem(project, item.id, { barsZone: { ...item.barsZone, points: structuralPreview.points } })
+          : updateRebarItem(project, structuralPreview.id, { points: structuralPreview.points });
+      })();
+  }, [project, structuralPreview, barPreview]);
+
+  // Changing selection, page or editing context cancels an uncommitted whole-zone drag.
+  useEffect(() => {
+    structuralDrag.current = null;
+    barDrag.current = null;
+    setBarPreview(null);
+    setStructuralPreview(null);
+  }, [project, currentPage, toolMode, drawTarget, selectedRoomId, selectedConcreteId, selectedRebarId, selectedDrawnBarId, selectedStirrupPlacementId,
+    selectedDetectionCandidateId, detectionCandidates, overlayVisible.finishes, overlayVisible.concrete, overlayVisible.rebar, meshLayoutView.editing]);
+
   const spaceHeld = useRef(false);
   const isPanning = useRef(false);
   const [hoverPoint, setHoverPoint] = useState<Point | null>(null);
@@ -229,56 +326,52 @@ export default function PdfViewer() {
   const [regionDraft, setRegionDraft] = useState<ExportRegion | null>(null);
   /** Open text-note editor: a new note at `point`, or an existing one when `markupId` is set. */
   const [textDraft, setTextDraft] = useState<{ point: Point; markupId?: string; text: string; rotationDeg: number } | null>(null);
+  useEffect(() => {
+    const cancel = () => { setTextDraft(null); setRegionDraft(null); };
+    window.addEventListener(FIELD_OPERATION_CANCEL, cancel);
+    return () => window.removeEventListener(FIELD_OPERATION_CANCEL, cancel);
+  }, []);
   const markupDrag = useRef<{ id: string; startClientX: number; startClientY: number; startPoints: Point[]; startOffset: number } | null>(
     null,
   );
   const handleDrag = useRef<{ id: string; index: number } | null>(null);
 
-  // Load PDF page
+  // Density affects only the raster; SVG and saved coordinates remain native scale 1.
   useEffect(() => {
-    if (!project) return;
-    let cancelled = false;
-    setLoadError(null);
-    loadPdfPlanSource(project.id, () => loadPdfBlob(project.id), currentPage)
-      .then(({ source, numPages }) => {
-        if (cancelled) return;
-        setNumPages(numPages);
-        setPlanSource(source);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setLoadError(err.message || t('viewer.pdfLoadError'));
-        trackError('pdf_load', err);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // Depend on project.id (not the whole project object, which gets a new reference on every
-    // edit — rooms, measurements, markups) so this doesn't reload the page and reset the zoom/pan
-    // on every unrelated change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project?.id, currentPage, setNumPages]);
-
-  // Render page to canvas whenever the plan source changes
-  useEffect(() => {
+    setRenderedKey('');
+    baseRasterScaleRef.current = 0;
     if (!planSource || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const { width, height } = planSource.getNativeSize();
     setPageSize({ width, height });
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
-    const handle = planSource.render(canvas, RENDER_SCALE);
+    const scale = initialPdfScale(width, height);
+    const handle = planSource.render(canvas, scale);
     let cancelled = false;
-    // The plan counts as opened once a page has actually been drawn (the render promise settles
-    // on cancel too, hence the flag). The analytics side fires only once per load of the plan.
     void handle.promise.then(() => {
+      if (cancelled) return;
+      baseRasterScaleRef.current = scale;
+      setRenderedKey(sourceKey);
       const { project, numPages } = useAppStore.getState();
-      if (!cancelled && project) notePlanRendered(project, numPages);
+      if (project) notePlanRendered(project, numPages);
+    }, (error: unknown) => {
+      if (cancelled || isViewerRenderCancelled(error)) return;
+      setLoadError(error instanceof Error ? error.message : t('viewer.pdfLoadError'));
+      trackError('pdf_load', error);
     });
-    return () => {
-      cancelled = true;
-      handle.cancel();
-    };
+    return () => { cancelled = true; handle.cancel(); };
+    // UI language does not change PDF pixels or its native coordinate system.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planSource, sourceKey, setLoadError]);
+
+  const detailHostRef = usePdfDetail(
+    planSource, sourceKey, renderedKey === sourceKey, containerRef, baseRasterScaleRef,
+    { zoom, pan }, transform.getView,
+  );
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    return () => { if (canvas) canvas.width = canvas.height = 0; };
   }, [planSource]);
 
   // Fit to container on first load / page size change
@@ -288,7 +381,62 @@ export default function PdfViewer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageSize]);
 
+  // Focus only after the requested PDF page renders. Closing the inspector is a separate UI
+  // action; wait for its layout/ResizeObserver before centering in the remaining canvas space.
+  useEffect(() => {
+    if (!focusRequest || project?.id !== focusRequest.planId || currentPage !== focusRequest.pageNumber ||
+      renderedKey !== `${focusRequest.planId}:${focusRequest.pageNumber}`) return;
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect || usePlanFocusStore.getState().request !== focusRequest) return;
+        const points = focusRequest.points;
+        if (points.length) {
+          const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
+          const left = Math.min(...xs), right = Math.max(...xs), top = Math.min(...ys), bottom = Math.max(...ys);
+          const usableTop = 120, usableBottom = Math.max(usableTop + 1, rect.height - 64);
+          const fit = Math.min((rect.width - 48) / Math.max(right - left, 1), (usableBottom - usableTop - 40) / Math.max(bottom - top, 1));
+          const zoom = Math.max(0.1, Math.min(transform.getView().zoom, fit));
+          transform.setView({ zoom, pan: { x: rect.width / 2 - (left + right) / 2 * zoom, y: (usableTop + usableBottom) / 2 - (top + bottom) / 2 * zoom } });
+        }
+        usePlanFocusStore.getState().clear();
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusRequest, project?.id, currentPage, renderedKey, containerRef, transform.getView, transform.setView]);
+
   const room = project?.rooms.find((r) => r.id === selectedRoomId) ?? null;
+  const areaPlan = structuralPlan ?? project;
+  const selectedArea = (() => {
+    if (!areaPlan || toolMode !== 'select') return null;
+    if (drawTarget === 'room' && overlayVisible.finishes) {
+      if (!touchInput && !reviewOnly) {
+        const candidate = detectionCandidates.find(c => c.id === selectedDetectionCandidateId && c.pageNumber === currentPage && c.localAi?.planId === project?.id);
+        if (candidate) return { kind: 'suggestion' as const, id: candidate.id,
+          points: structuralPreview?.kind === 'suggestion' && structuralPreview.id === candidate.id ? structuralPreview.points : candidate.points, color: CANDIDATE_COLOR };
+      }
+      const item = areaPlan.rooms.find((r) => r.id === selectedRoomId && r.pageNumber === currentPage);
+      return item ? { kind: 'room' as const, id: item.id, points: item.points, color: item.color } : null;
+    }
+    if (drawTarget === 'concrete' && overlayVisible.concrete) {
+      const item = concreteOf(areaPlan).find((el) => el.id === selectedConcreteId && el.pageNumber === currentPage);
+      return item ? { kind: 'concrete' as const, id: item.id, points: item.points, color: CONCRETE_COLOR } : null;
+    }
+    if (drawTarget === 'rebar' && overlayVisible.rebar) {
+      const item = rebarOf(areaPlan).find((i) => i.id === selectedRebarId);
+      if (item?.kind === 'stirrup') {
+        const placement = item.placements.find((p) => p.id === selectedStirrupPlacementId && p.pageNumber === currentPage);
+        if (placement?.kind === 'area') return { kind: 'stirrup' as const, id: item.id, placementId: placement.id, points: placement.points, color: REBAR_COLOR };
+        return null;
+      }
+      if (item?.pageNumber !== currentPage) return null;
+      if (item?.kind === 'mesh' && !(meshLayoutView.enabled && meshLayoutView.editing))
+        return { kind: 'mesh' as const, id: item.id, points: item.points, color: REBAR_COLOR };
+      if (item?.kind === 'bars' && item.barsZone && item.drawnBars === undefined)
+        return { kind: 'bars' as const, id: item.id, points: item.barsZone.points, color: REBAR_COLOR };
+    }
+    return null;
+  })();
   const metersPerPixel = project?.pages[currentPage]?.calibration?.metersPerPixel ?? 0;
   // A tool that yields real-world numbers is active on a page with no scale.
   const grid = computeGrid(metersPerPixel, gridSpacingM, zoom);
@@ -386,25 +534,36 @@ export default function PdfViewer() {
   };
 
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
+    const onKeyDown = async (e: KeyboardEvent) => {
+      if (reviewOnly || fieldDraft || useAppDialogs.getState().queue.length) return;
       // Anything typed into a field (including the text-note dialog and the contenteditable case)
       // must never reach the shortcuts below that delete or undo.
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName;
       const isEditingField =
-        tag === 'INPUT' ||
+        (tag === 'INPUT' && !['checkbox', 'radio', 'button', 'submit'].includes((target as HTMLInputElement).type)) ||
         tag === 'TEXTAREA' ||
         tag === 'SELECT' ||
         !!target?.isContentEditable ||
-        !!target?.closest?.('input, textarea, select, [contenteditable="true"]');
+        !!target?.closest?.('textarea, select, [contenteditable="true"]');
 
       if (e.code === 'Space') spaceHeld.current = true;
+      if (e.key === 'Escape' && useAppStore.getState().openingPlacement) { useAppStore.getState().cancelOpeningPlacement(); return; }
+      if (e.key === 'Escape' && useAiWorkflow.getState().oneClickArmed) { cancelOneClick();return; }
       if (e.key === 'Escape') {
+        marquee.current = null; setSelectionDraft(null);
+        useAppStore.getState().setPlanSelection([], []);
+        useAppStore.getState().cancelOpeningPlacement();
+        structuralDrag.current = null;
+        barDrag.current = null;
+        setStructuralPreview(null);
+        setBarPreview(null);
         clearDrawingPoints();
         clearMeasurePoints();
         clearMarkupPoints();
         // Nothing has been created yet, so this leaves no history entry behind.
-        clearDetectionCandidates();
+        if (useAppStore.getState().selectedDetectionCandidateId) selectDetectionCandidate(null);
+        else clearDetectionCandidates();
       }
       if (e.key === 'Enter' && drawingPoints.length >= 3) {
         finishDrawing();
@@ -432,14 +591,39 @@ export default function PdfViewer() {
       // room confirmation) as the sidebar's ✕ buttons — so it lands in undo history identically.
       // A selected markup wins over a selected room: it is the more recent selection on the plan.
       if ((e.key === 'Delete' || e.key === 'Backspace') && !isEditingField && !textDraft) {
-        if (selectedMarkupId) {
+        const latest = useAppStore.getState();
+        const count = latest.selectedRoomIds.length + latest.selectedOpeningIds.length;
+        if (count && overlayVisible.finishes) {
+          e.preventDefault();
+          const snapshot = latest.project;
+          const rooms = [...latest.selectedRoomIds], openings = [...latest.selectedOpeningIds];
+          if (await confirmDialog(t('planSelection.deleteConfirm', { count }), { destructive: true })) {
+            const current = useAppStore.getState();
+            if (current.project === snapshot && JSON.stringify(current.selectedRoomIds) === JSON.stringify(rooms) && JSON.stringify(current.selectedOpeningIds) === JSON.stringify(openings)) current.deletePlanSelection();
+          }
+        } else if (selectedOpeningId && overlayVisible.finishes) {
+          e.preventDefault();
+          if (await confirmDialog(t('openingTools.deleteConfirm'), { destructive: true })) useAppStore.getState().removePlanOpening(selectedOpeningId);
+        } else if (drawTarget === 'rebar' && overlayVisible.rebar && selectedRebarId && selectedStirrupPlacementId) {
+          e.preventDefault();
+          useAppStore.getState().deleteStirrupPlacement(selectedRebarId, selectedStirrupPlacementId);
+        } else if (drawTarget === 'rebar' && overlayVisible.rebar && selectedRebarId && selectedDrawnBarId) {
+          e.preventDefault();
+          useAppStore.getState().deleteDrawnBar(selectedRebarId, selectedDrawnBarId);
+        } else if (drawTarget === 'rebar' && overlayVisible.rebar && selectedRebarId && project) {
+          const selected = rebarOf(project).find((item) => item.id === selectedRebarId);
+          if (selected?.kind === 'stirrup') {
+            e.preventDefault();
+            if (await confirmDialog(t('rebar.deleteConfirm', { mark: markLabel(selected, t) }), { destructive: true })) useAppStore.getState().deleteRebarItem(selected.id);
+          }
+        } else if (selectedMarkupId) {
           e.preventDefault();
           deleteMarkup(selectedMarkupId);
         } else if (selectedRoomId) {
           const room = project?.rooms.find((r) => r.id === selectedRoomId);
           if (room) {
             e.preventDefault();
-            if (confirm(t('viewer.deleteRoomConfirm', { name: room.name }))) deleteRoom(selectedRoomId);
+            if (await confirmDialog(t('viewer.deleteRoomConfirm', { name: room.name }), { destructive: true })) deleteRoom(selectedRoomId);
           }
         }
       }
@@ -455,6 +639,8 @@ export default function PdfViewer() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    reviewOnly,
+    fieldDraft,
     clearDrawingPoints,
     drawingPoints.length,
     finishDrawing,
@@ -464,7 +650,13 @@ export default function PdfViewer() {
     markupPoints,
     selectedMarkupId,
     selectedRoomId,
-    clearDetectionCandidates,
+    selectedOpeningId,
+    selectedRebarId,
+    selectedDrawnBarId,
+    selectedStirrupPlacementId,
+    drawTarget,
+    overlayVisible.rebar, overlayVisible.finishes,
+    clearDetectionCandidates, selectDetectionCandidate,
     project,
     textDraft,
     deleteMarkup,
@@ -476,35 +668,99 @@ export default function PdfViewer() {
 
   // Auto-finish distance measurement once 2 points are placed.
   useEffect(() => {
-    if (measureTool === 'distance' && measurePoints.length === 2) {
+    if (!fieldDraft && measureTool === 'distance' && measurePoints.length === 2) {
       finishOpenMeasurement();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [measurePoints, measureTool]);
+  }, [measurePoints, measureTool, fieldDraft]);
 
   // Auto-finish 2-point markup tools once both points are placed. Dimensions are excluded — they
   // stay open so more stops can be continued along the same line (AutoCAD DIMCONTINUE style).
   useEffect(() => {
-    if (markupTool && markupTool !== 'cloud' && markupTool !== 'text' && markupTool !== 'dimension' && markupPoints.length === 2) {
+    if (!fieldDraft && markupTool && markupTool !== 'cloud' && markupTool !== 'text' && markupTool !== 'dimension' && markupPoints.length === 2) {
       finishOpenMarkup();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [markupPoints, markupTool]);
+  }, [markupPoints, markupTool, fieldDraft]);
 
   const handleMouseDown = (e: MouseEvent) => {
+    if (reviewOnly) return;
     const isPanGesture = toolMode === 'pan' || e.button === 1 || spaceHeld.current;
+    oneClickPanGesture.current=isPanGesture;
     if (isPanGesture) {
       isPanning.current = true;
       beginPanDrag(e.clientX, e.clientY);
       return;
     }
-    if (toolMode === 'select' && room) {
+    suppressStructuralClick.current = false;
+    if (openingPlacement) return;
+    if(useAiWorkflow.getState().oneClickArmed)return;
+    if (e.button === 0 && toolMode === 'select' && drawTarget === 'room' && overlayVisible.finishes && !touchInput) {
       const native = screenToNative(e.clientX, e.clientY);
-      const idx = nearestPointIndex(room.points, native, VERTEX_HIT_RADIUS_SCREEN / zoom);
-      if (idx >= 0) {
-        vertexDrag.current = { pointIndex: idx };
+      const child = (e.target as Element).closest?.('[data-markup-id], [data-handle-markup-id], [data-opening-id], [data-suggestion-edge]');
+      const hitRoom = project?.rooms.some(r => r.pageNumber === currentPage && pointInPolygon(native, r.points));
+      const hitSuggestion = detectionCandidates.some(c => c.pageNumber === currentPage && pointInPolygon(native, c.points));
+      if (!child && (e.shiftKey || (!hitRoom && !hitSuggestion))) {
+        marquee.current = { start: native, end: native, additive: e.shiftKey };
+        setSelectionDraft(selectionBox(native, native));
+        e.preventDefault(); return;
+      }
+    }
+
+    const addEdge = !touchInput && toolMode === 'select' && drawTarget === 'room'
+      ? (e.target as Element).closest?.('[data-suggestion-edge]') : null;
+    if (e.button === 0 && selectedArea?.kind === 'suggestion' && addEdge) {
+      const index = Number(addEdge.getAttribute('data-suggestion-edge'));
+      const a = selectedArea.points[index], b = selectedArea.points[(index + 1) % selectedArea.points.length];
+      if (a && b) {
+        const points = selectedArea.points.map(p => ({ ...p }));
+        points.splice(index + 1, 0, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+        editDetectionCandidate(selectedArea.id, points);
+        suppressStructuralClick.current = true;
+      }
+      return;
+    }
+    if (e.button === 0 && selectedArea) {
+      const native = screenToNative(e.clientX, e.clientY);
+      const handleIndex = nearestPointIndex(selectedArea.points, native, VERTEX_HIT_RADIUS_SCREEN / zoom);
+      const markupTarget = drawTarget === 'room' && (e.target as Element).closest?.('[data-markup-id], [data-handle-markup-id]');
+      if (handleIndex >= 0 || (!markupTarget && pointInPolygon(native, selectedArea.points))) {
+        structuralDrag.current = { kind: selectedArea.kind, id: selectedArea.id, start: native,
+          placementId: 'placementId' in selectedArea ? selectedArea.placementId : undefined, points: selectedArea.points, offset: { x: 0, y: 0 }, ...(handleIndex >= 0 ? { handleIndex } : {}) };
         return;
       }
+    }
+    if (toolMode === 'select' && e.button === 0 && project && (drawTarget === 'concrete' || drawTarget === 'rebar')) {
+      // Physical-sheet editing owns Mesh gestures while Edit Layout is active.
+      if (drawTarget === 'rebar' && meshLayoutView.enabled && meshLayoutView.editing) return;
+      const native = screenToNative(e.clientX, e.clientY);
+      const selected = drawTarget === 'concrete'
+        ? overlayVisible.concrete && concreteOf(project).find((item) => item.id === selectedConcreteId)
+        : overlayVisible.rebar && rebarOf(project).find((item) => item.id === selectedRebarId);
+      if (selected && selected.kind === 'stirrup' && overlayVisible.rebar) {
+        const placement = selected.placements.find((p) => p.id === selectedStirrupPlacementId && p.pageNumber === currentPage);
+        if (placement?.kind === 'line') {
+          const endpoint = nearestPointIndex([placement.start, placement.end], native, VERTEX_HIT_RADIUS_SCREEN / zoom);
+          if (endpoint >= 0 || hitStraightBar(native, placement, 6 / zoom)) barDrag.current = {
+            itemId: selected.id, bar: placement, start: native, endpoint: endpoint === 0 ? 'start' : endpoint === 1 ? 'end' : null, preview: null, stirrup: true,
+          };
+        }
+        return;
+      }
+      if (selected && selected.kind === 'bars'  && selected.drawnBars && overlayVisible.rebar) {
+        const bar = selected.drawnBars.find((b) => b.id === selectedDrawnBarId && b.pageNumber === currentPage);
+        if (bar) {
+          const endpointIndex = nearestPointIndex([bar.start, bar.end], native, VERTEX_HIT_RADIUS_SCREEN / zoom);
+          if (endpointIndex >= 0 || hitStraightBar(native, bar, 6 / zoom)) {
+            barDrag.current = { itemId: selected.id, bar, start: native,
+              endpoint: endpointIndex === 0 ? 'start' : endpointIndex === 1 ? 'end' : null, preview: null };
+          }
+        } else if (!selectedDrawnBarId && selected.drawnBars.some((b) => b.pageNumber === currentPage && hitStraightBar(native, b, 6 / zoom))) {
+          structuralDrag.current = { kind: 'bars', id: selected.id, start: native, points: [], offset: { x: 0, y: 0 }, drawnBars: selected.drawnBars };
+        }
+        return;
+      }
+      return;
     }
     if (toolMode === 'select') {
       const handleTarget = (e.target as Element).closest?.('[data-handle-markup-id]');
@@ -538,12 +794,40 @@ export default function PdfViewer() {
   };
 
   const handleMouseMove = (e: MouseEvent) => {
+    if (reviewOnly) return;
     if (isPanning.current && updatePanDrag(e.clientX, e.clientY)) {
       return;
     }
-    if (vertexDrag.current && room) {
+    if (marquee.current) {
+      marquee.current.end = screenToNative(e.clientX, e.clientY);
+      setSelectionDraft(selectionBox(marquee.current.start, marquee.current.end)); return;
+    }
+    if (openingPlacement) { setHoverPoint(screenToNative(e.clientX,e.clientY)); return; }
+    if (barDrag.current) {
+      const drag = barDrag.current;
       const native = screenToNative(e.clientX, e.clientY);
-      moveRoomPoint(room.id, vertexDrag.current.pointIndex, native);
+      const offset = { x: native.x - drag.start.x, y: native.y - drag.start.y };
+      if (!suppressStructuralClick.current && Math.hypot(offset.x, offset.y) * zoom < 3) return;
+      suppressStructuralClick.current = true;
+      drag.preview = drag.endpoint ? { ...drag.bar, [drag.endpoint]: native } : translateBar(drag.bar, offset);
+      setBarPreview({ itemId: drag.itemId, bar: drag.preview, stirrup: drag.stirrup });
+      return;
+    }
+    if (structuralDrag.current) {
+      const drag = structuralDrag.current;
+      const native = screenToNative(e.clientX, e.clientY);
+      const offset = { x: native.x - drag.start.x, y: native.y - drag.start.y };
+      if (!suppressStructuralClick.current && Math.hypot(offset.x, offset.y) * zoom < 3) return;
+      suppressStructuralClick.current = true;
+      drag.offset = offset;
+      const points = drag.handleIndex === undefined ? translateArea(drag.points, offset) : reshapeArea(drag.points, drag.handleIndex, native, drag.kind === 'suggestion' ? { polygon: true, allowInvalid: true } : undefined);
+      if (!points) return;
+      drag.previewPoints = points;
+      setStructuralPreview({
+        kind: drag.kind, id: drag.id, placementId: drag.placementId,
+        ...(drag.drawnBars ? { drawnBars: drag.drawnBars.map((bar) => translateBar(bar, offset)) } : {}),
+        points,
+      });
       return;
     }
     if (handleDrag.current) {
@@ -592,13 +876,48 @@ export default function PdfViewer() {
   };
 
   const handleMouseUp = () => {
+    if (marquee.current) {
+      const drag = marquee.current, box = selectionBox(drag.start, drag.end);
+      marquee.current = null; setSelectionDraft(null);
+      if (Math.max(box.width, box.height) * zoom >= 4 && project) {
+        const roomIds = project.rooms.filter(r => r.pageNumber === currentPage && polygonInSelection(r.points, box)).map(r => r.id);
+        const openingIds = (project.openings ?? []).filter(o => {
+          if (o.pageNumber !== currentPage) return false;
+          if (o.geometry) return segmentInSelection(o.geometry.endpointA, o.geometry.endpointB, box);
+          const b = o.aiDetection?.bbox;
+          return !!b && b.x1 <= box.x + box.width && b.x2 >= box.x && b.y1 <= box.y + box.height && b.y2 >= box.y;
+        }).map(o => o.id);
+        useAppStore.getState().setPlanSelection(drag.additive ? [...selectedRoomIds, ...roomIds] : roomIds, drag.additive ? [...selectedOpeningIds, ...openingIds] : openingIds);
+        suppressStructuralClick.current = true;
+      }
+      return;
+    }
+    if (barDrag.current) {
+      const drag = barDrag.current;
+      barDrag.current = null;
+      setBarPreview(null);
+      if (drag.preview && drag.stirrup && project) {
+        const item = rebarOf(project).find((i) => i.id === drag.itemId);
+        const placement = item?.kind === 'stirrup' ? item.placements.find((p) => p.id === drag.bar.id) : undefined;
+        if (placement?.kind === 'line') editStirrupPlacement(item!.id, { ...placement, start: drag.preview.start, end: drag.preview.end });
+      } else if (drag.preview) editDrawnBar(drag.itemId, drag.preview);
+      return;
+    }
+    if (structuralDrag.current) {
+      const drag = structuralDrag.current;
+      structuralDrag.current = null;
+      setStructuralPreview(null);
+      // A click on a selected handle must keep its area selected, even without a drag.
+      if (drag.handleIndex !== undefined) suppressStructuralClick.current = true;
+      if (drag.kind === 'suggestion') {
+        if (drag.previewPoints) editDetectionCandidate(drag.id, drag.previewPoints);
+      } else if (drag.drawnBars && drag.kind === 'bars') moveStructuralZone('bars', drag.id, drag.offset);
+      else if (drag.previewPoints) editAreaGeometry(drag.kind, drag.id, drag.previewPoints, drag.placementId);
+      return;
+    }
     if (isPanning.current) {
       isPanning.current = false;
       endPanDrag();
-    }
-    if (vertexDrag.current) {
-      vertexDrag.current = null;
-      void persist();
     }
     if (handleDrag.current) {
       // Reshaping a dimension changes what it measures, so its labels are recomputed.
@@ -623,7 +942,18 @@ export default function PdfViewer() {
   };
 
   const handleDoubleClick = (e: MouseEvent) => {
-    if (toolMode !== 'select') return;
+    if (reviewOnly) return;
+    if (useAiWorkflow.getState().oneClickArmed) return;
+    if (toolMode !== 'select' || drawTarget !== 'room' || !overlayVisible.finishes || spaceHeld.current) return;
+    if (!touchInput && selectedArea?.kind === 'suggestion') {
+      const index = nearestPointIndex(selectedArea.points, screenToNative(e.clientX, e.clientY), VERTEX_HIT_RADIUS_SCREEN / zoom);
+      if (index >= 0 && selectedArea.points.length > 3) {
+        e.stopPropagation();
+        editDetectionCandidate(selectedArea.id, selectedArea.points.filter((_, i) => i !== index));
+      }
+      return;
+    }
+    if (room?.pageNumber !== currentPage) return;
     // Double-clicking a text note reopens it for editing.
     const bodyTarget = (e.target as Element).closest?.('[data-markup-id]');
     const noteId = bodyTarget?.getAttribute('data-markup-id');
@@ -642,12 +972,84 @@ export default function PdfViewer() {
     }
   };
 
+  const selectAt = (native: Point, hitRadius = 6 / zoom) => {
+    if (!project) return;
+      // In the Concrete tab a click picks a concrete zone and never a room; everywhere else this
+      // is the original room hit-test, untouched.
+      if (drawTarget === 'concrete') {
+        // Hidden zones are not hit-tested: an invisible zone must not catch clicks.
+        const zone = !overlayVisible.concrete ? undefined : [...concreteOf(project)].reverse().find((z) => z.pageNumber === currentPage && polygonAreaPx(z.points) > 0 && pointInPolygon(native, z.points));
+        setSelectedConcreteId(zone ? zone.id : null);
+        return;
+      }
+      // Same for the Rebar tab: only mesh zones (manual bars have no shape) and only while visible.
+      if (drawTarget === 'rebar') {
+        if (overlayVisible.rebar) {
+          for (const item of [...rebarOf(project)].reverse()) {
+            if (item.kind === 'stirrup') {
+              const hit = [...item.placements].reverse().find((p) => p.pageNumber === currentPage && (p.kind === 'line' ? hitStraightBar(native, p, hitRadius) : pointInPolygon(native, p.points)));
+              if (hit) { selectStirrupPlacement(item.id, hit.id); return; }
+              continue;
+            }
+            if (item.kind !== 'bars' || !item.drawnBars) continue;
+            const bar = [...item.drawnBars].reverse().find((b) => b.pageNumber === currentPage && hitStraightBar(native, b, hitRadius));
+            if (bar) {
+              setSelectedRebarId(item.id);
+              setSelectedDrawnBarId(bar.id);
+              return;
+            }
+          }
+        }
+        const mesh = !overlayVisible.rebar
+          ? undefined
+          : [...rebarOf(project)].reverse().find((m) => {
+            const points = m.kind === 'mesh' ? m.points : m.kind === 'bars' ? m.barsZone?.points : undefined;
+            return m.pageNumber === currentPage && points && polygonAreaPx(points) > 0 && pointInPolygon(native, points);
+          });
+        setSelectedRebarId(mesh ? mesh.id : null);
+        return;
+      }
+      // Suggestions share native hit-testing with rooms, but never enter the plan while editing.
+      const candidate = !touchInput && !reviewOnly && overlayVisible.finishes
+        ? [...detectionCandidates].reverse().find(c => c.localAi?.planId === project.id && c.pageNumber === currentPage &&
+          (pointInPolygon(native, c.points) || nearestPointIndex(c.points, native, hitRadius) >= 0)) : undefined;
+      selectDetectionCandidate(candidate?.id ?? null);
+      if (candidate) return;
+      // A hidden Finishes overlay is not hit-tested either.
+      const hit = !overlayVisible.finishes ? undefined : [...project.rooms].reverse().find((r) => r.pageNumber === currentPage && polygonAreaPx(r.points) > 0 && pointInPolygon(native, r.points));
+      setSelectedRoomId(hit ? hit.id : null);
+  };
+
   const handleClick = (e: MouseEvent) => {
-    if (isPanning.current || vertexDrag.current) return;
+    if (reviewOnly) return;
+    if (suppressStructuralClick.current) {
+      suppressStructuralClick.current = false;
+      return;
+    }
+    if (isPanning.current || structuralDrag.current) return;
     const native = screenToNative(e.clientX, e.clientY);
+    if (openingPlacement) {
+      if (e.button !== 0 || spaceHeld.current || oneClickPanGesture.current) { oneClickPanGesture.current = false; return; }
+      useAppStore.getState().placeOpeningPoint(native); return;
+    }
+    if(useAiWorkflow.getState().oneClickArmed){
+      if(e.button!==0||spaceHeld.current||oneClickPanGesture.current){oneClickPanGesture.current=false;return;}
+      void startAiDetection(native);return;
+    }
 
     if (toolMode === 'calibrate') {
       if (calibrationPoints.length < 2) addCalibrationPoint(native);
+      return;
+    }
+
+    if (toolMode === 'draw' && stirrupDrawing === 'line') {
+      if (drawingPoints.length === 0) addDrawingPoint(native);
+      else finishStirrupLine(drawingPoints[0], orthoSnap ? snapOrtho(drawingPoints[0], native) : native);
+      return;
+    }
+    if (toolMode === 'draw' && barsDrawing === 'line') {
+      if (drawingPoints.length === 0) addDrawingPoint(native);
+      else finishDrawnBar(drawingPoints[0], orthoSnap ? snapOrtho(drawingPoints[0], native) : native);
       return;
     }
 
@@ -742,28 +1144,54 @@ export default function PdfViewer() {
       return;
     }
 
-    if (toolMode === 'select' && project) {
-      // In the Concrete tab a click picks a concrete zone and never a room; everywhere else this
-      // is the original room hit-test, untouched.
-      if (drawTarget === 'concrete') {
-        // Hidden zones are not hit-tested: an invisible zone must not catch clicks.
-        const zone = !overlayVisible.concrete ? undefined : [...concreteOf(project)].reverse().find((z) => z.pageNumber === currentPage && polygonAreaPx(z.points) > 0 && pointInPolygon(native, z.points));
-        setSelectedConcreteId(zone ? zone.id : null);
-        return;
-      }
-      // Same for the Rebar tab: only mesh zones (manual bars have no shape) and only while visible.
-      if (drawTarget === 'rebar') {
-        const mesh = !overlayVisible.rebar
-          ? undefined
-          : [...rebarOf(project)].reverse().find((m) => m.kind === 'mesh' && m.pageNumber === currentPage && polygonAreaPx(m.points) > 0 && pointInPolygon(native, m.points));
-        setSelectedRebarId(mesh ? mesh.id : null);
-        return;
-      }
-      // A hidden Finishes overlay is not hit-tested either.
-      const hit = !overlayVisible.finishes ? undefined : [...project.rooms].reverse().find((r) => r.pageNumber === currentPage && polygonAreaPx(r.points) > 0 && pointInPolygon(native, r.points));
-      setSelectedRoomId(hit ? hit.id : null);
-    }
+    if (toolMode === 'select') selectAt(native);
   };
+
+  const stirrupItem = project && rebarOf(project).find((item) => item.id === selectedRebarId && item.kind === 'stirrup');
+  const stirrupLine = stirrupItem?.kind === 'stirrup' ? stirrupItem.placements.find((p): p is StirrupLinePlacement => p.kind === 'line' && p.id === selectedStirrupPlacementId && p.pageNumber === currentPage) : undefined;
+  const individual = project && rebarOf(project).find((item) => item.id === selectedRebarId && item.kind === 'bars');
+  const selectedTouchBar = individual?.kind === 'bars' ? individual.drawnBars?.find((bar) => bar.id === selectedDrawnBarId && bar.pageNumber === currentPage) : undefined;
+  const meshTouch = useTouchMeshLayout(transform);
+  const touch = useTouchTakeoff({
+    transform, area: selectedArea?.kind === 'suggestion' ? null : selectedArea, bar: selectedTouchBar && individual ? { itemId: individual.id, bar: selectedTouchBar } : null, line: stirrupLine && stirrupItem ? { itemId: stirrupItem.id, placement: stirrupLine } : null,
+    contextKey: `${project?.id}:${currentPage}:${toolMode}:${drawTarget}:${selectedRoomId}:${selectedDetectionCandidateId}:${selectedConcreteId}:${selectedRebarId}:${selectedStirrupPlacementId}:${selectedMarkupId}:${selectedDrawnBarId}`,
+    onAreaPreview: setStructuralPreview, onLinePreview: setBarPreview, onTextDraft: setTextDraft,
+    finishMeasurement: finishOpenMeasurement, finishMarkup: finishOpenMarkup,
+  });
+
+  const desktopStart = useRef<Pick<ReturnType<typeof useAppStore.getState>, 'project' | 'history' | 'future' | 'dirty'> | null>(null);
+  const navigation = usePlanNavigation({
+    transform, reviewOnly, contextKey: `${project?.id}:${currentPage}:${toolMode}:${drawTarget}:${selectedRoomId}:${selectedDetectionCandidateId}:${selectedConcreteId}:${selectedRebarId}:${selectedStirrupPlacementId}:${selectedMarkupId}:${selectedDrawnBarId}:${meshLayoutView.level}:${meshLayoutView.editing}`,
+    editing: { begin: (x, y, target, pointerType) => meshTouch.active ? meshTouch.editing.begin(x, y, target, pointerType) : touch.editing.begin(x, y, target, pointerType),
+      move: (x, y) => { meshTouch.editing.move(x, y); touch.editing.move(x, y); },
+      end: (x, y) => { meshTouch.editing.end(x, y); touch.editing.end(x, y); },
+      cancel: () => { meshTouch.editing.cancel(); touch.editing.cancel(); } }, managedMouse: fieldDraft || geometryAction !== 'browse',
+    onDesktopStart: () => {
+      const { project, history, future, dirty } = useAppStore.getState();
+      desktopStart.current = { project, history, future, dirty };
+    },
+    onDesktopCancel: () => {
+      const before = desktopStart.current;
+      if (before && before.project?.id === useAppStore.getState().project?.id && (handleDrag.current || markupDrag.current)) {
+        useAppStore.setState(before);
+        void useAppStore.getState().persist();
+      }
+      desktopStart.current = null;
+      structuralDrag.current = null; barDrag.current = null; handleDrag.current = null; markupDrag.current = null;
+      isPanning.current = false; endPanDrag(); regionDragStart.current = null;
+      setStructuralPreview(null); setBarPreview(null); setRegionDraft(null);
+    },
+    onTap: (x, y, target) => {
+      if (openingPlacement && !reviewOnly) { useAppStore.getState().placeOpeningPoint(screenToNative(x,y)); return; }
+      const openingId = target instanceof Element ? target.closest('[data-opening-id]')?.getAttribute('data-opening-id') : null;
+      if (openingId && overlayVisible.finishes && !reviewOnly && toolMode === 'select') { useAppStore.getState().selectPlanOpening(openingId); return; }
+      if (meshTouch.tap(x, y) || touch.tap(x, y)) return;
+      const markupId = target instanceof Element ? target.closest('[data-markup-id]')?.getAttribute('data-markup-id') : null;
+      if (overlayVisible.markups && markupId) { setSelectedMarkupId(markupId); return; }
+      setSelectedMarkupId(null);
+      selectAt(screenToNative(x, y), nativeHitRadius(transform.getView().zoom, 'touch', 6));
+    },
+  });
 
   if (!project) return null;
 
@@ -773,7 +1201,14 @@ export default function PdfViewer() {
   return (
     <div
       ref={containerRef}
-      className={`pdf-viewport tool-${toolMode}`}
+      className={`pdf-viewport tool-${toolMode}${oneClickArmed?' one-click-ai-armed':''}${openingPlacement?' opening-placement-active':''}`}
+      {...navigation}
+      onPointerCancelCapture={(event) => {
+        if (navigation.onPointerCancelCapture(event) && event.pointerType !== 'mouse') { touch.cancel(); meshTouch.editing.cancel(); }
+      }}
+      onLostPointerCaptureCapture={(event) => {
+        if (navigation.onPointerCancelCapture(event) && event.pointerType !== 'mouse') { touch.cancel(); meshTouch.editing.cancel(); }
+      }}
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
@@ -782,13 +1217,26 @@ export default function PdfViewer() {
       onDoubleClick={handleDoubleClick}
       onClick={handleClick}
     >
+      {(reviewOnly || touchInput || fieldDraft || layout === 'compact' || geometryAction !== 'browse') && <FieldTools controls={touch} />}
+      {openingPlacement && <div className="opening-viewer-cancel" role="status"
+        onMouseDown={event=>event.stopPropagation()} onMouseUp={event=>event.stopPropagation()} onClick={event=>event.stopPropagation()}>
+        <span>{t(openingPlacement.start ? 'openingTools.second' : 'openingTools.first')}</span>
+        <button type="button" className="btn-secondary" onClick={()=>useAppStore.getState().cancelOpeningPlacement()}>{t('common.cancel')} · Esc</button>
+      </div>}
+      {selectedArea?.kind === 'suggestion' && <div className="ai-suggestion-edit-help" role="status">
+        AI draft · Drag vertices · Edge + adds a vertex · Double-click vertex deletes · Esc deselects
+      </div>}
       {loadError && <div className="viewer-error">{loadError}</div>}
       <div
         className="pdf-content"
         style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, width: pageSize.width, height: pageSize.height }}
       >
-        {/* Pinned to the Hebrew RTL context: pdf.js lays the plan's text out with the canvas's direction and language, and the plan must look the same in every UI language. */}
-        <canvas ref={canvasRef} dir="rtl" lang="he" />
+        {/* Retain the Hebrew canvas context for the internal PDF.js fallback. */}
+        <canvas ref={canvasRef} dir="rtl" lang="he"
+          style={{ visibility: planSource && renderedKey === sourceKey ? 'visible' : 'hidden' }} />
+        <div ref={detailHostRef} aria-hidden="true" dir="rtl" lang="he"
+          style={{ position: 'absolute', left: 0, top: 0, width: pageSize.width, height: pageSize.height,
+            overflow: 'hidden', pointerEvents: 'none' }} />
         {pageSize.width > 0 && (
           // Pinned to RTL rather than inherited from the page: the plan's labels keep the layout they
           // were drawn with (and that the export rasterizers reproduce) whatever the UI direction.
@@ -799,15 +1247,16 @@ export default function PdfViewer() {
             viewBox={`0 0 ${pageSize.width} ${pageSize.height}`}
             direction="rtl"
           >
+            {selectionDraft && <rect data-plan-selection-box="true" x={selectionDraft.x} y={selectionDraft.y} width={selectionDraft.width} height={selectionDraft.height} fill="#2563eb" fillOpacity={0.12} stroke="#2563eb" strokeWidth={1.5 / zoom} strokeDasharray={`${5 / zoom} ${3 / zoom}`} pointerEvents="none" />}
             {/* Measurement grid: first child, so everything else draws over it. Native pixels like the
                 rest of the overlay, so it pans and zooms with the plan; the spacing is the real-world
                 one over the page's own scale and does not depend on zoom or UI direction. */}
             {gridEnabled && grid && <GridLayer grid={grid} width={pageSize.width} height={pageSize.height} zoom={zoom} opacity={gridOpacity} />}
             {overlayVisible.finishes &&
-              project.rooms
+              (structuralPlan ?? project).rooms
                 .filter((r) => r.pageNumber === currentPage)
                 .map((r) => {
-                const isSelected = r.id === selectedRoomId;
+                const isSelected = r.id === selectedRoomId || selectedRoomIds.includes(r.id);
                 const pts = r.points.map((p) => `${p.x},${p.y}`).join(' ');
                 return (
                   <g key={r.id}>
@@ -818,10 +1267,6 @@ export default function PdfViewer() {
                       stroke={r.color}
                       strokeWidth={isSelected ? strokeW * 1.5 : strokeW}
                     />
-                    {isSelected &&
-                      r.points.map((p, i) => (
-                        <circle key={i} cx={p.x} cy={p.y} r={vertexR} fill="#fff" stroke={r.color} strokeWidth={strokeW} />
-                      ))}
                     {isSelected &&
                       (() => {
                         const c = polygonCentroid(r.points);
@@ -835,36 +1280,40 @@ export default function PdfViewer() {
                 );
               })}
 
+            {overlayVisible.rebar && <StirrupOverlay plan={structuralPlan ?? project} pageNumber={currentPage} selectedItemId={selectedRebarId} selectedPlacementId={selectedStirrupPlacementId} zoom={zoom} />}
+
             {/* Concrete and rebar zones each follow their own View switch: hidden means not drawn here and
                 not selectable (see handleClick). */}
             {overlayVisible.concrete && (
               <ConcreteZones
-                elements={concreteOf(project).filter((z) => z.pageNumber === currentPage)}
+                elements={concreteOf(structuralPlan ?? project).filter((z) => z.pageNumber === currentPage)}
                 selectedId={selectedConcreteId}
                 strokeW={strokeW}
                 zoom={zoom}
               />
             )}
+            <MeshLayoutOverlay plan={structuralPlan ?? project} pageNumber={currentPage} selectedId={selectedRebarId} zoom={zoom} visible={overlayVisible.rebar} screenToNative={screenToNative} interactionAllowed={!reviewOnly && toolMode === 'select'} />
             {overlayVisible.rebar && (
-              <RebarZones items={rebarOf(project).filter((m) => m.pageNumber === currentPage)} selectedId={selectedRebarId} strokeW={strokeW} zoom={zoom} />
+              <RebarZones pageNumber={currentPage} pages={project.pages} selectedBarId={selectedDrawnBarId} calibration={project.pages[currentPage]?.calibration ?? null} items={rebarOf(structuralPlan ?? project).filter((m) => m.kind === 'mesh' ? m.pageNumber === currentPage : m.kind === 'bars' ? (m.drawnBars?.some((b) => b.pageNumber === currentPage) ?? (m.barsZone?.pageNumber ?? m.pageNumber) === currentPage) : false)} selectedId={selectedRebarId} strokeW={strokeW} zoom={zoom} />
             )}
 
-            {/* Detection suggestions: dashed, faint and unselectable, so they never read as rooms
-                that are already part of the project. They live in session state only. */}
+            {/* Draft suggestions share editing helpers, but are never part of Plan.rooms. */}
             {detectionCandidates
-              .filter((c) => c.pageNumber === currentPage)
+              .filter((c) => c.pageNumber === currentPage && (!c.localAi || c.localAi.planId === project.id) && overlayVisible.finishes)
               .map((c) => {
-                const pts = c.points.map((p) => `${p.x},${p.y}`).join(' ');
-                const label = c.suggestedName || t('viewer.notDetected');
-                const centre = polygonCentroid(c.points);
+                const selected = selectedArea?.kind === 'suggestion' && selectedArea.id === c.id;
+                const points = selected ? selectedArea.points : c.points;
+                const pts = points.map((p) => `${p.x},${p.y}`).join(' ');
+                const label = c.localAi ? aiCandidateLabel(c, t) : c.suggestedName || t('viewer.notDetected');
+                const centre = polygonCentroid(points);
                 return (
-                  <g key={c.id} pointerEvents="none">
+                  <g key={c.id} data-ai-suggestion-id={c.id} pointerEvents="none">
                     <polygon
                       points={pts}
                       fill={CANDIDATE_COLOR}
-                      fillOpacity={0.08}
-                      stroke={CANDIDATE_COLOR}
-                      strokeWidth={strokeW}
+                      fillOpacity={selected ? 0.18 : 0.08}
+                      stroke={c.validationProblems?.length ? "#dc2626" : CANDIDATE_COLOR}
+                      strokeWidth={selected ? 3 / zoom : strokeW}
                       strokeDasharray={`${6 / zoom} ${4 / zoom}`}
                     />
                     <text
@@ -883,6 +1332,23 @@ export default function PdfViewer() {
                 );
               })}
 
+            {toolMode === 'draw' && (barsDrawing === 'line' || stirrupDrawing === 'line') && drawingPoints.length === 1 && hoverPoint && <line
+              x1={drawingPoints[0].x} y1={drawingPoints[0].y} x2={hoverPoint.x} y2={hoverPoint.y}
+              stroke="#c2410c" strokeWidth={strokeW} strokeDasharray={`${4 / zoom} ${4 / zoom}`} />}
+            {selectedArea && selectedArea.points.length >= 3 && <g>
+              <polygon points={selectedArea.points.map((point) => `${point.x},${point.y}`).join(' ')} fill="transparent"
+                pointerEvents={selectedArea.kind === 'suggestion' ? "none" : "all"} style={{ cursor: structuralDrag.current ? 'grabbing' : 'grab' }} />
+              <AreaGeometryHandles points={selectedArea.points} color={selectedArea.color} zoom={zoom} touch={touchInput} polygon={selectedArea.kind === 'suggestion'} />
+              {selectedArea.kind === 'suggestion' && selectedArea.points.map((a, index) => {
+                const b = selectedArea.points[(index + 1) % selectedArea.points.length];
+                const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
+                return <g key={`edge-${index}`}>
+                  <circle cx={x} cy={y} r={5 / zoom} fill="#fff" stroke={CANDIDATE_COLOR} strokeWidth={1.5 / zoom}
+                    pointerEvents="all" data-suggestion-edge={index} style={{ cursor: 'copy' }}><title>Add vertex on edge</title></circle>
+                  <text x={x} y={y} textAnchor="middle" dominantBaseline="central" fontSize={10 / zoom} fill={CANDIDATE_COLOR} pointerEvents="none">+</text>
+                </g>;
+              })}
+            </g>}
             {/* In-progress polygon drawing */}
             {toolMode === 'draw' && drawingPoints.length > 0 && (
               <g>
@@ -918,6 +1384,14 @@ export default function PdfViewer() {
                 <circle cx={drawingPoints[0].x} cy={drawingPoints[0].y} r={vertexR} fill="#ef4444" />
               </g>
             )}
+
+            {touch.rectangleDraft && <polygon points={touch.rectangleDraft.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#0ea5e9" strokeWidth={strokeW} strokeDasharray={`${4 / zoom} ${4 / zoom}`} />}
+            {touch.precision && <g pointerEvents="none" transform={`translate(${touch.precision.x} ${touch.precision.y})`} stroke="#0ea5e9" strokeWidth={1.5 / zoom}>
+              <path d={`M ${-8 / zoom} 0 H ${8 / zoom} M 0 ${-8 / zoom} V ${8 / zoom}`} />
+              <line x1={0} y1={-8 / zoom} x2={0} y2={-32 / zoom} strokeDasharray={`${2 / zoom} ${2 / zoom}`} />
+              <circle cx={0} cy={-40 / zoom} r={8 / zoom} fill="#fff" />
+              <path d={`M ${-5 / zoom} ${-40 / zoom} H ${5 / zoom} M 0 ${-45 / zoom} V ${-35 / zoom}`} />
+            </g>}
 
             {/* Calibration line */}
             {calibrationPoints.length > 0 && (
@@ -1112,6 +1586,9 @@ export default function PdfViewer() {
                   </g>
                 );
               })()}
+            {overlayVisible.finishes && <OpeningsOverlay zoom={zoom} screenToNative={screenToNative}
+              hoverPoint={hoverPoint} editable={!reviewOnly && toolMode === 'select'}
+              isPanGesture={() => spaceHeld.current} />}
           </svg>
         )}
 
@@ -1151,7 +1628,7 @@ export default function PdfViewer() {
         <TextNoteDialog
           initialText={textDraft.text}
           initialRotation={textDraft.rotationDeg}
-          onCancel={() => setTextDraft(null)}
+          onCancel={() => { setTextDraft(null); if (fieldDraft) touch.cancel(); }}
           onSubmit={(text, rotationDeg) => {
             if (textDraft.markupId) {
               updateMarkup(textDraft.markupId, { text, rotationDeg });
@@ -1169,6 +1646,7 @@ export default function PdfViewer() {
               });
             }
             setTextDraft(null);
+            if (fieldDraft) { useAppStore.getState().setToolMode('select'); useFieldWorkflowStore.getState().setDraft(false); }
           }}
         />
       )}
@@ -1188,6 +1666,7 @@ export default function PdfViewer() {
 
       {pageSize.width > 0 && (
         <button
+          data-plan-control="fit"
           className="btn-secondary small reset-view-btn"
           onMouseDown={(e) => e.stopPropagation()}
           onMouseUp={(e) => e.stopPropagation()}

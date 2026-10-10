@@ -1,3 +1,20 @@
+import { importOpeningReview } from '../lib/ai/openingsImport';
+import type { AiOpeningReview } from '../types/aiOpenings';
+import { buildOpeningSchedule } from '../lib/openingQuantities';
+import { openingClassification, measuredOpeningWidth, openingGeometryPatch, recalibrateOpeningWidths, type OpeningPreset } from '../lib/manualOpenings';
+import { addPlanOpening as addCanonicalOpening, updatePlanOpening as updateCanonicalOpening, removePlanOpening as removeCanonicalOpening, reviewPlanOpening, cloneOpeningsForRooms, withOpeningRoomChanges } from '../lib/planOpenings';
+import type { NewPlanOpening, PlanOpeningPatch } from '../types';
+import { normalizePlanFile, PlanImportError } from '../lib/planFileImport';
+import { planBulkTakeoff, materializeBulkTakeoff, type BulkWorkConfig, type BulkConflictPolicy } from '../lib/bulkTakeoff';
+import { aiWarnings, aiCandidateTypeKey, aiCandidateLabel } from '../lib/localAiReview';
+import { candidateGeometryProblems, overlapNotes } from '../lib/ai/oneClick';
+import type { LocalAiMetadata } from '../lib/localAiImport';
+import { canAuthorTakeoff, canUseToolMode, canUseMarkupTool, canUseMeasureTool, isTouchInput, isPhoneWorkspace } from '../lib/workspaceCapabilities';
+import { useFieldWorkflowStore } from './fieldWorkflowStore';
+import { concreteOf, rebarOf } from '../lib/structuralPlan';
+import { hasManualMark, nextAutoNumber } from '../lib/structuralMarks';
+import { withRenewedLayerIds } from '../lib/rebarMesh';
+import { editManualMeshLayout, renewManualMeshSheetIds, type ManualMeshEdit } from '../lib/manualMeshLayout';
 import { create } from 'zustand';
 import { v4 as uuid } from 'uuid';
 import type { AreaCalcMode, AreaKind, AreaShape, Calibration, ExportRegion, Markup, MarkupTool, Measurement, MeasureTool, Opening, OpeningType, Point, Plan, Project, Room, ToolMode, WorkItem, WorkType } from '../types';
@@ -19,7 +36,7 @@ import {
 import { clonePlanForDuplicate } from '../lib/planDuplication';
 import { createEmptyComparison, useCompareStore } from './compareStore';
 import type { Comparison } from '../types/compare';
-import type { ConcreteElement, ConcreteKind, MeshReinforcement, RebarLevel } from '../types/structural';
+import type { ConcreteElement, ConcreteKind, DrawnStraightBar, MeshReinforcement, RebarLevel, StirrupPlacement } from '../types/structural';
 import {
   addConcreteElement,
   addConcreteFromRooms,
@@ -29,6 +46,7 @@ import {
   changeConcreteKind as changeKind,
   newConcreteElement,
   newRebarBars,
+  newRebarStirrup,
   newRebarMesh,
   removeConcreteElement,
   removeRebarItem,
@@ -40,6 +58,10 @@ import {
   type RebarPatch,
 } from '../lib/structuralMutations';
 import { polygonAreaPx } from '../lib/geometry';
+import { isRectangle } from '../lib/zoneGeometry';
+import { resolveStraightBars } from '../lib/rebar';
+import { resizeStraightBar, translateBar } from '../lib/straightBarsGeometry';
+import type { AreaGeometryKind } from '../lib/areaGeometryEditing';
 import { overlayForTool, readOverlayVisibility, OVERLAY_STORAGE_KEY, type OverlayKey, type OverlayVisibility } from '../lib/overlayVisibility';
 import { createHistoryTracker } from '../lib/undoHistory';
 import { loadPdfPlanSource } from '../lib/planSource';
@@ -64,6 +86,13 @@ const historyTracker = createHistoryTracker<Plan>();
 
 /** How far a duplicated room is shifted from its source, in native page px, so the copy is visible. */
 const ROOM_DUPLICATE_OFFSET = 30;
+
+/** Whole structural copies shift by 25 cm on calibrated pages, otherwise by the room convention. */
+function structuralDuplicatePoints(plan: Plan, pageNumber: number, points: Point[]): Point[] {
+  const scale = plan.pages[pageNumber]?.calibration?.metersPerPixel;
+  const offset = scale && Number.isFinite(scale) && scale > 0 ? 0.25 / scale : ROOM_DUPLICATE_OFFSET;
+  return points.map((point) => ({ ...point, x: point.x + offset, y: point.y + offset }));
+}
 
 const ROOM_COLORS = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#9333ea', '#0891b2', '#c026d3', '#65a30d'];
 
@@ -135,33 +164,59 @@ export interface DetectionCandidate {
   roomTypeKey: string | null;
   /** Qualitative only ('high' = a room name was recognised) — not a probability. */
   confidence: 'high' | 'low';
+  originalPoints?: Point[];
+  originalValidationProblems?: string[];
+  localAi?: LocalAiMetadata;
+  validationProblems?: string[];
+  reviewedWarningIds?: string[];
+  semanticTypeEdited?: boolean;
+  semanticTypeConfirmed?: boolean;
+}
+
+/** Rechecked at the commit boundary, independent of disabled UI controls. */
+function candidateCanBeAccepted(candidate: DetectionCandidate, plan: Plan, pageNumber: number): boolean {
+  if (candidate.pageNumber !== pageNumber) return false;
+  if (!candidate.localAi) return true;
+  const meta = candidate.localAi;
+  return meta.planId === plan.id && meta.pageNumber === pageNumber &&
+    !plan.rooms.some(room => room.id === candidate.id) &&
+    !candidate.validationProblems?.length &&
+    candidateGeometryProblems(candidate.points, meta).length === 0;
 }
 
 /**
  * Turns an accepted candidate into an ordinary room. The accepted room is a normal room in every
  * way; `detectedType`/`detectionConfidence` are only metadata about where it came from, while
- * `roomType` records that the user confirmed that classification by accepting.
+ * `roomType` records legacy detection classification. Local AI types require separate confirmation and never seed finish items.
  */
 function roomFromCandidate(candidate: DetectionCandidate, project: Plan, seed: number, apartmentNumber: string): Room {
-  const profile = getRoomProfile(candidate.roomTypeKey);
+  const profile = getRoomProfile(candidate.localAi
+    ? (candidate.semanticTypeConfirmed ? aiCandidateTypeKey(candidate) : null) : candidate.roomTypeKey);
   return {
-    id: uuid(),
+    id: candidate.localAi ? candidate.id : uuid(),
     pageNumber: candidate.pageNumber,
     points: candidate.points.map((p) => ({ x: p.x, y: p.y })),
     closed: true,
     // `seed` counts up across a batch, so accepting several unnamed candidates gives each one its
     // own number instead of naming them all after the same room count.
-    name: candidate.suggestedName || t('defaultNames.room', { number: seed + 1 }),
+    name: candidate.localAi ? aiCandidateLabel(candidate) : candidate.suggestedName || t('defaultNames.room', { number: seed + 1 }),
     // Accepting is a manual act, so the room joins the apartment the user is working in — all the
     // detection metadata below is preserved untouched.
     apartmentNumber,
     notes: '',
-    // Work items come from the one shared profile builder; an unclassified candidate becomes a
+    // Even separately confirmed local AI types never seed work items. Legacy work items come
+    // from the one shared profile builder; an unclassified candidate becomes a
     // plain room with no work items, exactly like a room drawn by hand.
-    workItems: profile ? buildWorkItemsForProfile(profile, project) : [],
+    workItems: !candidate.localAi && profile ? buildWorkItemsForProfile(profile, project) : [],
     color: nextColor(seed),
-    roomType: candidate.roomTypeKey ?? undefined,
-    detectedType: candidate.roomTypeKey ?? undefined,
+    roomType: profile?.key,
+    detectedType: candidate.localAi ? undefined : profile?.key,
+    ...(candidate.localAi ? { aiSource: { targetPoint:candidate.localAi.targetPoint?{...candidate.localAi.targetPoint}:undefined,detectionMode:candidate.localAi.detectionMode,overlapWarnings:candidate.localAi.overlapWarnings?[...candidate.localAi.overlapWarnings]:undefined,spaceId: candidate.localAi.spaceId,
+      suggestedType: candidate.localAi.suggestedType ?? null, geometryClass: candidate.localAi.geometryClass,
+      geometryConfidence: candidate.localAi.geometryConfidence, typeConfidence: candidate.localAi.typeConfidence,
+      requiresReview: candidate.localAi.requiresReview, ambiguities: candidate.localAi.ambiguities ? [...candidate.localAi.ambiguities] : undefined,
+      reason: candidate.localAi.reason,
+      reviewNotes: [...candidate.localAi.reviewNotes], reviewedWarningIds: [...(candidate.reviewedWarningIds ?? [])] } } : {}),
     detectionConfidence: candidate.confidence,
   };
 }
@@ -207,6 +262,21 @@ interface AppState {
   currentPage: number;
   numPages: number;
   toolMode: ToolMode;
+  selectedOpeningId: string | null;
+  selectedOpeningIds: string[];
+  selectedRoomIds: string[];
+  setPlanSelection: (roomIds: string[], openingIds: string[]) => void;
+  deletePlanSelection: () => void;
+  rejectPlanOpenings: (ids: string[]) => void;
+  openingPlacement: { preset: OpeningPreset; start: Point | null; openingId?: string } | null;
+  selectPlanOpening: (id: string | null) => void;
+  beginOpeningPlacement: (preset: OpeningPreset) => void;
+  beginQuantityOpening: (preset: OpeningPreset) => string | null;
+  beginOpeningEndpointEdit: (id: string) => void;
+  cancelOpeningPlacement: () => void;
+  placeOpeningPoint: (point: Point) => void;
+  duplicatePlanOpening: (id: string) => string | null;
+  draftPlanOpening: (id: string) => void;
   selectedRoomId: string | null;
   /**
    * The room the user just finished drawing by hand (polygon or rectangle), so the sidebar can open
@@ -222,10 +292,14 @@ interface AppState {
    * in history — and reset to 'room' whenever a plan is opened or closed.
    */
   drawTarget: DrawTarget;
+  barsDrawing: 'zone' | 'line' | null;
+  stirrupDrawing: 'line' | 'area' | null;
+  selectedStirrupPlacementId: string | null;
   /** The concrete zone open in the Concrete tab's form. Session UI state, like `selectedRoomId`: not persisted and cleared by undo, redo, page changes and plan switches. */
   selectedConcreteId: string | null;
   /** The rebar item open in the Rebar tab's form. Session UI state, cleared like `selectedConcreteId`. */
   selectedRebarId: string | null;
+  selectedDrawnBarId: string | null;
   /** The kind the next drawn concrete zone gets (the Concrete tab's picker). Session UI state. */
   concreteKind: ConcreteKind;
   measureTool: MeasureTool | null;
@@ -270,6 +344,14 @@ interface AppState {
   detectionLabel: string;
   detectionSummary: DetectionSummary | null;
   /** Detection suggestions awaiting review. Session state — not in Plan, not persisted, not in history. */
+  selectedDetectionCandidateId: string | null;
+  selectDetectionCandidate: (id: string | null) => void;
+  editDetectionCandidate: (id: string, points: Point[]) => void;
+  restoreDetectionCandidate: (id: string) => void;
+  setDetectionWarningReviewed: (id: string, warningId: string, reviewed: boolean) => void;
+  setAllDetectionWarningsReviewed: (reviewed: boolean) => void;
+  setDetectionCandidateType: (id: string, key: string | null) => void;
+  confirmDetectionCandidateType: (id: string) => void;
   detectionCandidates: DetectionCandidate[];
   /** Page the pending candidates belong to; they are dropped when the user leaves it. */
   detectionCandidatesPage: number | null;
@@ -334,6 +416,20 @@ interface AppState {
   updateConcreteElement: (id: string, patch: Partial<Omit<ConcreteElement, 'id'>>) => void;
   /** Changes the kind of an existing zone (mark renumbered if still automatic). One undo step. */
   changeConcreteElementKind: (id: string, kind: ConcreteKind) => void;
+  /** Translate a whole zone in one undo/autosave action; manual sheet coordinates stay local. */
+  startBarsZone: (id: string) => void;
+  startDrawingBar: (id: string) => void;
+  setBarsIndividualMode: (id: string) => void;
+  finishDrawnBar: (start: Point, end: Point) => void;
+  setSelectedDrawnBarId: (id: string | null) => void;
+  editDrawnBar: (itemId: string, bar: DrawnStraightBar) => void;
+  resizeDrawnBar: (itemId: string, barId: string, lengthM: number) => void;
+  duplicateDrawnBar: (itemId: string, barId: string) => void;
+  deleteDrawnBar: (itemId: string, barId: string) => void;
+  removeBarsZone: (id: string) => void;
+  moveStructuralZone: (kind: 'concrete' | 'mesh' | 'bars', id: string, offset: Point) => void;
+  editAreaGeometry: (kind: AreaGeometryKind, id: string, points: Point[], placementId?: string) => void;
+  duplicateConcreteElement: (id: string) => void;
   deleteConcreteElement: (id: string) => void;
   /**
    * Copies the outlines of existing rooms into new concrete zones of the chosen kind (the room itself
@@ -345,8 +441,22 @@ interface AppState {
   setSelectedRebarId: (id: string | null) => void;
   /** Debounced into one undo step per burst, like typing in a room's fields. */
   updateRebarItem: (id: string, patch: RebarPatch) => void;
+  /** One physical layout action, one undo step; drag commits on release. */
+  editMeshLayout: (id: string, level: RebarLevel, edit: ManualMeshEdit) => void;
   /** Adds a manual-bars row on the current page and selects it. */
   addRebarBars: () => void;
+  addRebarStirrup: () => void;
+  duplicateStirrupItem: (id: string) => void;
+  duplicateStirrupPlacement: (id: string, placementId: string) => void;
+  startStirrupPlacement: (id: string, kind: 'line' | 'area') => void;
+  finishStirrupLine: (start: Point, end: Point) => void;
+  editStirrupShape: (id: string, shape: import('../types/structural').StirrupShape) => void;
+  editStirrupPlacement: (id: string, placement: StirrupPlacement, debounced?: boolean) => void;
+  deleteStirrupPlacement: (id: string, placementId: string) => void;
+  selectStirrupPlacement: (id: string, placementId: string) => void;
+  duplicateRebarMesh: (id: string) => void;
+  duplicateStraightBars: (id: string) => void;
+  removeDrawnBarsLayout: (id: string) => void;
   deleteRebarItem: (id: string) => void;
   /** Which reinforcement levels (Bottom / Top / both) a mesh zone has. One undo step. */
   setRebarMeshLevels: (id: string, choice: MeshLevelChoice) => void;
@@ -415,6 +525,7 @@ interface AppState {
   setSelectedMarkupId: (id: string | null) => void;
 
   updateRoom: (id: string, patch: Partial<Room>) => void;
+  assignRoomsToApartment: (roomIds: string[], apartmentNumber: string) => void;
   /**
    * Sets (or clears, with null) the room type the user picked, and — only for a room that has no
    * work items yet — seeds the profile's work items. One mutation, so one undo step.
@@ -434,9 +545,20 @@ interface AppState {
    */
   duplicateApartment: (sourceApartmentNumber: string, targetApartmentNumber: string) => number;
   deleteRoom: (id: string) => void;
+  deleteRooms: (ids: string[]) => void;
+  applyBulkTakeoff: (expectedPlan: Plan, roomIds: string[], configs: BulkWorkConfig[], policy: BulkConflictPolicy, updateConfirmed: boolean) => 'applied' | 'stale' | 'blocked' | 'no-change';
   addWorkItem: (roomId: string, type: WorkType) => void;
   updateWorkItem: (roomId: string, itemId: string, patch: Partial<WorkItem>) => void;
   removeWorkItem: (roomId: string, itemId: string) => void;
+  /** Phase 1 canonical records: never modify Room.openings or quantities. */
+  importAiOpeningReview: (review: AiOpeningReview) => void;
+  addPlanOpening: (input: NewPlanOpening) => string | null;
+  addApprovedQuantityOpening: (input: NewPlanOpening) => string | null;
+  updatePlanOpening: (id: string, patch: PlanOpeningPatch) => void;
+  removePlanOpening: (id: string) => void;
+  removePlanOpenings: (ids: string[]) => void;
+  approvePlanOpening: (id: string) => void;
+  rejectPlanOpening: (id: string) => void;
   addOpening: (roomId: string, type: OpeningType) => void;
   /** Debounced into one undo step per burst, like typing in a work item. */
   updateOpening: (roomId: string, openingId: string, patch: Partial<Opening>) => void;
@@ -489,6 +611,27 @@ function commitStructuralZone(get: () => AppState, set: (patch: Partial<AppState
     set({ drawingPoints: [] });
     return;
   }
+  if (drawTarget === 'rebar' && get().stirrupDrawing === 'area') {
+    const item = rebarOf(project).find((i) => i.id === get().selectedRebarId);
+    if (!item || item.kind !== 'stirrup' || !isRectangle(points)) return;
+    const placement: StirrupPlacement = { id: uuid(), kind: 'area', pageNumber: currentPage, points: structuredClone(points), spacingXM: 1, spacingYM: 1, quantityMode: 'automatic' };
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, item.id, { placements: [...item.placements, placement] }), updatedAt: Date.now() },
+      selectedStirrupPlacementId: placement.id, stirrupDrawing: null, drawingPoints: [], toolMode: 'select' });
+    scheduleSave(get, set);
+    return;
+  }
+  if (drawTarget === 'rebar' && get().barsDrawing === 'zone') {
+    const item = rebarOf(project).find((i) => i.id === get().selectedRebarId);
+    if (!item || item.kind !== 'bars' || !isRectangle(points)) return;
+    historyTracker.push(get, set, project);
+    const barsZone = { ...item.barsZone, pageNumber: currentPage, points: structuredClone(points),
+      direction: item.barsZone?.direction ?? 'long' as const, lengthMode: item.barsZone?.lengthMode ?? 'automatic' as const };
+    set({ project: { ...updateRebar(project, item.id, { barsZone, pageNumber: currentPage }), updatedAt: Date.now() },
+      drawingPoints: [], barsDrawing: null, stirrupDrawing: null, toolMode: 'select' });
+    scheduleSave(get, set);
+    return;
+  }
   historyTracker.push(get, set, project);
   if (drawTarget === 'rebar') {
     const mesh = newRebarMesh(project, currentPage, points);
@@ -496,7 +639,7 @@ function commitStructuralZone(get: () => AppState, set: (patch: Partial<AppState
       project: { ...addRebarItem(project, mesh), updatedAt: Date.now() },
       drawingPoints: [],
       selectedRebarId: mesh.id,
-      selectedRoomId: null,
+      selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null,
       toolMode: 'select',
     });
   } else {
@@ -505,7 +648,7 @@ function commitStructuralZone(get: () => AppState, set: (patch: Partial<AppState
       project: { ...addConcreteElement(project, element), updatedAt: Date.now() },
       drawingPoints: [],
       selectedConcreteId: element.id,
-      selectedRoomId: null,
+      selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null,
       toolMode: 'select',
     });
   }
@@ -569,13 +712,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentPage: 1,
   numPages: 1,
   toolMode: 'select',
-  selectedRoomId: null,
+  selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null,
   manuallyCreatedRoomId: null,
   calibrationPoints: [],
   drawingPoints: [],
   drawTarget: 'room',
+  barsDrawing: null, stirrupDrawing: null,
   selectedConcreteId: null,
-  selectedRebarId: null,
+  selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null,
   concreteKind: 'slab',
   measureTool: null,
   measurePoints: [],
@@ -619,6 +763,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   detectionProgress: 0,
   detectionLabel: '',
   detectionSummary: null,
+  selectedDetectionCandidateId: null,
   detectionCandidates: [],
   detectionCandidatesPage: null,
 
@@ -635,16 +780,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       dirty: false,
       saveError: null,
       currentPage: 1,
-      selectedRoomId: null,
+      selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null,
       selectedMarkupId: null,
       selectedConcreteId: null,
-      selectedRebarId: null,
+      selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null,
       drawTarget: 'room',
+      barsDrawing: null, stirrupDrawing: null,
       exportRegions: {},
       activeApartmentNumber: '',
       history: [],
       future: [],
       detectionSummary: null,
+      selectedDetectionCandidateId: null,
       detectionCandidates: [],
       detectionCandidatesPage: null,
       detecting: false,
@@ -718,11 +865,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   addPlan: async (file, name) => {
     const { currentProject } = get();
     if (!currentProject) return null;
-    const plan = createEmptyPlan(name, file.name, currentProject.id);
-    await savePdfBlob(plan.id, file);
+    const blob = await normalizePlanFile(file);
+    const destination = get().currentProject;
+    if (destination?.id !== currentProject.id) throw new PlanImportError('projectChanged');
+    const plan = createEmptyPlan(name, file.name, destination.id);
+    await savePdfBlob(plan.id, blob);
     await dbSavePlan(plan);
-    await dbSaveProject({ ...currentProject, planIds: [...currentProject.planIds, plan.id], updatedAt: Date.now() });
-    trackPlanCreated(plan, 'upload', file.size, currentProject.planIds.length + 1);
+    await dbSaveProject({ ...destination, planIds: [...destination.planIds, plan.id], updatedAt: Date.now() });
+    trackPlanCreated(plan, 'upload', file.size, destination.planIds.length + 1);
     await get().refreshProjectPlans();
     return plan;
   },
@@ -801,6 +951,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   setNewRoomTemplate: (key) => set({ newRoomTemplate: key }),
   applyRoomTemplate: (roomId) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     const room = project.rooms.find((r) => r.id === roomId);
@@ -852,11 +1003,65 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ detecting: false });
     }
   },
+  selectDetectionCandidate: (id) => {
+    const { project, currentPage, detectionCandidates } = get();
+    const candidate = detectionCandidates.find(c => c.id === id && c.pageNumber === currentPage && c.localAi?.planId === project?.id);
+    set({ selectedDetectionCandidateId: candidate?.id ?? null,
+      ...(candidate ? { selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null, selectedMarkupId: null } : {}) });
+  },
+  editDetectionCandidate: (id, points) => {
+    if (!canAuthorTakeoff()) return;
+    const { project, currentPage } = get();
+    set({ detectionCandidates: get().detectionCandidates.map(c => {
+      if (c.id !== id || !c.localAi || c.localAi.planId !== project?.id || c.pageNumber !== currentPage) return c;
+      return { ...c, originalPoints: c.originalPoints ?? c.points.map(p => ({ ...p })),
+        originalValidationProblems: c.originalValidationProblems ?? [...(c.validationProblems ?? [])],
+        points: points.map(p => ({ ...p })), validationProblems: candidateGeometryProblems(points, c.localAi),
+        ...(c.localAi.targetPoint?{localAi:{...c.localAi,overlapWarnings:overlapNotes(points,project?.rooms??[],currentPage)},reviewedWarningIds:c.reviewedWarningIds?.filter(id=>!id.startsWith('overlap:'))}:{}) };
+    }) });
+  },
+  restoreDetectionCandidate: (id) => {
+    const candidate = get().detectionCandidates.find(c => c.id === id);
+    if (!candidate?.originalPoints || !canAuthorTakeoff() || candidate.localAi?.planId !== get().project?.id || candidate.pageNumber !== get().currentPage) return;
+    set({ detectionCandidates: get().detectionCandidates.map(c => c.id === id ? { ...c,
+      points: candidate.originalPoints!.map(p => ({ ...p })), validationProblems: [...(candidate.originalValidationProblems ?? [])],
+      ...(c.localAi?.targetPoint?{localAi:{...c.localAi,overlapWarnings:overlapNotes(candidate.originalPoints!,get().project?.rooms??[],get().currentPage)},reviewedWarningIds:c.reviewedWarningIds?.filter(id=>!id.startsWith('overlap:'))}:{}) } : c) });
+  },
+  setDetectionWarningReviewed: (id, warningId, reviewed) => {
+    const { project, currentPage } = get();
+    set({ detectionCandidates: get().detectionCandidates.map(c => {
+      if (c.id !== id || c.localAi?.planId !== project?.id || !c.localAi || c.pageNumber !== currentPage ||
+          !aiWarnings(c.localAi).some(w => w.id === warningId)) return c;
+      const ids = new Set(c.reviewedWarningIds ?? []);
+      if (reviewed) ids.add(warningId); else ids.delete(warningId);
+      return { ...c, reviewedWarningIds: [...ids] };
+    }) });
+  },
+  setAllDetectionWarningsReviewed: (reviewed) => {
+    const { project, currentPage } = get();
+    set({ detectionCandidates: get().detectionCandidates.map(c =>
+      c.localAi && c.localAi.planId === project?.id && c.pageNumber === currentPage
+        ? { ...c, reviewedWarningIds: reviewed ? aiWarnings(c.localAi).map(w => w.id) : [] } : c) });
+  },
+  setDetectionCandidateType: (id, key) => {
+    if (!canAuthorTakeoff() || (key !== null && !getRoomProfile(key))) return;
+    const { project, currentPage } = get();
+    set({ detectionCandidates: get().detectionCandidates.map(c =>
+      c.id === id && c.localAi?.planId === project?.id && c.pageNumber === currentPage
+        ? { ...c, roomTypeKey: key, semanticTypeEdited: true, semanticTypeConfirmed: false } : c) });
+  },
+  confirmDetectionCandidateType: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const { project, currentPage } = get();
+    set({ detectionCandidates: get().detectionCandidates.map(c =>
+      c.id === id && c.localAi?.planId === project?.id && c.pageNumber === currentPage && getRoomProfile(aiCandidateTypeKey(c))
+        ? { ...c, semanticTypeConfirmed: true } : c) });
+  },
   acceptDetectionCandidate: (candidateId) => {
     const { project, detectionCandidates } = get();
     if (!project) return null;
     const candidate = detectionCandidates.find((c) => c.id === candidateId && c.pageNumber === get().currentPage);
-    if (!candidate) return null;
+    if (!candidate || !canAuthorTakeoff() || !candidateCanBeAccepted(candidate, project, get().currentPage)) return null;
 
     historyTracker.push(get, set, project);
     const room = roomFromCandidate(candidate, project, project.rooms.length, get().activeApartmentNumber);
@@ -865,6 +1070,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       // The candidate leaves the review list; the rest stay for review. Candidates are session
       // state, so an undo of this room does not bring the suggestion back — that is fine.
       detectionCandidates: detectionCandidates.filter((c) => c.id !== candidateId),
+      selectedDetectionCandidateId: get().selectedDetectionCandidateId === candidateId ? null : get().selectedDetectionCandidateId,
       selectedRoomId: room.id,
     });
     scheduleSave(get, set);
@@ -872,10 +1078,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   acceptAllDetectionCandidates: () => {
     const { project, detectionCandidates, currentPage } = get();
-    if (!project) return 0;
-    // Only what the user is actually reviewing on screen. Anything belonging to another page is
-    // never accepted sight-unseen — it is dropped along with the rest of the review session.
-    const accepted = detectionCandidates.filter((c) => c.pageNumber === currentPage);
+    if (!project || !canAuthorTakeoff()) return 0;
+    // Only valid suggestions on the current source page are accepted. Blocked suggestions
+    // remain in the review list so their validation problems can be inspected or rejected.
+    const accepted = detectionCandidates.filter((c) => candidateCanBeAccepted(c, project, currentPage));
     if (accepted.length === 0) return 0;
 
     // One push for the whole batch: a single undo removes every room it created.
@@ -885,9 +1091,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     const rooms = accepted.map((c) => roomFromCandidate(c, project, seed++, activeApartment));
     set({
       project: { ...project, rooms: [...project.rooms, ...rooms], updatedAt: Date.now() },
-      detectionCandidates: [],
-      detectionCandidatesPage: null,
-      selectedRoomId: null,
+      selectedDetectionCandidateId: accepted.some(c => c.id === get().selectedDetectionCandidateId) ? null : get().selectedDetectionCandidateId,
+      detectionCandidates: detectionCandidates.filter(c => !accepted.some(a => a.id === c.id)),
+      detectionCandidatesPage: detectionCandidates.length > accepted.length ? currentPage : null,
+      selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null,
     });
     scheduleSave(get, set);
     return rooms.length;
@@ -895,11 +1102,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   rejectDetectionCandidate: (candidateId) => {
     // Pure session state: no project change, no history, no save.
     const remaining = get().detectionCandidates.filter((c) => c.id !== candidateId);
-    set({ detectionCandidates: remaining, detectionCandidatesPage: remaining.length > 0 ? get().detectionCandidatesPage : null });
+    set({ selectedDetectionCandidateId: get().selectedDetectionCandidateId === candidateId ? null : get().selectedDetectionCandidateId, detectionCandidates: remaining, detectionCandidatesPage: remaining.length > 0 ? get().detectionCandidatesPage : null });
   },
   clearDetectionCandidates: () => {
     if (get().detectionCandidates.length === 0 && get().detectionCandidatesPage === null) return;
-    set({ detectionCandidates: [], detectionCandidatesPage: null });
+    set({ selectedDetectionCandidateId: null, detectionCandidates: [], detectionCandidatesPage: null });
   },
   autoCalculateQuantities: () => {
     const { project, currentPage } = get();
@@ -926,7 +1133,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { project, history, future } = get();
     if (!project || history.length === 0) return;
     const previous = history[history.length - 1];
-    set({ project: previous, history: history.slice(0, -1), future: [project, ...future], selectedRoomId: null, selectedConcreteId: null, selectedRebarId: null });
+    set({ project: previous, history: history.slice(0, -1), future: [project, ...future], selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null, selectedConcreteId: null, selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null });
     scheduleSave(get, set);
   },
   redo: () => {
@@ -937,7 +1144,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { project, history, future } = get();
     if (!project || future.length === 0) return;
     const next = future[0];
-    set({ project: next, history: [...history, project], future: future.slice(1), selectedRoomId: null, selectedConcreteId: null, selectedRebarId: null });
+    set({ project: next, history: [...history, project], future: future.slice(1), selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null, selectedConcreteId: null, selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null });
     scheduleSave(get, set);
   },
   setCurrentPage: (n) => {
@@ -947,11 +1154,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     const pageChanged = n !== get().currentPage;
     set({
       currentPage: n,
-      ...(pageChanged ? { detectionCandidates: [], detectionCandidatesPage: null } : {}),
-      selectedRoomId: null,
+      ...(pageChanged ? { selectedDetectionCandidateId: null, detectionCandidates: [], detectionCandidatesPage: null } : {}),
+      selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null,
       selectedMarkupId: null,
       selectedConcreteId: null,
-      selectedRebarId: null,
+      selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null,
+      barsDrawing: null, stirrupDrawing: null,
       drawingPoints: [],
       calibrationPoints: [],
       measurePoints: [],
@@ -960,8 +1168,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   setNumPages: (n) => set({ numPages: n }),
   setToolMode: (m) => {
+    if (!canUseToolMode(m) || (m === 'measure' && !canUseMeasureTool(get().measureTool)) || (m === 'markup' && !canUseMarkupTool(get().markupTool))) return;
+    useFieldWorkflowStore.getState().setGeometryAction('browse');
+    useFieldWorkflowStore.getState().setCalibrationDialog(false);
+    useFieldWorkflowStore.getState().setDraft(isTouchInput() && m !== 'select' && m !== 'pan');
     set({
+      selectedDetectionCandidateId: null,
       toolMode: m,
+      openingPlacement: null,
+      ...(m !== 'select' && m !== 'pan' ? { selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [] } : {}),
+      barsDrawing: null, stirrupDrawing: null,
       calibrationPoints: [],
       drawingPoints: [],
       measurePoints: [],
@@ -969,14 +1185,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
     ensureOverlayVisible(overlayForTool(m, get().drawTarget), get, set);
   },
-  setSelectedRoomId: (id) => set({ selectedRoomId: id }),
+  setSelectedRoomId: (id) => set({ selectedRoomIds: [], selectedOpeningIds: [], selectedRoomId: id, selectedOpeningId: null, openingPlacement: null, ...(id ? { selectedDetectionCandidateId: null } : {}) }),
 
   addCalibrationPoint: (p) => {
+    if (!canAuthorTakeoff()) return;
     const pts = [...get().calibrationPoints, p];
     set({ calibrationPoints: pts.slice(-2) });
   },
   clearCalibrationPoints: () => set({ calibrationPoints: [] }),
   applyCalibration: (realDistanceMeters) => {
+    if (!canAuthorTakeoff()) return;
     const { project, calibrationPoints, currentPage } = get();
     if (!project || calibrationPoints.length !== 2 || realDistanceMeters <= 0) return;
     const [a, b] = calibrationPoints;
@@ -992,30 +1210,328 @@ export const useAppStore = create<AppState>((set, get) => ({
       [currentPage]: { pageNumber: currentPage, calibration },
     };
     historyTracker.push(get, set, project);
-    const updated = { ...project, pages, updatedAt: Date.now() };
+    const updated = recalibrateOpeningWidths({ ...project, pages, updatedAt: Date.now() }, currentPage, Date.now());
     set({ project: updated, calibrationPoints: [], toolMode: 'select' });
     trackCalibrationCompleted(updated, !!project.pages[currentPage]?.calibration, get().numPages);
     scheduleSave(get, set);
   },
 
-  addDrawingPoint: (p) => set({ drawingPoints: [...get().drawingPoints, p] }),
+  addDrawingPoint: (p) => { if (canAuthorTakeoff()) set({ drawingPoints: [...get().drawingPoints, p] }); },
   clearDrawingPoints: () => set({ drawingPoints: [] }),
   // Changing the target drops a shape in progress: it was started for the previous target.
   setDrawTarget: (target) => {
     if (get().drawTarget === target) return;
-    set({ drawTarget: target, drawingPoints: [] });
+    set({ drawTarget: target, selectedOpeningId: null, openingPlacement: null, drawingPoints: [], barsDrawing: null, stirrupDrawing: null });
     ensureOverlayVisible(overlayForTool(get().toolMode, target), get, set);
   },
-  setSelectedConcreteId: (id) => set({ selectedConcreteId: id }),
+  setSelectedConcreteId: (id) => set({ selectedConcreteId: id, ...(id ? { selectedOpeningId: null, openingPlacement: null } : {}) }),
   setConcreteKind: (kind) => set({ concreteKind: kind }),
   updateConcreteElement: (id, patch) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
     set({ project: { ...updateConcrete(project, id, patch), updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
+  addRebarStirrup: () => {
+    if (!canAuthorTakeoff()) return;
+    const { project, currentPage } = get();
+    if (!project) return;
+    const item = newRebarStirrup(project, currentPage);
+    ensureOverlayVisible('rebar', get, set);
+    historyTracker.push(get, set, project);
+    set({ project: { ...addRebarItem(project, item), updatedAt: Date.now() }, selectedRebarId: item.id,
+      selectedDrawnBarId: null, selectedStirrupPlacementId: null, barsDrawing: null, stirrupDrawing: null, drawingPoints: [], toolMode: 'select' });
+    scheduleSave(get, set);
+  },
+  duplicateStirrupItem: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const source = project && rebarOf(project).find((i) => i.id === id);
+    if (!project || !source || source.kind !== 'stirrup') return;
+    const copy = { ...structuredClone(source), id: uuid() };
+    if (!hasManualMark(copy)) copy.autoNumber = nextAutoNumber(rebarOf(project), 'stirrup');
+    copy.placements = copy.placements.map((p) => {
+      if (p.kind === 'area') return { ...p, id: uuid(), points: structuralDuplicatePoints(project, p.pageNumber, p.points) };
+      const [start, end] = structuralDuplicatePoints(project, p.pageNumber, [p.start, p.end]);
+      return { ...p, id: uuid(), start, end };
+    });
+    historyTracker.push(get, set, project);
+    set({ project: { ...addRebarItem(project, copy), updatedAt: Date.now() }, selectedRebarId: copy.id,
+      selectedStirrupPlacementId: null, selectedDrawnBarId: null, barsDrawing: null, stirrupDrawing: null, drawingPoints: [], toolMode: 'select' });
+    scheduleSave(get, set);
+  },
+  duplicateStirrupPlacement: (id, placementId) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    const source = item?.kind === 'stirrup' ? item.placements.find((p) => p.id === placementId) : undefined;
+    if (!project || !item || item.kind !== 'stirrup' || !source) return;
+    const copied = structuredClone(source);
+    let placement: StirrupPlacement;
+    if (copied.kind === 'area') placement = { ...copied, id: uuid(), points: structuralDuplicatePoints(project, copied.pageNumber, copied.points) };
+    else {
+      const [start, end] = structuralDuplicatePoints(project, copied.pageNumber, [copied.start, copied.end]);
+      placement = { ...copied, id: uuid(), start, end };
+    }
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, id, { placements: [...item.placements, placement] }), updatedAt: Date.now() } });
+    get().selectStirrupPlacement(id, placement.id);
+    scheduleSave(get, set);
+  },
+  startStirrupPlacement: (id, kind) => {
+    useFieldWorkflowStore.getState().setDraft(isTouchInput());
+    useFieldWorkflowStore.getState().setGeometryAction('browse');
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    if (!item || item.kind !== 'stirrup') return;
+    ensureOverlayVisible('rebar', get, set);
+    set({ selectedRebarId: id, ...(id ? { selectedOpeningId: null, openingPlacement: null } : {}), selectedStirrupPlacementId: null, selectedDrawnBarId: null,
+      drawTarget: 'rebar', barsDrawing: null, stirrupDrawing: kind, toolMode: kind === 'line' ? 'draw' : 'draw-rect', drawingPoints: [] });
+  },
+  finishStirrupLine: (start, end) => {
+    if (!canAuthorTakeoff()) return;
+    const { project, selectedRebarId, currentPage, stirrupDrawing } = get();
+    const item = project && rebarOf(project).find((i) => i.id === selectedRebarId);
+    if (!project || !item || item.kind !== 'stirrup' || stirrupDrawing !== 'line' || Math.hypot(end.x - start.x, end.y - start.y) < 1e-9) return;
+    const placement: StirrupPlacement = { id: uuid(), kind: 'line', pageNumber: currentPage, start: { ...start }, end: { ...end }, spacingM: 0.2, quantityMode: 'automatic' };
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, item.id, { placements: [...item.placements, placement] }), updatedAt: Date.now() },
+      selectedStirrupPlacementId: placement.id, stirrupDrawing: null, drawingPoints: [], toolMode: 'select' });
+    scheduleSave(get, set);
+  },
+  editStirrupShape: (id, shape) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    if (!project || !rebarOf(project).some((item) => item.id === id && item.kind === 'stirrup')) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, id, { shape }), updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
+  editStirrupPlacement: (id, placement, debounced = false) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    if (!project || !item || item.kind !== 'stirrup') return;
+    const previous = item.placements.find((p) => p.id === placement.id && p.kind === placement.kind);
+    if (!previous || JSON.stringify(previous) === JSON.stringify(placement)) return;
+    const points = placement.kind === 'line' ? [placement.start, placement.end] : placement.points;
+    if (!points.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y))) return;
+    if (placement.kind === 'line' && Math.hypot(placement.end.x - placement.start.x, placement.end.y - placement.start.y) < 1e-9) return;
+    if (placement.kind === 'area' && !isRectangle(placement.points)) return;
+    if (debounced) historyTracker.pushDebounced(get, set, project);
+    else historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, id, { placements: item.placements.map((p) => p.id === placement.id ? structuredClone(placement) : p) }), updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
+  deleteStirrupPlacement: (id, placementId) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    if (!project || !item || item.kind !== 'stirrup' || !item.placements.some((p) => p.id === placementId)) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, id, { placements: item.placements.filter((p) => p.id !== placementId) }), updatedAt: Date.now() },
+      selectedStirrupPlacementId: get().selectedStirrupPlacementId === placementId ? null : get().selectedStirrupPlacementId,
+      ...(get().selectedStirrupPlacementId === placementId ? { stirrupDrawing: null, drawingPoints: [], toolMode: 'select' as const } : {}) });
+    scheduleSave(get, set);
+  },
+  selectStirrupPlacement: (id, placementId) => {
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    const placement = item?.kind === 'stirrup' ? item.placements.find((p) => p.id === placementId) : undefined;
+    if (!placement) return;
+    get().setCurrentPage(placement.pageNumber);
+    set({ selectedRebarId: id, ...(id ? { selectedOpeningId: null, openingPlacement: null } : {}), selectedStirrupPlacementId: placementId, drawTarget: 'rebar', toolMode: 'select' });
+  },
+  setSelectedDrawnBarId: (id) => set({ selectedDrawnBarId: id, ...(id ? { selectedOpeningId: null, openingPlacement: null } : {}) }),
+  editDrawnBar: (itemId, bar) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === itemId);
+    if (!project || !item || item.kind !== 'bars' || !item.drawnBars?.some((b) => b.id === bar.id)) return;
+    const coords = [bar.start.x, bar.start.y, bar.end.x, bar.end.y];
+    if (!coords.every(Number.isFinite) || Math.hypot(bar.end.x - bar.start.x, bar.end.y - bar.start.y) < 1e-9) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, itemId, { drawnBars: item.drawnBars.map((b) => b.id === bar.id ? structuredClone(bar) : b) }), updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
+  resizeDrawnBar: (itemId, barId, lengthM) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === itemId);
+    const bar = item?.kind === 'bars' ? item.drawnBars?.find((b) => b.id === barId) : undefined;
+    if (!project || !bar) return;
+    const resized = resizeStraightBar(bar, lengthM, project.pages[bar.pageNumber]?.calibration?.metersPerPixel ?? 0);
+    if (!resized || !item || item.kind !== 'bars' || !item.drawnBars) return;
+    historyTracker.pushDebounced(get, set, project);
+    set({ project: { ...updateRebar(project, itemId, { drawnBars: item.drawnBars.map((b) => b.id === barId ? resized : b) }), updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
+  duplicateDrawnBar: (itemId, barId) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === itemId);
+    const source = item?.kind === 'bars' ? item.drawnBars?.find((bar) => bar.id === barId) : undefined;
+    if (!project || !item || item.kind !== 'bars' || !source) return;
+    const [start, end] = structuralDuplicatePoints(project, source.pageNumber, [source.start, source.end]);
+    const bar = { ...structuredClone(source), id: uuid(), start, end };
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, itemId, { drawnBars: [...(item.drawnBars ?? []), bar] }), updatedAt: Date.now() }, selectedDrawnBarId: bar.id });
+    scheduleSave(get, set);
+  },
+  deleteDrawnBar: (itemId, barId) => {
+    if (!canAuthorTakeoff()) return;
+    const { project, selectedDrawnBarId } = get();
+    const item = project && rebarOf(project).find((i) => i.id === itemId);
+    if (!project || !item || item.kind !== 'bars' || !item.drawnBars?.some((bar) => bar.id === barId)) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, itemId, { drawnBars: item.drawnBars.filter((bar) => bar.id !== barId) }), updatedAt: Date.now() },
+      selectedDrawnBarId: selectedDrawnBarId === barId ? null : selectedDrawnBarId });
+    scheduleSave(get, set);
+  },
+  setBarsIndividualMode: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    if (!project || !item || item.kind !== 'bars' || item.barsZone || item.drawnBars !== undefined) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, id, { drawnBars: [] }), updatedAt: Date.now() }, drawingPoints: [], barsDrawing: null, stirrupDrawing: null });
+    scheduleSave(get, set);
+  },
+  startDrawingBar: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    if (!item || item.kind !== 'bars' || item.barsZone) return;
+    get().setBarsIndividualMode(id);
+    get().setCurrentPage(item.pageNumber);
+    ensureOverlayVisible('rebar', get, set);
+    useFieldWorkflowStore.getState().setGeometryAction('browse');
+    useFieldWorkflowStore.getState().setDraft(isTouchInput());
+    set({ selectedRebarId: id, ...(id ? { selectedOpeningId: null, openingPlacement: null } : {}), selectedDrawnBarId: null, selectedStirrupPlacementId: null, drawTarget: 'rebar', barsDrawing: 'line', toolMode: 'draw', drawingPoints: [] });
+  },
+  finishDrawnBar: (start, end) => {
+    if (!canAuthorTakeoff()) return;
+    const { project, selectedRebarId, currentPage, barsDrawing } = get();
+    const item = project && rebarOf(project).find((i) => i.id === selectedRebarId);
+    if (!project || !item || item.kind !== 'bars' || item.barsZone || barsDrawing !== 'line' || item.pageNumber !== currentPage) return;
+    if (Math.hypot(end.x - start.x, end.y - start.y) < 1e-9) return;
+    const bar = { id: uuid(), pageNumber: currentPage, start: { ...start }, end: { ...end } };
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, item.id, { drawnBars: [...(item.drawnBars ?? []), bar] }), updatedAt: Date.now() }, drawingPoints: [], selectedDrawnBarId: bar.id });
+    scheduleSave(get, set);
+  },
+  removeDrawnBarsLayout: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    if (!project || !item || item.kind !== 'bars' || item.drawnBars === undefined) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, id, { drawnBars: undefined, count: 0, lengthM: 0 }), updatedAt: Date.now() },
+      selectedDrawnBarId: null, selectedStirrupPlacementId: null, barsDrawing: null, stirrupDrawing: null, drawingPoints: [], toolMode: 'select' });
+    scheduleSave(get, set);
+  },
+  duplicateStraightBars: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const source = project && rebarOf(project).find((i) => i.id === id);
+    if (!project || !source || source.kind !== 'bars') return;
+    const copy = { ...structuredClone(source), id: uuid() };
+    if (!hasManualMark(copy)) copy.autoNumber = nextAutoNumber(rebarOf(project), 'bars');
+    if (copy.barsZone) copy.barsZone.points = structuralDuplicatePoints(project, copy.barsZone.pageNumber, copy.barsZone.points);
+    if (copy.drawnBars !== undefined) {
+      const offset = structuralDuplicatePoints(project, source.pageNumber, [{ x: 0, y: 0 }])[0];
+      copy.drawnBars = copy.drawnBars.map((bar) => ({ ...translateBar(bar, offset), id: uuid() }));
+    }
+    historyTracker.push(get, set, project);
+    set({ project: { ...addRebarItem(project, copy), updatedAt: Date.now() }, selectedRebarId: copy.id,
+      selectedDrawnBarId: null, selectedStirrupPlacementId: null, barsDrawing: null, stirrupDrawing: null, drawingPoints: [], toolMode: 'select' });
+    scheduleSave(get, set);
+  },
+  startBarsZone: (id) => {
+    useFieldWorkflowStore.getState().setDraft(isTouchInput());
+    useFieldWorkflowStore.getState().setGeometryAction('browse');
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    if (!item || item.kind !== 'bars' || item.drawnBars !== undefined) return;
+    ensureOverlayVisible('rebar', get, set);
+    set({ selectedRebarId: id, ...(id ? { selectedOpeningId: null, openingPlacement: null } : {}), selectedDrawnBarId: null, selectedStirrupPlacementId: null, drawTarget: 'rebar', barsDrawing: 'zone', toolMode: 'draw-rect', drawingPoints: [] });
+  },
+  removeBarsZone: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const item = project && rebarOf(project).find((i) => i.id === id);
+    if (!project || !item || item.kind !== 'bars' || !item.barsZone) return;
+    const resolved = resolveStraightBars(item, project.pages[item.pageNumber]?.calibration ?? null);
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, id, { barsZone: undefined, lengthM: resolved.effectiveLengthM ?? item.lengthM }), updatedAt: Date.now() },
+      barsDrawing: null, stirrupDrawing: null, drawingPoints: [], toolMode: 'select' });
+    scheduleSave(get, set);
+  },
+  editAreaGeometry: (kind, id, points, placementId) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    if (!project || points.length < 3 || !points.every((point) => Number.isFinite(point.x) && Number.isFinite(point.y)) || polygonAreaPx(points) <= 1e-9) return;
+    if (kind === 'stirrup') {
+      const item = rebarOf(project).find((i) => i.id === id);
+      const placement = item?.kind === 'stirrup' ? item.placements.find((p) => p.id === placementId) : undefined;
+      if (placement?.kind !== 'area' || !isRectangle(points)) return;
+      if (placement.points.every((point, index) => point.x === points[index]?.x && point.y === points[index]?.y)) return;
+      get().editStirrupPlacement(id, { ...placement, points: structuredClone(points) });
+      return;
+    }
+    const source = kind === 'room' ? project.rooms.find((room) => room.id === id)
+      : kind === 'concrete' ? concreteOf(project).find((element) => element.id === id)
+      : rebarOf(project).find((item) => item.id === id && item.kind === (kind === 'bars' ? 'bars' : 'mesh'));
+    if (!source) return;
+    const previous = 'points' in source ? source.points : 'kind' in source && source.kind === 'bars' ? source.barsZone?.points : undefined;
+    if (!previous || (kind === 'bars' && !isRectangle(points))) return;
+    if (previous.length === points.length && previous.every((point, index) => point.x === points[index].x && point.y === points[index].y)) return;
+    const geometry = structuredClone(points);
+    const next = kind === 'room' ? { ...project, rooms: project.rooms.map((room) => room.id === id ? { ...room, points: geometry } : room) }
+      : kind === 'concrete' ? updateConcrete(project, id, { points: geometry })
+      : 'kind' in source && source.kind === 'bars' && source.barsZone
+        ? updateRebar(project, id, { barsZone: { ...source.barsZone, points: geometry } })
+        : updateRebar(project, id, { points: geometry });
+    historyTracker.push(get, set, project);
+    set({ project: { ...next, updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
+  moveStructuralZone: (kind, id, offset) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    if (!project || (!offset.x && !offset.y) || !Number.isFinite(offset.x) || !Number.isFinite(offset.y)) return;
+    const source = kind === 'concrete'
+      ? concreteOf(project).find((element) => element.id === id)
+      : rebarOf(project).find((item) => item.id === id);
+    if (!source) return;
+    const original = 'points' in source ? source.points : source.kind === 'bars' ? source.barsZone?.points : undefined;
+    if (!original && !(source.kind === 'bars' && source.drawnBars?.length)) return;
+    const points = original?.map((point) => ({ ...point, x: point.x + offset.x, y: point.y + offset.y })) ?? [];
+    const next = kind === 'concrete' ? updateConcrete(project, id, { points })
+      : source.kind === 'bars' && source.drawnBars ? updateRebar(project, id, { drawnBars: source.drawnBars.map((bar) => translateBar(bar, offset)) })
+      : source.kind === 'bars' && source.barsZone ? updateRebar(project, id, { barsZone: { ...source.barsZone, points } })
+      : updateRebar(project, id, { points });
+    historyTracker.push(get, set, project);
+    set({ project: { ...next, updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
+  duplicateConcreteElement: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const source = project && concreteOf(project).find((element) => element.id === id);
+    if (!project || !source) return;
+    const copy = { ...structuredClone(source), id: uuid(), points: structuralDuplicatePoints(project, source.pageNumber, source.points) };
+    if (!hasManualMark(copy)) copy.autoNumber = nextAutoNumber(concreteOf(project), copy.kind);
+    historyTracker.push(get, set, project);
+    set({ project: { ...addConcreteElement(project, copy), updatedAt: Date.now() }, selectedConcreteId: copy.id });
+    scheduleSave(get, set);
+  },
   changeConcreteElementKind: (id, kind) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     const next = changeKind(project, id, kind);
@@ -1025,6 +1541,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   copyRoomsToConcrete: (roomIds) => {
+    if (!canAuthorTakeoff()) return 0;
     const { project, concreteKind } = get();
     if (!project) return 0;
     const wanted = new Set(roomIds);
@@ -1040,8 +1557,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
     return created.length;
   },
-  setSelectedRebarId: (id) => set({ selectedRebarId: id }),
+  setSelectedRebarId: (id) => set({ selectedRebarId: id, ...(id ? { selectedOpeningId: null, openingPlacement: null } : {}), selectedDrawnBarId: null, selectedStirrupPlacementId: null, barsDrawing: null, stirrupDrawing: null, drawingPoints: [] }),
+  editMeshLayout: (id, level, edit) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const mesh = project && rebarOf(project).find((i) => i.id === id && i.kind === 'mesh');
+    if (!project || !mesh || mesh.kind !== 'mesh') return;
+    const next = editManualMeshLayout(mesh, project.pages[mesh.pageNumber]?.calibration ?? null, level, edit, uuid);
+    if (next === mesh) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...updateRebar(project, id, { manualLayouts: next.manualLayouts }), updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
   updateRebarItem: (id, patch) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
@@ -1049,18 +1578,35 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   addRebarBars: () => {
+    if (!canAuthorTakeoff()) return;
     const { project, currentPage } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
     const bars = newRebarBars(project, currentPage);
-    set({ project: { ...addRebarItem(project, bars), updatedAt: Date.now() }, selectedRebarId: bars.id });
+    set({ project: { ...addRebarItem(project, bars), updatedAt: Date.now() }, selectedRebarId: bars.id, selectedDrawnBarId: null, selectedStirrupPlacementId: null, barsDrawing: null, stirrupDrawing: null, drawingPoints: [], toolMode: 'select' });
+    scheduleSave(get, set);
+  },
+  duplicateRebarMesh: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const source = project && rebarOf(project).find((item) => item.id === id);
+    if (!project || !source || source.kind !== 'mesh') return;
+    const copy = {
+      ...renewManualMeshSheetIds(withRenewedLayerIds(structuredClone(source)), uuid),
+      id: uuid(),
+      points: structuralDuplicatePoints(project, source.pageNumber, source.points),
+    };
+    historyTracker.push(get, set, project);
+    set({ project: { ...addRebarItem(project, copy), updatedAt: Date.now() }, selectedRebarId: copy.id });
     scheduleSave(get, set);
   },
   deleteRebarItem: (id) => {
+    if (!canAuthorTakeoff()) return;
     const { project, selectedRebarId } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
-    set({ project: { ...removeRebarItem(project, id), updatedAt: Date.now() }, selectedRebarId: selectedRebarId === id ? null : selectedRebarId });
+    set({ project: { ...removeRebarItem(project, id), updatedAt: Date.now() }, selectedRebarId: selectedRebarId === id ? null : selectedRebarId,
+      ...(selectedRebarId === id ? { selectedDrawnBarId: null, selectedStirrupPlacementId: null, barsDrawing: null, stirrupDrawing: null, drawingPoints: [] } : {}) });
     scheduleSave(get, set);
   },
   setRebarMeshLevels: (id, choice) => {
@@ -1107,6 +1653,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     return created.length;
   },
   deleteConcreteElement: (id) => {
+    if (!canAuthorTakeoff()) return;
     const { project, selectedConcreteId } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
@@ -1117,6 +1664,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   finishDrawing: () => {
+    if (!canAuthorTakeoff()) return;
+    if (get().barsDrawing === 'line' || get().stirrupDrawing === 'line') return;
     if (get().drawTarget !== 'room') return commitStructuralZone(get, set, get().drawingPoints);
     const { project, drawingPoints, currentPage, activeApartmentNumber } = get();
     if (!project || drawingPoints.length < 3) {
@@ -1131,6 +1680,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   finishRectangle: (p1, p2) => {
+    if (!canAuthorTakeoff()) return;
     if (get().drawTarget !== 'room') {
       return commitStructuralZone(get, set, [p1, { x: p2.x, y: p1.y }, p2, { x: p1.x, y: p2.y }]);
     }
@@ -1145,7 +1695,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
 
-  setMeasureTool: (t) => set({ toolMode: t ? 'measure' : 'select', measureTool: t, measurePoints: [] }),
+  setMeasureTool: (t) => {
+    if (!canUseMeasureTool(t)) return;
+    useFieldWorkflowStore.getState().setDraft((isTouchInput() || isPhoneWorkspace()) && !!t);
+    useFieldWorkflowStore.getState().setGeometryAction('browse');
+    set({ toolMode: t ? 'measure' : 'select', measureTool: t, measurePoints: [] });
+    if (t) ensureOverlayVisible('measurements', get, set);
+  },
   setAreaShape: (s) => set({ areaShape: s, measurePoints: [] }),
   setAreaCalcMode: (m) => set({ areaCalcMode: m, measurePoints: [] }),
   setPendingAreaKind: (k) => set({ pendingAreaKind: k }),
@@ -1168,6 +1724,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   addMeasurePoint: (p) => set({ measurePoints: [...get().measurePoints, p] }),
   clearMeasurePoints: () => set({ measurePoints: [] }),
   finishMeasurement: (m) => {
+    if (isPhoneWorkspace() && (m.tool !== 'distance' || !get().project?.pages[m.pageNumber]?.calibration)) return;
     const { project } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
@@ -1193,6 +1750,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setMarkupTool: (t) => {
+    if (!canUseMarkupTool(t)) return;
+    useFieldWorkflowStore.getState().setDraft((isTouchInput() || isPhoneWorkspace()) && !!t);
+    useFieldWorkflowStore.getState().setGeometryAction('browse');
     set({ toolMode: t ? 'markup' : 'select', markupTool: t, markupPoints: [] });
     if (t) ensureOverlayVisible('markups', get, set);
   },
@@ -1202,6 +1762,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   addMarkupPoint: (p) => set({ markupPoints: [...get().markupPoints, p] }),
   clearMarkupPoints: () => set({ markupPoints: [] }),
   finishMarkup: (m) => {
+    if (!canUseMarkupTool(m.tool)) return;
     const { project } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
@@ -1210,6 +1771,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   updateMarkup: (id, patch) => {
+    if (isPhoneWorkspace()) {
+      const note = get().project?.markups?.find((m) => m.id === id);
+      if (note?.tool !== 'text' || Object.keys(patch).some((key) => key !== 'text' && key !== 'rotationDeg')) return;
+    }
     const { project } = get();
     if (!project) return;
     // Debounced like updateMarkupQuiet, so a move/resize burst collapses into one undo step — the
@@ -1222,6 +1787,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   updateMarkupQuiet: (id, patch) => {
+    if (isPhoneWorkspace()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
@@ -1241,6 +1807,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   duplicateMarkup: (id) => {
+    if (isPhoneWorkspace() && !canUseMarkupTool(get().project?.markups?.find((m) => m.id === id)?.tool ?? null)) return;
     const { project } = get();
     if (!project) return;
     const original = (project.markups ?? []).find((m) => m.id === id);
@@ -1257,17 +1824,33 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ project: { ...project, markups, updatedAt: Date.now() }, selectedMarkupId: copy.id });
     scheduleSave(get, set);
   },
-  setSelectedMarkupId: (id) => set({ selectedMarkupId: id }),
+  setSelectedMarkupId: (id) => set({ selectedMarkupId: id, ...(id ? { selectedOpeningId: null, openingPlacement: null } : {}) }),
 
   updateRoom: (id, patch) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
     const rooms = project.rooms.map((r) => (r.id === id ? { ...r, ...patch } : r));
-    set({ project: { ...project, rooms, updatedAt: Date.now() } });
+    set({ project: { ...withOpeningRoomChanges(project, rooms, Date.now()), updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
+  assignRoomsToApartment: (roomIds, apartmentNumber) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    const target = apartmentNumber.trim();
+    if (!project || !target) return;
+    const selected = new Set(roomIds);
+    if (!project.rooms.some((room) => selected.has(room.id) && room.apartmentNumber !== target)) return;
+    historyTracker.push(get, set, project);
+    const rooms = project.rooms.map((room) =>
+      selected.has(room.id) && room.apartmentNumber !== target ? { ...room, apartmentNumber: target } : room
+    );
+    set({ project: { ...withOpeningRoomChanges(project, rooms, Date.now()), updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
   setRoomType: (roomId, roomType) => {
+    if (!canAuthorTakeoff()) return 'none';
     const { project } = get();
     if (!project) return 'none';
     const room = project.rooms.find((r) => r.id === roomId);
@@ -1292,6 +1875,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     return outcome;
   },
   duplicateRoom: (roomId) => {
+    if (!canAuthorTakeoff()) return null;
     const { project } = get();
     if (!project) return null;
     const original = project.rooms.find((r) => r.id === roomId);
@@ -1308,13 +1892,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       color: nextColor(project.rooms.length),
     });
 
-    const updated = { ...project, rooms: [...project.rooms, copy], updatedAt: Date.now() };
+    const now = Date.now();
+    const openingCopies = cloneOpeningsForRooms(project, [{ source: original, copy }], project.id, uuid, now, { offset: ROOM_DUPLICATE_OFFSET });
+    const updated = { ...project, rooms: [...project.rooms, copy],
+      ...(project.openings ? { openings: [...project.openings, ...openingCopies] } : {}), updatedAt: now };
     set({ project: updated, selectedRoomId: copy.id });
     trackRoomsCreated(updated, 'duplicate', [copy]);
     scheduleSave(get, set);
     return copy.id;
   },
   duplicateApartment: (sourceApartmentNumber, targetApartmentNumber) => {
+    if (!canAuthorTakeoff()) return 0;
     const { project } = get();
     if (!project) return 0;
     const sourceRooms = project.rooms.filter((r) => r.apartmentNumber === sourceApartmentNumber);
@@ -1332,24 +1920,59 @@ export const useAppStore = create<AppState>((set, get) => ({
       })
     );
 
-    const updated = { ...project, rooms: [...project.rooms, ...copies], updatedAt: Date.now() };
+    const now = Date.now();
+    const openingCopies = cloneOpeningsForRooms(project, sourceRooms.map((source, i) => ({ source, copy: copies[i] })), project.id, uuid, now,
+      { apartment: { source: sourceApartmentNumber, target: targetApartmentNumber }, offset: 0 });
+    const updated = { ...project, rooms: [...project.rooms, ...copies],
+      ...(project.openings ? { openings: [...project.openings, ...openingCopies] } : {}), updatedAt: now };
     set({ project: updated, selectedRoomId: copies[0].id });
     trackRoomsCreated(updated, 'apartment_duplicate', copies);
     scheduleSave(get, set);
     return copies.length;
   },
   deleteRoom: (id) => {
+    if (!canAuthorTakeoff()) return;
     const { project, selectedRoomId } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
     const rooms = project.rooms.filter((r) => r.id !== id);
     set({
-      project: { ...project, rooms, updatedAt: Date.now() },
+      project: { ...withOpeningRoomChanges(project, rooms, Date.now()), updatedAt: Date.now() },
       selectedRoomId: selectedRoomId === id ? null : selectedRoomId,
+      selectedRoomIds: get().selectedRoomIds.filter(selected => selected !== id),
     });
     scheduleSave(get, set);
   },
+  deleteRooms: (ids) => {
+    if (!canAuthorTakeoff()) return;
+    const { project, selectedRoomId } = get();
+    if (!project) return;
+    const selected = new Set(ids);
+    const rooms = project.rooms.filter(room => !selected.has(room.id));
+    if (rooms.length === project.rooms.length) return;
+    const now = Date.now();
+    const updated = withOpeningRoomChanges(project, rooms, now);
+    // The entire batch, including affected opening associations, is one undoable operation.
+    historyTracker.push(get, set, project);
+    set({ project: { ...updated, updatedAt: now }, selectedRoomId: selectedRoomId && selected.has(selectedRoomId) ? null : selectedRoomId, selectedRoomIds: get().selectedRoomIds.filter(id => !selected.has(id)) });
+    scheduleSave(get, set);
+  },
+  applyBulkTakeoff: (expectedPlan, roomIds, configs, policy, updateConfirmed) => {
+    if (!canAuthorTakeoff()) return 'blocked';
+    const project = get().project;
+    if (!project || project !== expectedPlan) return 'stale';
+    if (policy === 'update-existing' && !updateConfirmed) return 'blocked';
+    const preview = planBulkTakeoff(project, roomIds, configs, policy);
+    if (!preview.changedCount) return 'no-change';
+    // Materialize before changing history/state, so errors cannot leave a partial operation.
+    const updated = materializeBulkTakeoff(project, preview, uuid);
+    historyTracker.push(get, set, project);
+    set({ project: updated });
+    scheduleSave(get, set);
+    return 'applied';
+  },
   addWorkItem: (roomId, type) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     if (!project.rooms.some((r) => r.id === roomId)) return;
@@ -1367,6 +1990,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   updateWorkItem: (roomId, itemId, patch) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
@@ -1379,6 +2003,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     scheduleSave(get, set);
   },
   removeWorkItem: (roomId, itemId) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
@@ -1389,16 +2014,220 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ project: { ...project, rooms, updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
+  selectPlanOpening: (id) => {
+    const o = get().project?.openings?.find(o => o.id === id && o.pageNumber === get().currentPage);
+    set({ selectedRoomIds: [], selectedOpeningIds: [], selectedRoomId: null, selectedOpeningId: o?.id ?? null, openingPlacement: null,
+      selectedDetectionCandidateId: null, selectedMarkupId: null, selectedConcreteId: null,
+      selectedRebarId: null, selectedDrawnBarId: null, selectedStirrupPlacementId: null });
+  },
+  setPlanSelection: (roomIds, openingIds) => {
+    const { project, currentPage } = get();
+    set({ selectedRoomIds: [...new Set(roomIds)].filter(id => project?.rooms.some(r => r.id === id)),
+      selectedOpeningIds: [...new Set(openingIds)].filter(id => project?.openings?.some(o => o.id === id && o.pageNumber === currentPage)),
+      selectedRoomId: null, selectedOpeningId: null, selectedMarkupId: null, selectedDetectionCandidateId: null, openingPlacement: null });
+  },
+  deletePlanSelection: () => {
+    if (!canAuthorTakeoff()) return;
+    const { project, selectedRoomIds, selectedOpeningIds } = get();
+    if (!project) return;
+    const roomIds = new Set(selectedRoomIds), openingIds = new Set(selectedOpeningIds);
+    const rooms = project.rooms.filter(r => !roomIds.has(r.id));
+    const openings = project.openings?.filter(o => !openingIds.has(o.id));
+    if (rooms.length === project.rooms.length && openings?.length === project.openings?.length) return;
+    const now = Date.now();
+    const updated = withOpeningRoomChanges({ ...project, openings }, rooms, now);
+    historyTracker.push(get, set, project);
+    set({ project: { ...updated, updatedAt: now }, selectedRoomIds: [], selectedOpeningIds: [], selectedRoomId: null, selectedOpeningId: null });
+    scheduleSave(get, set);
+  },
+  rejectPlanOpenings: (ids) => {
+    if (!canAuthorTakeoff()) return;
+    const project = get().project;
+    if (!project) return;
+    const now = Date.now();
+    let updated = project;
+    for (const id of new Set(ids)) {
+      if (updated.openings?.some(o => o.id === id && o.approval.status === 'draft')) updated = reviewPlanOpening(updated, id, 'rejected', now);
+    }
+    if (updated === project) return;
+    historyTracker.push(get, set, project);
+    set({ project: updated });
+    scheduleSave(get, set);
+  },
+  beginOpeningPlacement: (preset) => {
+    if (!canAuthorTakeoff() || !get().project) return;
+    get().setToolMode('select');
+    get().selectPlanOpening(null);
+    get().setOverlayVisible('finishes', true);
+    set({ openingPlacement: { preset, start: null } });
+  },
+  beginQuantityOpening: (preset) => {
+    if (!canAuthorTakeoff()) return null;
+    const { project, currentPage } = get();
+    if (!project) return null;
+    // Same canonical draft/editor as placement; only drawing geometry is omitted.
+    const id = get().addPlanOpening({ pageNumber: currentPage, entryMethod: 'takeoff', geometry: null,
+      ...openingClassification(preset), roomIds: [], legacyRefs: [], source: 'manual',
+      widthM: null, widthSource: 'manual', heightM: null, sillHeightM: null, quantity: 1 });
+    if (id) {
+      get().setToolMode('select');
+      get().selectPlanOpening(id);
+      get().setOverlayVisible('finishes', true);
+    }
+    return id;
+  },
+  beginOpeningEndpointEdit: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const o = get().project?.openings?.find(o => o.id === id && o.pageNumber === get().currentPage);
+    if (!o) return;
+    get().setToolMode('select'); get().selectPlanOpening(id); get().setOverlayVisible('finishes', true);
+    set({ openingPlacement: { preset: 'unknown', start: null, openingId: id } });
+  },
+  cancelOpeningPlacement: () => set({ openingPlacement: null }),
+  placeOpeningPoint: (point) => {
+    if (!canAuthorTakeoff() || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+    const { project, openingPlacement, currentPage } = get();
+    if (!project || !openingPlacement) return;
+    if (!openingPlacement.start) { set({ openingPlacement: { ...openingPlacement, start: point } }); return; }
+    if (Math.hypot(point.x-openingPlacement.start.x, point.y-openingPlacement.start.y) < 0.001) return;
+    const geometry = { endpointA: openingPlacement.start, endpointB: point };
+    if (openingPlacement.openingId) {
+      get().updatePlanOpening(openingPlacement.openingId, { geometry });
+      get().selectPlanOpening(openingPlacement.openingId); return;
+    }
+    const id = get().addPlanOpening({ pageNumber: currentPage, geometry, entryMethod: 'plan',
+      ...openingClassification(openingPlacement.preset), roomIds: [], legacyRefs: [], source: 'manual',
+      widthM: measuredOpeningWidth(project, currentPage, geometry), widthSource: 'calibration',
+      heightM: null, sillHeightM: null, quantity: 1 });
+    if (id) get().selectPlanOpening(id);
+  },
+  duplicatePlanOpening: (id) => {
+    if (!canAuthorTakeoff()) return null;
+    const o = get().project?.openings?.find(o => o.id === id);
+    if (!o) return null;
+    const { id: _id, planId: _planId, createdAt: _created, updatedAt: _updated, approval: _approval, ...input } = structuredClone(o);
+    if (input.geometry) for (const p of [input.geometry.endpointA, input.geometry.endpointB]) { p.x += 30; p.y += 30; }
+    // Offset copies need their own explicit room confirmation. Never copy legacy links.
+    delete input.aiDetection;
+    delete input.roomSides;
+    input.roomIds = []; input.legacyRefs = []; input.quantityReview = { associationsConfirmed: false, distinctLegacyRoomIds: [] }; delete input.apartmentNumber;
+    const copyId = get().addPlanOpening(input);
+    if (copyId) get().selectPlanOpening(copyId);
+    return copyId;
+  },
+  draftPlanOpening: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const project = get().project;
+    if (!project) return;
+    const updated = reviewPlanOpening(project, id, 'draft', Date.now());
+    if (updated === project) return;
+    historyTracker.push(get, set, project); set({ project: updated }); scheduleSave(get, set);
+  },
+  importAiOpeningReview: (review) => {
+    if (!canAuthorTakeoff()) return;
+    const project=get().project;
+    if (!project || project.id!==review.planId) return;
+    const updated=importOpeningReview(project,review,Date.now());
+    if(updated===project)return;
+    historyTracker.push(get,set,project);set({project:updated});scheduleSave(get,set);
+  },
+  addPlanOpening: (input) => {
+    if (!canAuthorTakeoff()) return null;
+    const project = get().project;
+    if (!project) return null;
+    const id = uuid();
+    const updated = addCanonicalOpening(project, input, id, Date.now());
+    historyTracker.push(get, set, project);
+    set({ project: updated });
+    scheduleSave(get, set);
+    return id;
+  },
+  // Explicit final approval in the quantity-only form: validate before one history/save step.
+  addApprovedQuantityOpening: (input) => {
+    if (!canAuthorTakeoff()) return null;
+    const project = get().project;
+    if (!project) return null;
+    const id = uuid(), now = Date.now();
+    const draft = addCanonicalOpening(project, input, id, now);
+    if (input.entryMethod !== 'takeoff' || input.geometry !== null || input.roomIds.length !== 1 || !input.quantityReview?.associationsConfirmed)
+      throw new Error('Quantity opening requires explicit room review');
+    const updated = reviewPlanOpening(draft, id, 'approved', now);
+    const reasons = buildOpeningSchedule(updated).find(row => row.id === id)!.reasons.filter(reason => reason !== 'legacyPrecedence');
+    if (reasons.length) throw new Error(reasons.join('; '));
+    historyTracker.push(get, set, project);
+    set({ project: updated, selectedOpeningId: null, openingPlacement: null });
+    scheduleSave(get, set);
+    return id;
+  },
+  updatePlanOpening: (id, patch) => {
+    if (!canAuthorTakeoff()) return;
+    const project = get().project;
+    if (!project) return;
+    const opening = project.openings?.find(o => o.id === id);
+    if (opening && patch.geometry && !Object.hasOwn(patch, 'widthM'))
+      patch = { ...openingGeometryPatch(project, opening, patch.geometry), ...patch };
+    const updated = updateCanonicalOpening(project, id, patch, Date.now());
+    if (updated === project) return;
+    historyTracker.pushDebounced(get, set, project);
+    set({ project: updated });
+    scheduleSave(get, set);
+  },
+  removePlanOpening: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const project = get().project;
+    if (!project) return;
+    const updated = removeCanonicalOpening(project, id, Date.now());
+    if (updated === project) return;
+    historyTracker.push(get, set, project);
+    set({ project: updated, selectedOpeningId: get().selectedOpeningId === id ? null : get().selectedOpeningId, selectedOpeningIds: get().selectedOpeningIds.filter(selected => selected !== id) });
+    scheduleSave(get, set);
+  },
+  removePlanOpenings: (ids) => {
+    if (!canAuthorTakeoff()) return;
+    const { project, selectedOpeningId, openingPlacement } = get();
+    if (!project?.openings) return;
+    const selected = new Set(ids);
+    const openings = project.openings.filter(o => !selected.has(o.id));
+    if (openings.length === project.openings.length) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...project, openings, updatedAt: Date.now() },
+      selectedOpeningId: selectedOpeningId && selected.has(selectedOpeningId) ? null : selectedOpeningId,
+      selectedOpeningIds: get().selectedOpeningIds.filter(id => !selected.has(id)),
+      openingPlacement: openingPlacement?.openingId && selected.has(openingPlacement.openingId) ? null : openingPlacement });
+    scheduleSave(get, set);
+  },
+  approvePlanOpening: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const project = get().project;
+    if (!project) return;
+    const updated = reviewPlanOpening(project, id, 'approved', Date.now());
+    if (updated === project) return;
+    historyTracker.push(get, set, project);
+    set({ project: updated });
+    scheduleSave(get, set);
+  },
+  rejectPlanOpening: (id) => {
+    if (!canAuthorTakeoff()) return;
+    const project = get().project;
+    if (!project) return;
+    const updated = reviewPlanOpening(project, id, 'rejected', Date.now());
+    if (updated === project) return;
+    historyTracker.push(get, set, project);
+    set({ project: updated });
+    scheduleSave(get, set);
+  },
   addOpening: (roomId, type) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
     const opening: Opening = { id: uuid(), type, ...OPENING_DEFAULT_SIZES[type], quantity: 1 };
     const rooms = project.rooms.map((r) => (r.id === roomId ? { ...r, openings: [...(r.openings ?? []), opening] } : r));
-    set({ project: { ...project, rooms, updatedAt: Date.now() } });
+    set({ project: { ...withOpeningRoomChanges(project, rooms, Date.now()), updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
   updateOpening: (roomId, openingId, patch) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
@@ -1406,10 +2235,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (r.id !== roomId) return r;
       return { ...r, openings: (r.openings ?? []).map((o) => (o.id === openingId ? { ...o, ...patch } : o)) };
     });
-    set({ project: { ...project, rooms, updatedAt: Date.now() } });
+    set({ project: { ...withOpeningRoomChanges(project, rooms, Date.now()), updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
   removeOpening: (roomId, openingId) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
@@ -1417,10 +2247,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (r.id !== roomId) return r;
       return { ...r, openings: (r.openings ?? []).filter((o) => o.id !== openingId) };
     });
-    set({ project: { ...project, rooms, updatedAt: Date.now() } });
+    set({ project: { ...withOpeningRoomChanges(project, rooms, Date.now()), updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
   moveRoomPoint: (roomId, pointIndex, p) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
@@ -1429,10 +2260,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       const points = r.points.map((pt, i) => (i === pointIndex ? p : pt));
       return { ...r, points };
     });
-    set({ project: { ...project, rooms, updatedAt: Date.now() } });
+    set({ project: { ...withOpeningRoomChanges(project, rooms, Date.now()), updatedAt: Date.now() } });
     markDirty(set);
   },
   deleteRoomPoint: (roomId, pointIndex) => {
+    if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.push(get, set, project);
@@ -1441,7 +2273,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (r.points.length <= 3) return r;
       return { ...r, points: r.points.filter((_, i) => i !== pointIndex) };
     });
-    set({ project: { ...project, rooms, updatedAt: Date.now() } });
+    set({ project: { ...withOpeningRoomChanges(project, rooms, Date.now()), updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
 

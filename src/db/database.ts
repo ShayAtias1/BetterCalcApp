@@ -1,3 +1,10 @@
+import { importOpeningReview } from '../lib/ai/openingsImport';
+import { openingsChanged } from '../lib/ai/openingsEvents';
+import type { AiBatch } from '../lib/ai/batchModel';
+import type { AiJobRecord, AiReviewRecord } from '../lib/ai/contracts';
+import type { OpeningsJob } from '../lib/ai/openingsContracts';
+import type { AiOpeningReview } from '../types/aiOpenings';
+import { notifyPdfBlobChanged } from '../lib/pdfBlobEvents';
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { v4 as uuid } from 'uuid';
 import type { Plan, Project } from '../types';
@@ -7,6 +14,11 @@ import { migrateComparePageOwnership } from '../lib/compareMigration';
 import { withMeasurementValues } from '../lib/measurementValues';
 
 interface QtoDB extends DBSchema {
+  openingsAiJobs: { key:string; value:OpeningsJob };
+  openingsAiReviews: { key:string; value:AiOpeningReview };
+  aiBatches: { key:string; value:AiBatch };
+  aiReviews: { key:string; value:AiReviewRecord };
+  aiJobs: { key:string; value:AiJobRecord };
   /**
    * Plans. The store keeps its historical name: before projects existed every saved takeoff was a
    * single plan document stored here, and keeping the name means no record ever has to move.
@@ -35,7 +47,7 @@ interface QtoDB extends DBSchema {
 }
 
 const DB_NAME = 'bettercalc-qto';
-const DB_VERSION = 3;
+const DB_VERSION = 6;
 
 let dbPromise: Promise<IDBPDatabase<QtoDB>> | null = null;
 
@@ -43,6 +55,12 @@ function getDb(): Promise<IDBPDatabase<QtoDB>> {
   if (!dbPromise) {
     dbPromise = openDB<QtoDB>(DB_NAME, DB_VERSION, {
       upgrade(db) {
+        if (!db.objectStoreNames.contains('openingsAiJobs')) db.createObjectStore('openingsAiJobs', {keyPath:'requestId'});
+        if (!db.objectStoreNames.contains('openingsAiReviews')) db.createObjectStore('openingsAiReviews', {keyPath:'key'});
+        if (!db.objectStoreNames.contains('aiBatches')) db.createObjectStore('aiBatches', {keyPath:'id'});
+        // v4 adds isolated AI stores; existing plan/PDF storage is unchanged.
+        if (!db.objectStoreNames.contains('aiReviews')) db.createObjectStore('aiReviews', {keyPath:'key'});
+        if (!db.objectStoreNames.contains('aiJobs')) db.createObjectStore('aiJobs', {keyPath:'requestId'});
         if (!db.objectStoreNames.contains('projects')) {
           db.createObjectStore('projects', { keyPath: 'id' });
         }
@@ -82,6 +100,7 @@ async function readAllPlans(db: IDBPDatabase<QtoDB>): Promise<Plan[]> {
   return (await db.getAll('projects')).map(withPlanMeasurementValues);
 }
 
+/** Includes optional Plan.openings in the same atomic record; no legacy opening migration. */
 export async function savePlan(plan: Plan): Promise<void> {
   const db = await getDb();
   await db.put('projects', plan);
@@ -90,6 +109,7 @@ export async function savePlan(plan: Plan): Promise<void> {
 export async function savePdfBlob(planId: string, blob: Blob): Promise<void> {
   const db = await getDb();
   await db.put('pdfFiles', blob, planId);
+  notifyPdfBlobChanged(`plan:${planId}`);
 }
 
 export async function loadPdfBlob(planId: string): Promise<Blob | undefined> {
@@ -443,6 +463,7 @@ export async function deleteComparison(id: string): Promise<void> {
 export async function saveComparePdfBlob(comparisonId: string, layer: string, blob: Blob): Promise<void> {
   const db = await getDb();
   await db.put('comparePdfFiles', blob, `${comparisonId}:${layer}`);
+  notifyPdfBlobChanged(`compare:${comparisonId}:${layer}`);
 }
 
 export async function loadComparePdfBlob(comparisonId: string, layer: string): Promise<Blob | undefined> {
@@ -453,4 +474,50 @@ export async function loadComparePdfBlob(comparisonId: string, layer: string): P
 export async function deleteComparePdfBlob(comparisonId: string, layer: string): Promise<void> {
   const db = await getDb();
   await db.delete('comparePdfFiles', `${comparisonId}:${layer}`);
+  notifyPdfBlobChanged(`compare:${comparisonId}:${layer}`);
+}
+
+// ---------- page-bound AI development reviews and jobs ----------
+export async function loadAiReview(key:string):Promise<AiReviewRecord|undefined>{return (await getDb()).get('aiReviews',key);}
+export async function updateAiReview(key:string,update:(previous:AiReviewRecord|undefined)=>AiReviewRecord):Promise<void>{
+  const db=await getDb(),tx=db.transaction('aiReviews','readwrite');
+  await tx.store.put(update(await tx.store.get(key)));await tx.done;
+}
+export async function saveAiJob(job:AiJobRecord):Promise<void>{await (await getDb()).put('aiJobs',job);}
+export async function listAiJobs():Promise<AiJobRecord[]>{return (await getDb()).getAll('aiJobs');}
+
+// v6 openings records are isolated from room jobs/reviews. No existing data is rewritten.
+export async function saveOpeningsAiJob(job:OpeningsJob):Promise<void>{
+  if(job.task!=='openings-v1'||!job.requestId.startsWith('openings-'))throw new Error('Invalid openings job task.');
+  await (await getDb()).put('openingsAiJobs',job);openingsChanged();
+}
+export async function listOpeningsAiJobs():Promise<OpeningsJob[]>{return (await getDb()).getAll('openingsAiJobs');}
+export async function loadOpeningsAiReview(key:string):Promise<AiOpeningReview|undefined>{return (await getDb()).get('openingsAiReviews',key);}
+export async function saveCompletedOpeningsAiJob(job:OpeningsJob,review:AiOpeningReview):Promise<void>{
+  if(job.task!=='openings-v1'||review.task!==job.task||job.status!=='COMPLETED'||job.reviewKey!==review.key||
+    job.planId!==review.planId||job.pageNumber!==review.pageNumber||job.sourceHash!==review.sourceHash||job.jobId!==review.importId)throw new Error('Openings completion identity mismatch.');
+  const db=await getDb(),tx=db.transaction(['openingsAiJobs','openingsAiReviews'],'readwrite');
+  // Recovery must not overwrite later manual edits to a previously collected review.
+  const previous=await tx.objectStore('openingsAiReviews').get(review.key);
+  if(!previous)await tx.objectStore('openingsAiReviews').put(review);
+  await tx.objectStore('openingsAiJobs').put(job);await tx.done;openingsChanged();
+}
+
+export async function saveAiBatch(batch:AiBatch):Promise<void>{await (await getDb()).put('aiBatches',batch);}
+export async function listAiBatches():Promise<AiBatch[]>{return (await getDb()).getAll('aiBatches');}
+
+/** Commit canonical drafts and consumed-review marker together before UI import. */
+export async function collectOpeningsAiReview(plan:Plan,key:string,currentPlan?:()=>Plan|null):Promise<AiOpeningReview|undefined>{
+  const db=await getDb(),tx=db.transaction(['projects','openingsAiReviews'],'readwrite');
+  const review=await tx.objectStore('openingsAiReviews').get(key);
+  if(!review||review.importedAt!==undefined){await tx.done;return undefined;}
+  const latest=currentPlan?.()??plan;
+  if(currentPlan&&currentPlan()?.id!==plan.id){await tx.done;return undefined;}
+  const updated=importOpeningReview(latest,review,Date.now());
+  await tx.objectStore('projects').put(updated);
+  await tx.objectStore('openingsAiReviews').put({...review,importedAt:Date.now()});
+  if(currentPlan&&currentPlan()!==latest){
+    tx.abort();try{await tx.done;}catch{/* Leave the review unconsumed for the next activation. */}return undefined;
+  }
+  await tx.done;return review;
 }

@@ -36,3 +36,9 @@ demo/output/
 demo/video/node_modules/
 demo/video/out/
 demo/video/public/
+
+# Local AI spending ledger; contains no plan imagery.
+.ai-local/
+
+# Original provider captures/customer-plan fixtures stay local; tests use synthetic data.
+tests/ai/fixtures/openings-vision-002/

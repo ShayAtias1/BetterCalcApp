@@ -1,3 +1,5 @@
+import { buildOpeningQuantityReport } from './openingQuantityReport';
+import { addOpeningQuantitySheets } from './exportOpeningExcel';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import type { AreaKind, ExtraReportCategory, Measurement, Plan, ReportCategory, ReportCategoryTotal, RoomQuantitySummary } from '../types';
@@ -227,13 +229,14 @@ export async function exportQuantitiesToExcel(
   areaMeasurements: Measurement[],
   /** What the user chose to export; the caller has already emptied `summaries` / `areaMeasurements` when Finishes is off. */
   content: ExportContent,
-  language: Language
+  language: Language,
+  openingPages?: Set<number>
 ) {
   // Concrete and rebar come from the plan itself; the caller has already limited them to the pages
   // being exported (withStructuralPages), as it limits the summaries and the area measurements.
-  const workbook = buildQuantitiesWorkbook(summaries, areaMeasurements, language, selectStructural(buildStructuralReport(project), content));
+  const workbook = buildQuantitiesWorkbook(summaries, areaMeasurements, language, selectStructural(buildStructuralReport(project), content), content.finishes ? project : undefined, openingPages);
   // A selection with nothing to write (no finishes, no structural items on those pages) has no sheet to save.
-  if (workbook.worksheets.length === 0) throw new Error('The selected content has nothing to export on the selected pages.');
+  if (workbook.worksheets.length === 0) throw new Error('The selected content has nothing to export on the selected sheets.');
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/octet-stream' });
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, '_');
@@ -246,7 +249,9 @@ export function buildQuantitiesWorkbook(
   areaMeasurements: Measurement[],
   language: Language,
   /** Concrete and rebar sheets, added after the others and only for the sections that have items. Omitted: none. */
-  structural?: StructuralReport
+  structural?: StructuralReport,
+  openingPlan?: Plan,
+  openingPages?: Set<number>
 ): ExcelJS.Workbook {
   const x = exportContext(language);
   const { t } = x;
@@ -575,6 +580,11 @@ export function buildQuantitiesWorkbook(
 
   if (areaMeasurements.length > 0) {
     addAreaMeasurementSheet(workbook, areaMeasurements, x);
+  }
+
+  if (openingPlan) {
+    addOpeningQuantitySheets(workbook,[openingPlan],x,undefined,openingPages);
+    if(buildOpeningQuantityReport(openingPlan,undefined,openingPages).incomplete) workbook.worksheets[0]?.addRow([t('openingQuantities.partialNote')]);
   }
 
   if (structural) addStructuralSheets(workbook, structural, x);

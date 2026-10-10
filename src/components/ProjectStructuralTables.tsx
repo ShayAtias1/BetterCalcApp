@@ -11,7 +11,7 @@ import { exportContext } from '../lib/exportLanguage';
 
 const DASH = '-';
 /** An estimate carries "≈" so it can never be read as an exact figure; a figure that cannot be known is a dash. */
-const num = (v: number, basis: RebarBasis | null) => (basis === null ? DASH : `${basis === 'estimated' ? '≈ ' : ''}${formatNumber(round(v, 2))}`);
+const num = (v: number | null, basis: RebarBasis | null) => (basis === null || v === null ? DASH : `${basis === 'estimated' ? '≈ ' : ''}${formatNumber(round(v, 2))}`);
 
 export function ProjectConcreteTable({ concrete }: { concrete: ProjectConcrete }) {
   const t = useT();
@@ -69,6 +69,7 @@ export function ProjectRebarTable({ rebar, plans }: { rebar: ProjectRebar; plans
   const t = useT();
   const x = exportContext(useLanguage());
   const details = useMemo(() => plans.flatMap((plan) => buildRebarLevelRows(plan).map((row) => ({ planId: plan.id, planName: plan.name, row }))), [plans]);
+  const meshOnly = details.length > 0 && details.every(({ row }) => row.kind === 'mesh');
   const weight = (v: number | null, estimated: boolean) => v === null ? DASH : num(v, estimated ? 'estimated' : 'exact');
   const length = (v: number | null) => v === null ? DASH : `${formatNumber(round(v, 2))} ${t('units.m')}`;
   const status = (basis: RebarBasis | null) =>
@@ -86,8 +87,8 @@ export function ProjectRebarTable({ rebar, plans }: { rebar: ProjectRebar; plans
               <th>{t('quantitiesPanel.cols.level')}</th>
               <th>{t('quantitiesPanel.cols.specification')}</th>
               <th className="num">{t('quantitiesPanel.cols.quantity')}</th>
-              <th className="num group-edge">{t('quantitiesPanel.cols.netWeight')} <span className="qty-group-unit">({t('units.kg')})</span></th>
-              <th className="num">{t('quantitiesPanel.cols.orderWeight')} <span className="qty-group-unit">({t('units.kg')})</span></th>
+              <th className="num group-edge">{t(meshOnly ? 'rebar.requiredWeightShort' : 'quantitiesPanel.cols.netWeight')} <span className="qty-group-unit">({t('units.kg')})</span></th>
+              <th className="num">{t(meshOnly ? 'rebar.purchaseWeightShort' : 'quantitiesPanel.cols.orderWeight')} <span className="qty-group-unit">({t('units.kg')})</span></th>
               <th className="group-edge">{t('quantitiesPanel.cols.status')}</th>
             </tr>
           </thead>
@@ -96,19 +97,19 @@ export function ProjectRebarTable({ rebar, plans }: { rebar: ProjectRebar; plans
               <tr key={`${planId}|${d.key}`}>
                 <td dir="auto">{planName}</td>
                 <td className="col-page">{d.pageNumber}</td>
-                <td className="qty-id">{t(d.kind === 'mesh' ? 'rebar.mesh' : 'rebar.bars')}</td>
+                <td className="qty-id">{t(d.kind === 'mesh' ? 'rebar.mesh' : d.kind === 'stirrup' ? 'rebar.stirrupName' : 'rebar.bars')}</td>
                 <td dir="auto">{markLabel(d, t)}</td>
                 <td>{levelText(d.level, x) || DASH}</td>
                 <td className="qty-spec" dir="auto">{levelSpecification(d, x)}</td>
                 <td className="num">
                   {levelQuantity(d, x)}
-                  {d.kind === 'bars' && <>
-                    <span className="qty-sub">{t('rebar.barLength')}: <span dir="ltr">{length(d.parts[0].barLengthM)}</span></span>
+                  {d.kind !== 'mesh' && <>
+                    <span className="qty-sub">{t(d.kind === 'stirrup' ? 'rebar.stirrup.lengthUsed' : 'rebar.barLength')}: <span dir="ltr">{length(d.parts[0].barLengthM)}</span></span>
                     <span className="qty-sub">{t('rebar.totalLength')}: <span dir="ltr">{length(d.parts[0].netLengthM)}</span></span>
                   </>}
                 </td>
-                <td className="num group-edge" dir="ltr">{weight(d.netWeightKg, d.estimated)}</td>
-                <td className="num order" dir="ltr">{weight(d.orderWeightKg, d.estimated)}</td>
+                <td className="num group-edge" dir="ltr">{weight(d.netWeightKg, d.estimated)}{!meshOnly && d.kind === 'mesh' && <span className="qty-sub">{t('rebar.requiredWeightShort')}</span>}</td>
+                <td className="num order" dir="ltr">{weight(d.orderWeightKg, false)}{!meshOnly && d.kind === 'mesh' && <span className="qty-sub">{t('rebar.purchaseWeightShort')}</span>}</td>
                 <td className="group-edge"><span className={d.status !== 'ok' ? 'cal-missing' : `qty-status ${d.estimated ? 'estimate' : ''}`}>{levelStatus(d, x)}</span></td>
               </tr>
             ))}
@@ -117,7 +118,7 @@ export function ProjectRebarTable({ rebar, plans }: { rebar: ProjectRebar; plans
             <tr>
               <td className="qty-id" colSpan={7}>{t('rebar.summary.total')}</td>
               <td className="num group-edge" dir="ltr">{num(rebar.weightKg, rebar.basis)}</td>
-              <td className="num order" dir="ltr">{num(rebar.orderWeightKg, rebar.basis)}</td>
+              <td className="num order" dir="ltr">{num(rebar.orderWeightKg, rebar.basis === null ? null : 'exact')}</td>
               <td className="group-edge">
                 {status(rebar.basis)}
                 {rebar.missingItemCount > 0 && <span className="qty-sub cal-missing">{t('exports.structural.missingShort', { count: rebar.missingItemCount })}</span>}

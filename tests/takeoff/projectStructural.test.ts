@@ -178,9 +178,9 @@ test('finishes summary mode: only a project with neither finishes nor structural
 // ---------- project Excel ----------
 
 
-test('a project without concrete or rebar has exactly the sheets it always had', async () => {
+test('a project without concrete or rebar retains legacy sheets plus canonical opening reports', async () => {
   const wb = buildProjectWorkbook(PROJECT(['plan-a', 'plan-b']), [PLAN_A, PLAN_B], 'he');
-  assert.deepEqual(wb.worksheets.map((s) => s.name), ['סיכום פרויקט', 'תוכניות', 'חדרים', 'סוגי עבודה']);
+  assert.deepEqual(wb.worksheets.map((s) => s.name), ['סיכום פרויקט', 'תוכניות', 'חדרים', 'סוגי עבודה', 'ספירת פתחים פיזיים', 'טבלת פתחים']);
 });
 
 // ---------- project PDF ----------
@@ -213,7 +213,7 @@ test('every character the structural PDF layouts print has a glyph in the report
   for (const lang of ['he', 'en'] as const) {
     const x = exportContext(lang);
     const blocks = [...buildProjectStructuralPdfLayout(buildProjectStructural([a, b]), x, [a, b]), ...buildStructuralPdfLayout(buildStructuralReport(a), x)];
-    const printed = blocks.flatMap((blk) => (blk.type === 'section' ? [blk.title] : blk.type === 'note' ? [blk.text] : [...blk.headers, ...blk.rows.flatMap((r) => r.cells)]));
+    const printed = blocks.flatMap((blk) => (blk.type === 'section' ? [blk.title] : blk.type === 'note' ? [blk.text] : blk.type === 'shape' ? [blk.card.title, ...blk.card.details] : [...blk.headers, ...blk.rows.flatMap((r) => r.cells)]));
     for (const text of printed) for (const ch of text) assert.ok(covered(ch), `U+${ch.codePointAt(0)!.toString(16)} (${ch}) in "${text}" [${lang}]`);
   }
 });

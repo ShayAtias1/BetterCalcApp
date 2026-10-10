@@ -31,7 +31,9 @@ export type IconName =
   | 'map'
   | 'layers'
   | 'settings'
+  | 'globe'
   | 'copy'
+  | 'edit'
   | 'trash'
   | 'plus'
   | 'check'
@@ -63,6 +65,7 @@ export type IconName =
 
 /** Path data only — every icon shares the same stroke setup below. */
 const PATHS: Record<IconName, string> = {
+  edit: 'M15 4l5 5M4 20l5-1L20 8a2 2 0 00-5-5L4 14z',
   select: 'M5 3l6.5 16 2.2-6.3L20 10.5z',
   pan: 'M9 11V5.5a1.5 1.5 0 013 0V11m0-1.5a1.5 1.5 0 013 0V12m0-1a1.5 1.5 0 013 0v4a5 5 0 01-5 5h-2a5 5 0 01-4.2-2.3L6 14.5a1.6 1.6 0 012.6-1.8L9 13.5V5.5',
   ruler: 'M3.5 14.5l11-11 5 5-11 11zM7 11l2 2M10 8l2 2M13 5l2 2',
@@ -92,6 +95,7 @@ const PATHS: Record<IconName, string> = {
   link: 'M10 13.5a3.5 3.5 0 005 0l3-3a3.54 3.54 0 00-5-5l-1 1M14 10.5a3.5 3.5 0 00-5 0l-3 3a3.54 3.54 0 005 5l1-1',
   layers: 'M12 2.8l9 4.7-9 4.7-9-4.7zM3 12.5l9 4.7 9-4.7M3 17l9 4.7 9-4.7',
   settings: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 4.5v5M8 14.5v5',
+  globe: 'M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3a18 18 0 010 18 18 18 0 010-18z',
   copy: 'M8.5 8.5h11v11h-11zM5.5 15.5h-1v-11h11v1',
   trash: 'M4.5 6.5h15M9.5 6.5V4h5v2.5M6.5 6.5l1 13h9l1-13M10 10v6M14 10v6',
   plus: 'M12 5v14M5 12h14',

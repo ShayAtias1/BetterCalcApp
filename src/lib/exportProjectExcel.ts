@@ -1,3 +1,5 @@
+import { buildOpeningQuantityReport } from './openingQuantityReport';
+import { addOpeningQuantitySheets } from './exportOpeningExcel';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import type { Plan, Project, ReportCategory } from '../types';
@@ -269,6 +271,8 @@ export function buildProjectWorkbook(project: Project, plans: Plan[], language: 
     addSummarySheet(summary, project, q, totalCell, x);
     addRoomsSheet(workbook, q, categories, x);
     addWorkItemsSheet(workbook, plans, x);
+    addOpeningQuantitySheets(workbook, plans, x);
+    if(plans.some(plan=>buildOpeningQuantityReport(plan).incomplete)) summary.addRow([t('openingQuantities.partialNote')]);
   }
 
   // Concrete and rebar sheets, after every existing one and only when selected and some plan has such items.

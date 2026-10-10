@@ -1,3 +1,5 @@
+import { PLAN_FILE_ACCEPT, planFileKind, PlanImportError } from '../lib/planFileImport';
+import { promptDialog, confirmDialog } from '../lib/appDialogs';
 import { ProjectConcreteTable, ProjectRebarTable } from './ProjectStructuralTables';
 import { buildProjectStructural } from '../lib/structuralQuantities';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
@@ -14,6 +16,8 @@ import { everything, hasAnyContent, type ExportContent } from '../lib/exportCont
 import { BrandHomeLink } from './BrandLogo';
 import NewComparisonDialog from './compare/NewComparisonDialog';
 import LanguageSwitch from './LanguageSwitch';
+import TopBarMenu, { type MenuId } from './TopBarMenu';
+import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import type { Comparison } from '../types/compare';
 
 /** What a comparison row says: which flat, how many revised plans, when it was last touched. */
@@ -51,6 +55,8 @@ function primaryOrder(a: CategoryAmount, t: TranslateFn): string {
  */
 export default function ProjectOverview() {
   const t = useT();
+  const { layout } = useWorkspaceLayout();
+  const [headerMenu, setHeaderMenu] = useState<MenuId | null>(null);
   const project = useAppStore((s) => s.currentProject);
   const plans = useAppStore((s) => s.projectPlans);
   const closeProject = useAppStore((s) => s.closeProject);
@@ -86,7 +92,7 @@ export default function ProjectOverview() {
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   // The project export asks what to include: Finishes, Concrete, Rebar (no plan drawings here).
-  const [exportDialog, setExportDialog] = useState<{ kind: 'excel' | 'pdf'; content: ExportContent } | null>(null);
+  const [exportDialog, setExportDialog] = useState<{ kind: 'excel' | 'pdf'; content: ExportContent; includeOpeningDetails?: boolean } | null>(null);
   const exportAvailable: ExportContent = {
     plan: false,
     // Finishes is offered whenever there are rooms - and for a project with nothing at all, so the old empty report still exports.
@@ -126,31 +132,31 @@ export default function ProjectOverview() {
     }
   };
 
-  const onRename = (planId: string, current: string) => {
-    const next = window.prompt(t('projectOverview.renamePlanPrompt'), current);
+  const onRename = async (planId: string, current: string) => {
+    const next = await promptDialog(t('projectOverview.renamePlanPrompt'), current);
     if (next && next.trim() && next.trim() !== current) void renamePlan(planId, next.trim());
   };
 
-  const onDelete = (planId: string, name: string) => {
-    if (!confirm(t('projectOverview.deletePlanConfirm', { name }))) return;
+  const onDelete = async (planId: string, name: string) => {
+    if (!await confirmDialog(t('projectOverview.deletePlanConfirm', { name }), { destructive: true })) return;
     void deletePlan(planId);
   };
 
-  const onRenameComparison = (comparisonId: string, current: string) => {
-    const next = window.prompt(t('projectOverview.renameComparisonPrompt'), current);
+  const onRenameComparison = async (comparisonId: string, current: string) => {
+    const next = await promptDialog(t('projectOverview.renameComparisonPrompt'), current);
     if (next && next.trim() && next.trim() !== current) void renameComparison(comparisonId, next.trim());
   };
 
-  const onDeleteComparison = (comparisonId: string, name: string) => {
-    if (!confirm(t('projectOverview.deleteComparisonConfirm', { name }))) return;
+  const onDeleteComparison = async (comparisonId: string, name: string) => {
+    if (!await confirmDialog(t('projectOverview.deleteComparisonConfirm', { name }), { destructive: true })) return;
     void deleteComparison(comparisonId);
   };
 
   return (
-    <div className="workspace home">
+    <div className="workspace home project-overview-workspace">
       <div className="top-bar">
         <div className="top-bar-group identity">
-          <BrandHomeLink title={t('topBar.goHome')} />
+          <BrandHomeLink title={t('topBar.goHome')} responsive />
           {/* "Projects" sits right next to the logo (the reading start in either direction). */}
           <button className="btn-ghost small" onClick={() => void closeProject()} title={t('projectOverview.backToProjects')}>
             <Icon name="exit" />
@@ -161,12 +167,15 @@ export default function ProjectOverview() {
             dir="auto"
             value={project.name}
             onChange={(e) => renameProject(e.target.value)}
-            title={t('projectOverview.projectName')}
+            title={project.name}
+            aria-label={t('projectOverview.projectName')}
           />
         </div>
         <div className="top-bar-group grow" />
         <div className="top-bar-group output">
-          <LanguageSwitch />
+          {layout === 'expanded' ? <LanguageSwitch /> : <TopBarMenu id="settings" openId={headerMenu} setOpenId={setHeaderMenu} icon="globe" label={t('app.language')} title={t('app.language')} variant="ghost">
+            <LanguageSwitch labeled />
+          </TopBarMenu>}
         </div>
       </div>
 
@@ -202,9 +211,9 @@ export default function ProjectOverview() {
                   <p className="muted">{t('projectOverview.takeoffIntro')}</p>
                 </div>
                 {/* The project exports cover the quantity plans only, so they live in this panel. */}
-                <div className="panel-head-actions">
+                <div className="panel-head-actions project-plan-actions">
                   <button
-                    className="btn-secondary"
+                    className="btn-secondary project-export-excel"
                     disabled={!!busy || plans.length === 0}
                     onClick={() => setExportDialog({ kind: 'excel', content: everything(exportAvailable) })}
                     title={t('projectOverview.excelHint')}
@@ -213,7 +222,7 @@ export default function ProjectOverview() {
                     {busy === 'excel' ? t('common.exporting') : t('projectOverview.excel')}
                   </button>
                   <button
-                    className="btn-secondary"
+                    className="btn-secondary project-export-pdf"
                     disabled={!!busy || plans.length === 0}
                     onClick={() => setExportDialog({ kind: 'pdf', content: everything(exportAvailable) })}
                     title={t('projectOverview.pdfHint')}
@@ -221,7 +230,7 @@ export default function ProjectOverview() {
                     <Icon name="download" />
                     {busy === 'pdf' ? t('common.exporting') : t('projectOverview.pdf')}
                   </button>
-                  <button className="btn-primary" onClick={() => setAdding(true)} disabled={!!busy}>
+                  <button className="btn-primary project-new-plan" onClick={() => setAdding(true)} disabled={!!busy}>
                     <Icon name="plus" />
                     {t('projectOverview.newPlan')}
                   </button>
@@ -239,13 +248,16 @@ export default function ProjectOverview() {
                     <li key={r.plan.id} onClick={() => void openPlan(r.plan.id)} title={t('projectOverview.openPlan')}>
                       <Icon name="map" />
                       <span className="saved-list-text">
-                        <span className="saved-list-name" dir="auto">{r.plan.name}</span>
+                        <span className="saved-list-name" dir="auto" title={r.plan.name}>{r.plan.name}</span>
                         <span className="saved-list-meta">
                           {r.calibratedPageCount > 0
                             ? t('projectOverview.planMeta', { rooms: r.roomCount, pages: r.calibratedPageCount })
                             : t('projectOverview.planMetaUncalibrated', { rooms: r.roomCount })}
                         </span>
                       </span>
+                      {layout !== 'expanded' && <button className="icon-btn plan-open-action" title={t('projectOverview.openPlan')} aria-label={t('projectOverview.openPlan')}
+                        onClick={(event) => { event.stopPropagation(); void openPlan(r.plan.id); }}><Icon name="chevron-next" /></button>}
+                      <span className="plan-card-action-row">
                       <span className={`plan-status plan-status-${r.status}`}>{planStatusLabel(r.status)}</span>
                       <span className="list-item-actions" onClick={(e) => e.stopPropagation()}>
                         <button className="icon-btn" title={t('projectOverview.rename')} onClick={() => onRename(r.plan.id, r.plan.name)}>
@@ -262,6 +274,7 @@ export default function ProjectOverview() {
                         <button className="icon-btn danger" title={t('projectOverview.deletePlan')} onClick={() => onDelete(r.plan.id, r.plan.name)}>
                           <Icon name="trash" />
                         </button>
+                      </span>
                       </span>
                     </li>
                   ))}
@@ -292,7 +305,7 @@ export default function ProjectOverview() {
                     <li key={c.id} onClick={() => void openComparison(c.id)} title={t('projectOverview.openComparison')}>
                       <Icon name="layers" />
                       <span className="saved-list-text">
-                        <span className="saved-list-name" dir="auto">{c.name}</span>
+                        <span className="saved-list-name" dir="auto" title={c.name}>{c.name}</span>
                         <span className="saved-list-meta">{comparisonMeta(c, t)}</span>
                       </span>
                       {/* TODO: "Move to Project" for comparisons — reassign `projectId` and move the id between the
@@ -370,6 +383,7 @@ export default function ProjectOverview() {
                   </tbody>
                 </table>
               )}
+              {quantities.openingTotalsIncomplete && <div className="warning-box">{t('openingQuantities.partialNote')}</div>}
               {quantities.uncalibratedRoomCount > 0 && (
                 <div className="warning-box">
                   {t('projectOverview.uncalibratedRooms', { count: quantities.uncalibratedRoomCount })}
@@ -396,6 +410,7 @@ export default function ProjectOverview() {
               available={exportAvailable}
               onChange={(content) => setExportDialog({ ...exportDialog, content })}
             />
+            {exportDialog.kind === 'pdf' && exportDialog.content.finishes && <label className="opening-review-check"><input type="checkbox" checked={exportDialog.includeOpeningDetails??false} onChange={e=>setExportDialog({...exportDialog,includeOpeningDetails:e.target.checked})}/>{t('openingQuantities.includeDetails')}</label>}
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setExportDialog(null)}>
                 {t('common.cancel')}
@@ -404,12 +419,12 @@ export default function ProjectOverview() {
                 className="btn-primary"
                 disabled={!hasAnyContent(exportDialog.content)}
                 onClick={() => {
-                  const { kind, content } = exportDialog;
+                  const { kind, content, includeOpeningDetails = false } = exportDialog;
                   setExportDialog(null);
                   void run(kind, () =>
                     kind === 'excel'
                       ? runProjectExport('project_excel', () => exportProjectToExcel(project, plans, content, language))
-                      : runProjectExport('project_pdf', () => exportProjectToPdf(project, plans, content, language))
+                      : runProjectExport('project_pdf', () => exportProjectToPdf(project, plans, content, language, {includeOpeningDetails}))
                   );
                 }}
               >
@@ -429,21 +444,36 @@ function AddPlanDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (file: 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState('');
+  const importLock = useRef(false);
 
   const pick = (f: File | null | undefined) => {
     if (!f) return;
-    if (!(f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'))) {
-      alert(t('projectOverview.addPlan.notPdf'));
+    if (!planFileKind(f)) {
+      setError(t('projectOverview.addPlan.notPdf'));
       return;
     }
+    setError('');
     setFile(f);
-    if (!name.trim()) setName(f.name.replace(/\.pdf$/i, ''));
+    if (!name.trim()) setName(f.name.replace(/\.(pdf|png|jpe?g)$/i, ''));
   };
 
   const confirm = async () => {
-    if (!file) return;
-    onClose();
-    await onAdd(file, name.trim() || t('projectOverview.addPlan.defaultName'));
+    if (!file || importLock.current) return;
+    importLock.current = true;
+    setImporting(true);
+    setError('');
+    try {
+      await onAdd(file, name.trim() || t('projectOverview.addPlan.defaultName'));
+      onClose();
+    } catch (err) {
+      const code = err instanceof PlanImportError ? err.code : 'importFailed';
+      setError(t(`projectOverview.addPlan.${code}`));
+    } finally {
+      importLock.current = false;
+      setImporting(false);
+    }
   };
 
   return (
@@ -452,14 +482,15 @@ function AddPlanDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (file: 
         <h3>{t('projectOverview.addPlan.title')}</h3>
         <div className="form-row">
           <label>{t('projectOverview.addPlan.fileLabel')}</label>
-          <button className="btn-secondary file-pick" onClick={() => fileInputRef.current?.click()}>
+          <button className="btn-secondary file-pick" disabled={importing} onClick={() => fileInputRef.current?.click()}>
             <Icon name={file ? 'check' : 'file'} />
             {file ? file.name : t('projectOverview.addPlan.pickPdf')}
           </button>
           <input
             ref={fileInputRef}
             type="file"
-            accept="application/pdf,.pdf"
+            accept={PLAN_FILE_ACCEPT}
+            disabled={importing}
             hidden
             onChange={(e) => {
               pick(e.target.files?.[0]);
@@ -469,14 +500,15 @@ function AddPlanDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (file: 
         </div>
         <div className="form-row">
           <label>{t('projectOverview.addPlan.nameLabel')}</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('projectOverview.addPlan.namePlaceholder')} />
+          <input disabled={importing} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('projectOverview.addPlan.namePlaceholder')} />
         </div>
+        {error && <p role="alert" className="form-hint">{error}</p>}
         <div className="modal-actions">
-          <button className="btn-secondary" onClick={onClose}>
+          <button className="btn-secondary" disabled={importing} onClick={onClose}>
             {t('common.cancel')}
           </button>
-          <button className="btn-primary" onClick={() => void confirm()} disabled={!file}>
-            {t('projectOverview.addPlan.add')}
+          <button className="btn-primary" onClick={() => void confirm()} disabled={!file || importing}>
+            {t(importing ? 'projectOverview.addPlan.importing' : 'projectOverview.addPlan.add')}
           </button>
         </div>
       </div>

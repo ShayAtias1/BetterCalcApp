@@ -1,9 +1,13 @@
+import { confirmDialog } from '../lib/appDialogs';
+import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
+import { useState } from 'react';
+import ReviewFields from './ReviewFields';
 import { formatNumber, useT } from '../i18n';
 import { useAppStore } from '../store/appStore';
 import type { Calibration } from '../types';
-import type { BarSpec, MeshReinforcement, RebarBars, RebarItem, RebarLayerDirection, RebarLevel, RebarMesh } from '../types/structural';
-import { REBAR_DIAMETERS_MM, calculateRebar, type RebarCalc } from '../lib/rebar';
-import { calculateMeshSheets, type MeshSheetsResult } from '../lib/meshSheets';
+import type { BarSpec, MeshReinforcement, RebarBars, RebarItem, RebarLayerDirection, RebarLevel, RebarMesh, RebarStirrup } from '../types/structural';
+import { REBAR_DIAMETERS_MM, calculateRebar, resolveStraightBars, type RebarCalc } from '../lib/rebar';
+import { resolveMeshProcurement, type MeshProcurementResult } from '../lib/meshSheets';
 import { levelChoice, meshLevels, specNotation, withDirection, withMode, withoutDirection, withoutExtra, withSpec } from '../lib/rebarMesh';
 import type { MeshLevelChoice } from '../lib/structuralMutations';
 import { cmToMeters, metersToCm } from '../lib/structuralUnits';
@@ -13,8 +17,14 @@ import { zoneGeometry } from '../lib/zoneGeometry';
 import { round } from '../lib/geometry';
 import { REBAR_COLOR } from './RebarZones';
 import ExistingAreaPicker from './ExistingAreaPicker';
+import { MeshLayoutControl } from './MeshLayoutPreview';
 import NumberField from './NumberField';
 import Icon from './Icon';
+import StirrupShapeBuilder from './StirrupShapeBuilder';
+import StirrupPlacements from './StirrupPlacements';
+import { resolveStirrupItem } from '../lib/stirrup';
+import { prepareStirrupShape } from '../lib/stirrupShape';
+import { drawnBarLength } from '../lib/straightBarsGeometry';
 
 type T = ReturnType<typeof useT>;
 
@@ -34,14 +44,17 @@ function meshNotation(mesh: RebarMesh, t: T): string {
 }
 
 /** What a list row says about an item: its notation (mesh) or its bars (manual). Notation is never translated. */
-function itemSummary(item: RebarItem, t: T): string {
+function itemSummary(item: RebarItem, t: T, resolved?: ReturnType<typeof resolveStraightBars>): string {
   if (item.kind === 'mesh') return meshNotation(item, t) || t('rebar.mesh');
+  if (item.kind === 'stirrup') return `Ø${item.diameterMm} · ${t(`rebar.stirrup.templates.${item.shape.template}`)}`;
   const parts = [item.diameterMm > 0 ? `Ø${item.diameterMm}` : t('rebar.bars')];
-  if (item.count > 0 && item.lengthM > 0) parts.push(`${item.count} × ${formatNumber(item.lengthM)}`);
+  if (resolved?.count !== null && resolved?.count !== undefined) parts.push(t('rebar.spatial.count', { count: resolved.count }));
+  if (resolved?.effectiveLengthM != null) parts.push(`${formatNumber(round(resolved.effectiveLengthM, 2))} ${t('units.m')}`);
   return parts.join(' · ');
 }
 
-export default function RebarPanel() {
+export default function RebarPanel({ readOnly = false }: { readOnly?: boolean }) {
+  const [filter, setFilter] = useState<'all' | 'mesh' | 'bars' | 'stirrup'>('all');
   const t = useT();
   const project = useAppStore((s) => s.project);
   const currentPage = useAppStore((s) => s.currentPage);
@@ -51,8 +64,12 @@ export default function RebarPanel() {
   const selectedId = useAppStore((s) => s.selectedRebarId);
   const setSelectedId = useAppStore((s) => s.setSelectedRebarId);
   const addBars = useAppStore((s) => s.addRebarBars);
+  const addStirrup = useAppStore((s) => s.addRebarStirrup);
   const copyRoomsToRebar = useAppStore((s) => s.copyRoomsToRebar);
   const deleteItem = useAppStore((s) => s.deleteRebarItem);
+  const duplicateMesh = useAppStore((s) => s.duplicateRebarMesh);
+  const duplicateBars = useAppStore((s) => s.duplicateStraightBars);
+  const duplicateStirrup = useAppStore((s) => s.duplicateStirrupItem);
 
   if (!project) return null;
   const items = rebarOf(project);
@@ -71,36 +88,40 @@ export default function RebarPanel() {
           <span className="color-dot" style={{ background: REBAR_COLOR }} />
           <span className="detail-header-text">
             <span className="detail-title" dir="auto">{markLabel(selected, t)}</span>
-            <span className="detail-subtitle">{t(selected.kind === 'mesh' ? 'rebar.meshZone' : 'rebar.manualBars')}</span>
+            <span className="detail-subtitle">{t(selected.kind === 'mesh' ? 'rebar.meshZone' : selected.kind === 'stirrup' ? 'rebar.stirrupName' : selected.kind === 'bars' && selected.barsZone ? 'rebar.bars' : selected.kind === 'bars' && selected.drawnBars !== undefined ? 'rebar.spatial.individual' : 'rebar.manualBars')}</span>
           </span>
+          {!readOnly && <><button className="icon-btn" title={t(selected.kind === 'mesh' ? 'rebar.duplicate' : selected.kind === 'stirrup' ? 'rebar.stirrup.duplicateItem' : 'rebar.spatial.duplicateItem')} aria-label={t(selected.kind === 'mesh' ? 'rebar.duplicate' : selected.kind === 'stirrup' ? 'rebar.stirrup.duplicateItem' : 'rebar.spatial.duplicateItem')} onClick={() => selected.kind === 'mesh' ? duplicateMesh(selected.id) : selected.kind === 'stirrup' ? duplicateStirrup(selected.id) : duplicateBars(selected.id)}>
+            <Icon name="copy" />
+          </button>
           <button
             className="icon-btn danger"
             title={t('rebar.delete')}
-            onClick={() => {
-              if (confirm(t('rebar.deleteConfirm', { mark: markLabel(selected, t) }))) deleteItem(selected.id);
+            onClick={async () => {
+              if (await confirmDialog(t('rebar.deleteConfirm', { mark: markLabel(selected, t) }), { destructive: true })) deleteItem(selected.id);
             }}
           >
             <Icon name="trash" />
           </button>
-        </div>
-        {selected.kind === 'mesh' ? (
+        </>}</div>
+        <ReviewFields readOnly={readOnly}>{selected.kind === 'mesh' ? (
           <MeshDetail key={selected.id} mesh={selected} calibration={project.pages[selected.pageNumber]?.calibration ?? null} />
-        ) : (
+        ) : selected.kind === 'stirrup' ? <StirrupDetail key={selected.id} item={selected} /> : (
           <BarsDetail key={selected.id} bars={selected} />
-        )}
+        )}</ReviewFields>
       </div>
     );
   }
 
   const toggleTool = (mode: 'draw' | 'draw-rect') => setToolMode(toolMode === mode ? 'select' : mode);
   const select = (item: RebarItem) => {
-    if (item.kind === 'mesh') setCurrentPage(item.pageNumber);
+    setCurrentPage(item.pageNumber);
     setSelectedId(item.id);
   };
 
   return (
     <div className="room-panel">
-      <div className="room-create-row">
+      <div hidden={readOnly}>
+      <div className="room-create-row rebar-create-controls">
         <button className={`btn-primary ${toolMode === 'draw' ? 'active' : ''}`} onClick={() => toggleTool('draw')} title={t('rebar.drawHint')}>
           {t('rebar.draw')}
         </button>
@@ -112,21 +133,23 @@ export default function RebarPanel() {
             <Icon name="rectangle" />
           </button>
         </div>
-      </div>
-
-      <div className="rebar-entry-row">
         <ExistingAreaPicker
           copy={copyRoomsToRebar}
           willCreate={(count) => t('rebar.copy.willCreate', { count })}
           addLabel={t('rebar.copy.add')}
           doneLabel={(count) => t('rebar.copy.done', { count })}
         />
-        <button className="btn-ghost small" onClick={() => addBars()} title={t('rebar.addBarsHint')}>
+        <button className="btn-secondary structural-entry-action" onClick={() => addBars()} title={t('rebar.addBarsHint')}>
           <Icon name="plus" size={13} />
           {t('rebar.addBars')}
         </button>
+        <button className="btn-secondary structural-entry-action" onClick={() => addStirrup()}><Icon name="plus" size={13} />{t('rebar.stirrup.addItem')}</button>
       </div>
 
+      </div>
+      {readOnly && <label className="adaptive-domain-picker">{t('workspace.tabs.rebar')}<select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
+        <option value="all">{t('adaptive.allRebar')}</option><option value="mesh">{t('adaptive.mesh')}</option><option value="bars">{t('adaptive.bars')}</option><option value="stirrup">{t('adaptive.stirrups')}</option>
+      </select></label>}
       <div className="room-list">
         <span className="section-label">{t('rebar.items', { count: items.length })}</span>
         {items.length === 0 && (
@@ -136,14 +159,15 @@ export default function RebarPanel() {
           </div>
         )}
         <ul>
-          {items.map((item) => {
-            const calc = calculateRebar(item, project.pages[item.pageNumber]?.calibration ?? null);
+          {items.filter((item) => filter === 'all' || item.kind === filter).map((item) => {
+            const calc = calculateRebar(item, project.pages[item.pageNumber]?.calibration ?? null, project.pages);
             return (
               <li key={item.id} onClick={() => select(item)}>
                 <span className="color-dot" style={{ background: REBAR_COLOR }} />
                 <span className="room-list-name" dir="auto">
-                  {markLabel(item, t)} · <span dir="ltr">{itemSummary(item, t)}</span>
+                  {markLabel(item, t)} · <span dir="ltr">{itemSummary(item, t, item.kind === 'bars' ? resolveStraightBars(item, project.pages[item.pageNumber]?.calibration ?? null, project.pages) : undefined)}</span>
                 </span>
+                {item.kind === 'stirrup' && <StirrupShapeThumbnail item={item} />}
                 {item.pageNumber !== currentPage && <span className="room-list-page">{t('concrete.page', { page: item.pageNumber })}</span>}
                 <span className="room-list-apt">{calc.weightKg === null ? '-' : `${calc.estimated ? '≈ ' : ''}${kg(calc.weightKg, t)}`}</span>
               </li>
@@ -153,6 +177,30 @@ export default function RebarPanel() {
       </div>
     </div>
   );
+}
+
+/** Fit the shared saved-shape vectors into a centred, proportional list thumbnail. */
+function StirrupShapeThumbnail({ item }: { item: RebarStirrup }) {
+  const t = useT();
+  const model = prepareStirrupShape(item.shape);
+  const xs = model.points.map((point) => point.x);
+  const ys = model.points.map((point) => point.y);
+  const minX = xs.length ? Math.min(...xs) : 0;
+  const maxX = xs.length ? Math.max(...xs) : 0;
+  const minY = ys.length ? Math.min(...ys) : 0;
+  const maxY = ys.length ? Math.max(...ys) : 0;
+  const side = Math.max(maxX - minX, maxY - minY, 1) + 16;
+  const left = (minX + maxX - side) / 2;
+  const top = (minY + maxY - side) / 2;
+  return <svg width="36" height="36" viewBox={`${left} ${top} ${side} ${side}`}
+    preserveAspectRatio="xMidYMid meet" direction="ltr" role="img"
+    aria-label={`${markLabel(item, t)} · ${t('rebar.stirrup.shape')}`}
+    style={{ flexShrink: 0, display: 'block' }}>
+    {model.segments.map((segment) => <line key={segment.index}
+      x1={segment.normalizedStart.x} y1={segment.normalizedStart.y}
+      x2={segment.normalizedEnd.x} y2={segment.normalizedEnd.y}
+      stroke={REBAR_COLOR} strokeWidth="3" strokeLinecap="round" />)}
+  </svg>;
 }
 
 // ---------- shared pieces ----------
@@ -171,7 +219,7 @@ function DiameterSelect({ value, onChange }: { value: number; onChange: (mm: num
   );
 }
 
-function Results({ calc, showLength }: { calc: RebarCalc; showLength: boolean }) {
+function Results({ calc, showLength, purchaseWeight }: { calc: RebarCalc; showLength: boolean; purchaseWeight?: number | null }) {
   const t = useT();
   const ok = calc.status === 'ok';
   const na = t('concrete.notCalculable');
@@ -183,12 +231,12 @@ function Results({ calc, showLength }: { calc: RebarCalc; showLength: boolean })
           <span className={`metric-value ${ok ? '' : 'cal-missing'}`}>{ok ? `${calc.estimated ? '≈ ' : ''}${metres(calc.totalLengthM!, t)}` : na}</span>
         </div>}
         <div>
-          <span className="metric-label">{t(showLength ? 'rebar.totalWeight' : 'quantitiesPanel.cols.netWeight')}</span>
+          <span className="metric-label">{t(showLength ? 'rebar.totalWeight' : 'rebar.requiredWeight')}</span>
           <span className={`metric-value ${ok ? '' : 'cal-missing'}`}>{ok ? `${calc.estimated ? '≈ ' : ''}${kg(calc.weightKg!, t)}` : na}</span>
         </div>
         <div>
-          <span className="metric-label">{t('rebar.order')}</span>
-          <span className={`metric-value ${ok ? '' : 'cal-missing'}`}>{ok ? `${calc.estimated ? '≈ ' : ''}${kg(calc.orderWeightKg!, t)}` : na}</span>
+          <span className="metric-label">{t(showLength ? 'rebar.order' : 'rebar.purchaseWeight')}</span>
+          <span className={`metric-value ${(showLength ? ok : purchaseWeight !== null && purchaseWeight !== undefined) ? '' : 'cal-missing'}`}>{showLength ? (ok ? kg(calc.orderWeightKg!, t) : na) : purchaseWeight == null ? '-' : kg(purchaseWeight, t)}</span>
         </div>
       </div>
       {ok && showLength && (
@@ -327,7 +375,7 @@ function LevelSection({
 // ---------- mesh sheets (procurement) ----------
 
 /** Sheet size and overlap, and how many physical sheets the zone needs — secondary to the reinforcement above it. */
-function MeshSheets({ mesh, result }: { mesh: RebarMesh; result: MeshSheetsResult }) {
+function MeshSheets({ mesh, result }: { mesh: RebarMesh; result: MeshProcurementResult }) {
   const t = useT();
   const updateItem = useAppStore((s) => s.updateRebarItem);
   const { settings } = result;
@@ -340,7 +388,7 @@ function MeshSheets({ mesh, result }: { mesh: RebarMesh; result: MeshSheetsResul
         {result.levels.length > 1 ? (
           <>
             {result.levels.map((l) => (
-              <p className="rebar-sheets-line" key={l.level}>{`${t(l.level === 'bottom' ? 'rebar.levelBottom' : 'rebar.levelTop')}: ${t('quantitiesPanel.sheetsQty', { count: l.sheets })}`}</p>
+              <p className="rebar-sheets-line" key={l.level}>{`${t(l.level === 'bottom' ? 'rebar.levelBottom' : 'rebar.levelTop')}: ${t('quantitiesPanel.sheetsQty', { count: l.sheets! })}`}</p>
             ))}
             <div className="rebar-sheets-count">{`${t('rebar.sheets.total')}: ${t('quantitiesPanel.sheetsQty', { count: result.totalSheets! })}`}</div>
           </>
@@ -392,7 +440,7 @@ function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calib
   const setReinforcement = useAppStore((s) => s.setRebarMeshReinforcement);
   const copyBottomToTop = useAppStore((s) => s.copyRebarBottomToTop);
   const calc = calculateRebar(mesh, calibration);
-  const sheets = calculateMeshSheets(mesh, calibration);
+  const sheets = resolveMeshProcurement(mesh, calibration);
   const message = statusMessage(calc, t);
   const manual = !!mesh.sizeOverride;
   const choice = levelChoice(mesh);
@@ -413,7 +461,8 @@ function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calib
     <div className="room-detail">
       {message && <div className="warning-box">{message}</div>}
       <MeshSheets mesh={mesh} result={sheets} />
-      <Results calc={calc} showLength={false} />
+      <Results calc={calc} showLength={false} purchaseWeight={sheets.procurementWeightKg} />
+      {plan && <MeshLayoutControl planId={plan.id} mesh={mesh} calibration={calibration} />}
 
       <div className="form-grid">
         <div className="form-row">
@@ -478,16 +527,83 @@ function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calib
 // ---------- manual bars ----------
 
 function BarsDetail({ bars }: { bars: RebarBars }) {
+  const { touchInput } = useWorkspaceLayout();
   const t = useT();
   const updateItem = useAppStore((s) => s.updateRebarItem);
   const plan = useAppStore((s) => s.project);
   const siblings = plan ? rebarOf(plan) : [];
-  const calc = calculateRebar(bars, null);
+  const startZone = useAppStore((s) => s.startBarsZone);
+  const removeZone = useAppStore((s) => s.removeBarsZone);
+  const startLine = useAppStore((s) => s.startDrawingBar);
+  const individualMode = useAppStore((s) => s.setBarsIndividualMode);
+  const removeLayout = useAppStore((s) => s.removeDrawnBarsLayout);
+  const barsDrawing = useAppStore((s) => s.barsDrawing);
+  const toolMode = useAppStore((s) => s.toolMode);
+  const setToolMode = useAppStore((s) => s.setToolMode);
+  const selectedBarId = useAppStore((s) => s.selectedDrawnBarId);
+  const selectBar = useAppStore((s) => s.setSelectedDrawnBarId);
+  const resizeBar = useAppStore((s) => s.resizeDrawnBar);
+  const duplicateBar = useAppStore((s) => s.duplicateDrawnBar);
+  const deleteBar = useAppStore((s) => s.deleteDrawnBar);
+  const selectedBar = bars.drawnBars?.find((bar) => bar.id === selectedBarId);
+  const calibration = plan?.pages[bars.pageNumber]?.calibration ?? null;
+  const selectedCalibration = selectedBar ? plan?.pages[selectedBar.pageNumber]?.calibration ?? null : null;
+  const calc = resolveStraightBars(bars, calibration, plan?.pages);
+  const zone = bars.barsZone;
 
   return (
     <div className="room-detail">
-      {calc.status !== 'ok' && <div className="warning-box">{t('rebar.barsInvalid')}</div>}
+      {calc.status !== 'ok' && <div className="warning-box">{statusMessage(calc, t)}</div>}
       <Results calc={calc} showLength />
+      <div className="concrete-kinds" role="group" aria-label={t('rebar.spatial.mode')}>
+        <button className={`btn-ghost small ${bars.drawnBars === undefined ? 'active' : ''}`} aria-pressed={bars.drawnBars === undefined} disabled={bars.drawnBars !== undefined} onClick={() => startZone(bars.id)}>{t('rebar.spatial.area')}</button>
+        <button className={`btn-ghost small ${bars.drawnBars !== undefined ? 'active' : ''}`} disabled={!!zone} onClick={() => individualMode(bars.id)}>{t('rebar.spatial.individual')}</button>
+      </div>
+      {bars.drawnBars !== undefined ? <ReviewFields readOnly={false}>
+        <div className="concrete-kinds">
+          <button className={`btn-ghost small ${barsDrawing === 'line' && toolMode === 'draw' ? 'active' : ''}`}
+            onClick={() => barsDrawing === 'line' && toolMode === 'draw' ? setToolMode('select') : startLine(bars.id)}>
+            {t(barsDrawing === 'line' && toolMode === 'draw' ? 'rebar.spatial.finishDrawing' : 'rebar.spatial.drawBar')}
+          </button>
+          {!touchInput && bars.drawnBars.length > 0 && <button className="btn-ghost small" onClick={() => { selectBar(null); setToolMode('select'); }}>{t('rebar.spatial.moveGroup')}</button>}
+          <button className="btn-ghost small danger" onClick={async () => { if (await confirmDialog(t('rebar.spatial.removeLayoutConfirm'), { destructive: true })) removeLayout(bars.id); }}>{t('rebar.spatial.removeLayout')}</button>
+        </div>
+        {!selectedBar && bars.drawnBars.length > 0 && <p className="muted">{t('rebar.spatial.groupHint')}</p>}
+        <p className="muted">{t('rebar.spatial.count', { count: calc.count ?? '-' })}</p>
+        {selectedBar && <section className="rebar-direction">
+          <div className="rebar-direction-head">
+            <span>{t('rebar.spatial.selectedBar')}</span>
+            <button className="icon-btn" title={t('rebar.spatial.duplicateBar')} aria-label={t('rebar.spatial.duplicateBar')}
+              onClick={() => duplicateBar(bars.id, selectedBar.id)}><Icon name="copy" /></button>
+            <button className="icon-btn danger" title={t('rebar.spatial.deleteBar')} aria-label={t('rebar.spatial.deleteBar')}
+              onClick={() => deleteBar(bars.id, selectedBar.id)}><Icon name="trash" /></button>
+            <button className="btn-ghost small" onClick={() => { selectBar(null); setToolMode('select'); }}>{t('rebar.spatial.doneEditing')}</button>
+          </div>
+          {selectedCalibration ? <div className="form-row">
+            <label>{t('rebar.barLength')} ({t('units.m')})</label>
+            <NumberField value={drawnBarLength(selectedBar, selectedCalibration.metersPerPixel) ?? undefined}
+              onChange={(v) => { if (v) resizeBar(bars.id, selectedBar.id, v); }} />
+          </div> : <p className="muted">{t('concrete.noScale')}</p>}
+        </section>}
+      </ReviewFields> : <div className="concrete-kinds">
+        <button className="btn-ghost small" onClick={() => startZone(bars.id)}>{t(zone ? 'rebar.spatial.changeZone' : 'rebar.spatial.markArea')}</button>
+        {zone && <button className="btn-ghost small danger" onClick={() => removeZone(bars.id)}>{t('rebar.spatial.removeZone')}</button>}
+      </div>}
+      {zone && <>
+        <div className="form-row">
+          <label>{t('rebar.spatial.direction')}</label>
+          <select value={zone.direction} onChange={(e) => updateItem(bars.id, { barsZone: { ...zone, direction: e.target.value as RebarLayerDirection } })}>
+            <option value="long">{t('rebar.spatial.long')}</option>
+            <option value="short">{t('rebar.spatial.short')}</option>
+          </select>
+        </div>
+        <label className="wi-check">
+          <input type="checkbox" checked={zone.lengthMode === 'manual'} onChange={(e) => updateItem(bars.id, { barsZone: { ...zone,
+            lengthMode: e.target.checked ? 'manual' : 'automatic', manualLengthM: e.target.checked ? calc.effectiveLengthM ?? undefined : undefined } })} />
+          {t('rebar.spatial.manualLength')}
+        </label>
+        {zone.lengthMode !== 'manual' && <p className="muted">{t('rebar.spatial.automaticLength')}: {calc.effectiveLengthM === null ? '-' : metres(calc.effectiveLengthM, t)}</p>}
+      </>}
       <div className="form-grid">
         <div className="form-row">
           <label>{t('concrete.mark')}</label>
@@ -497,14 +613,15 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
           <label>{t('rebar.diameter')}</label>
           <DiameterSelect value={bars.diameterMm} onChange={(mm) => updateItem(bars.id, { diameterMm: mm })} />
         </div>
-        <div className="form-row">
+        {bars.drawnBars === undefined && <div className="form-row">
           <label>{t('rebar.barCount')}</label>
           <NumberField value={bars.count || undefined} step="1" onChange={(v) => updateItem(bars.id, { count: v ?? 0 })} />
-        </div>
-        <div className="form-row">
+        </div>}
+        {bars.drawnBars === undefined && (!zone || zone.lengthMode === 'manual') && <div className="form-row">
           <label>{t('rebar.barLength')} ({t('units.m')})</label>
-          <NumberField value={bars.lengthM || undefined} onChange={(v) => updateItem(bars.id, { lengthM: v ?? 0 })} />
-        </div>
+          <NumberField value={(zone ? zone.manualLengthM : bars.lengthM) || undefined} onChange={(v) => updateItem(bars.id,
+            zone ? { barsZone: { ...zone, manualLengthM: v ?? 0 } } : { lengthM: v ?? 0 })} />
+        </div>}
         <div className="form-row">
           <label>{t('concrete.waste')}</label>
           <NumberField value={bars.wastePercent} step="1" onChange={(v) => updateItem(bars.id, { wastePercent: v ?? 0 })} />
@@ -513,4 +630,25 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
       <p className="muted">{t('concrete.page', { page: bars.pageNumber })}</p>
     </div>
   );
+}
+
+function StirrupDetail({ item }: { item: RebarStirrup }) {
+  const t = useT();
+  const plan = useAppStore((s) => s.project);
+  const update = useAppStore((s) => s.updateRebarItem);
+  if (!plan) return null;
+  const resolved = resolveStirrupItem(item, plan.pages);
+  return <div className="room-detail">
+    <div className="form-grid">
+      <div className="form-row"><label>{t('concrete.mark')}</label>
+        <input dir="auto" value={item.mark} placeholder={markLabel(item, t)} onChange={(e) => update(item.id, markPatch(rebarOf(plan), item, e.target.value))} /></div>
+      <div className="form-row"><label>{t('rebar.diameter')}</label><DiameterSelect value={item.diameterMm} onChange={(mm) => update(item.id, { diameterMm: mm })} /></div>
+      <div className="form-row"><label>{t('concrete.waste')}</label><NumberField value={item.wastePercent} step="1" onChange={(v) => update(item.id, { wastePercent: v ?? 0 })} /></div>
+    </div>
+    <StirrupShapeBuilder item={item} />
+    <StirrupPlacements item={item} />
+    <p>{t('rebar.stirrup.quantity')}: {resolved.totalCount ?? '-'}</p>
+    <Results calc={resolved} showLength />
+    {item.placements.length === 0 ? <p className="muted">{t('rebar.stirrup.noPlacements')}</p> : resolved.status !== 'ok' && <p className="cal-missing">{statusMessage(resolved, t)}</p>}
+  </div>;
 }

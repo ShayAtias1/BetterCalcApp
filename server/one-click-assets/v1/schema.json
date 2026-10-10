@@ -1,0 +1,76 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "reason",
+    "space"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "FOUND",
+        "UNCERTAIN"
+      ]
+    },
+    "reason": {
+      "type": "string"
+    },
+    "space": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "polygon",
+            "type",
+            "geometryConfidence",
+            "ambiguities"
+          ],
+          "properties": {
+            "polygon": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "minItems": 3,
+              "maxItems": 256
+            },
+            "type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "geometryConfidence": {
+              "type": "string",
+              "enum": [
+                "LOW",
+                "MEDIUM",
+                "HIGH"
+              ]
+            },
+            "ambiguities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 32
+            }
+          }
+        }
+      ]
+    }
+  }
+}

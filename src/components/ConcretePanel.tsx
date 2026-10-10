@@ -1,3 +1,5 @@
+import { confirmDialog } from '../lib/appDialogs';
+import ReviewFields from './ReviewFields';
 import { useT, formatNumber } from '../i18n';
 import { useAppStore } from '../store/appStore';
 import type { Calibration } from '../types';
@@ -19,7 +21,7 @@ function volumeText(calc: ConcreteCalc, t: ReturnType<typeof useT>, field: 'volu
   return v === null ? t('concrete.notCalculable') : `${formatNumber(round(v, 2))} ${t('units.m3')}`;
 }
 
-export default function ConcretePanel() {
+export default function ConcretePanel({ readOnly = false }: { readOnly?: boolean }) {
   const t = useT();
   const project = useAppStore((s) => s.project);
   const currentPage = useAppStore((s) => s.currentPage);
@@ -32,6 +34,7 @@ export default function ConcretePanel() {
   const setSelectedId = useAppStore((s) => s.setSelectedConcreteId);
   const updateElement = useAppStore((s) => s.updateConcreteElement);
   const deleteElement = useAppStore((s) => s.deleteConcreteElement);
+  const duplicateElement = useAppStore((s) => s.duplicateConcreteElement);
   const changeKind = useAppStore((s) => s.changeConcreteElementKind);
   const copyRoomsToConcrete = useAppStore((s) => s.copyRoomsToConcrete);
 
@@ -54,24 +57,27 @@ export default function ConcretePanel() {
             <span className="detail-title" dir="auto">{markLabel(selected, t)}</span>
             <span className="detail-subtitle">{t(`concrete.kinds.${selected.kind}`)}</span>
           </span>
+          {!readOnly && <><button className="icon-btn" title={t('concrete.duplicate')} aria-label={t('concrete.duplicate')} onClick={() => duplicateElement(selected.id)}>
+            <Icon name="copy" />
+          </button>
           <button
             className="icon-btn danger"
             title={t('concrete.delete')}
-            onClick={() => {
-              if (confirm(t('concrete.deleteConfirm', { mark: markLabel(selected, t) }))) deleteElement(selected.id);
+            onClick={async () => {
+              if (await confirmDialog(t('concrete.deleteConfirm', { mark: markLabel(selected, t) }), { destructive: true })) deleteElement(selected.id);
             }}
           >
             <Icon name="trash" />
           </button>
-        </div>
-        <ConcreteDetail
+        </>}</div>
+        <ReviewFields readOnly={readOnly}><ConcreteDetail
           key={selected.id}
           element={selected}
           siblings={elements}
           calibration={project.pages[selected.pageNumber]?.calibration ?? null}
           onUpdate={(patch) => updateElement(selected.id, patch)}
           onChangeKind={(kind) => changeKind(selected.id, kind)}
-        />
+        /></ReviewFields>
       </div>
     );
   }
@@ -84,6 +90,7 @@ export default function ConcretePanel() {
 
   return (
     <div className="room-panel">
+      <div hidden={readOnly}>
       <div className="concrete-kinds" role="group" aria-label={t('concrete.kindPicker')}>
         {CONCRETE_KINDS.map((kind) => (
           <button
@@ -97,7 +104,7 @@ export default function ConcretePanel() {
         ))}
       </div>
 
-      <div className="room-create-row">
+      <div className="room-create-row concrete-create-controls">
         <button className={`btn-primary ${toolMode === 'draw' ? 'active' : ''}`} onClick={() => toggleTool('draw')} title={t('concrete.drawHint')}>
           {t('concrete.draw')}
         </button>
@@ -119,15 +126,15 @@ export default function ConcretePanel() {
             <Icon name="rectangle" />
           </button>
         </div>
-      </div>
-
       <ExistingAreaPicker
         copy={copyRoomsToConcrete}
         willCreate={(count) => t('concrete.copy.willCreate', { count, kind: t(`concrete.kinds.${concreteKind}`) })}
         addLabel={t('concrete.copy.add')}
         doneLabel={(count) => t('concrete.copy.done', { count })}
       />
+      </div>
 
+      </div>
       <div className="room-list">
         <span className="section-label">{t('concrete.zones', { count: elements.length })}</span>
         {elements.length === 0 && (

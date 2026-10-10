@@ -1,3 +1,4 @@
+import { openingPdfSchedule, openingPdfDeductions, type OpeningPdfOptions } from './openingQuantityReport';
 import { PDFDocument } from 'pdf-lib';
 import { drawLogo, embedReportFonts, logoWidth, PdfPainter, REPORT_LOGO_HEIGHT, type ReportFonts } from './pdfText';
 import { saveAs } from 'file-saver';
@@ -6,8 +7,9 @@ import type { Language } from '../i18n';
 import { exportContext, type ExportContext } from './exportLanguage';
 import { buildProjectQuantities, planStatusLabel, roomCategoryQuantity, type CategoryAmount } from './projectQuantities';
 import { buildProjectStructural, finishesSummaryMode } from './structuralQuantities';
-import { buildProjectStructuralPdfLayout, writeBlocks } from './structuralPdfLayout';
+import { buildProjectStructuralPdfLayout, writeBlocks, type StirrupShapeCard } from './structuralPdfLayout';
 import { type ExportContent } from './exportContent';
+import { placeStirrupPdfDimensions } from './stirrupPdfDimensions';
 
 /*
  * The project quantity report: vector text and table lines throughout (see lib/pdfText — Hebrew is
@@ -71,31 +73,35 @@ export class ReportWriter {
     if (this.y + rows * ROW_H > PAGE_H - MARGIN) this.newPage();
   }
 
-  private drawCells(cells: string[], widths: number[], bg: string, color: string, bold: boolean) {
+  private drawCells(cells: string[], widths: number[], bg: string, color: string, bold: boolean, columnSeparators = false) {
     const usable = PAGE_W - MARGIN * 2;
     this.pt.fillRect(MARGIN, this.y, usable, ROW_H, bg);
     this.pt.strokeRect(MARGIN, this.y, usable, ROW_H, C_BORDER);
     let edge = this.startX;
     cells.forEach((cell, i) => {
       const w = widths[i] ?? 0;
+      if (columnSeparators && i > 0) {
+        // Match the Finishes table's subtle body and header divider treatment.
+        this.pt.line(edge, this.y, edge, this.y + ROW_H, bg === C_HEADER ? '#4B739A' : C_BORDER, 1);
+      }
       this.pt.fillText(cell, edge + (this.sign * w) / 2, this.y + ROW_H / 2 + 4, { size: 12, bold, color, align: 'center', maxWidth: w - 6 });
       edge += this.sign * w;
     });
     this.y += ROW_H;
   }
 
-  section(title: string) {
-    this.ensure(3);
+  section(title: string, minimumRows = 3) {
+    this.ensure(minimumRows);
     this.y += 10;
     this.pt.fillText(title, this.startX, this.y + 16, { size: 15, bold: true, color: '#0f172a' });
     this.y += 26;
   }
 
-  table(headers: string[], weights: number[], rows: TableRow[]) {
+  table(headers: string[], weights: number[], rows: TableRow[], columnSeparators = false) {
     const usable = PAGE_W - MARGIN * 2;
     const total = weights.reduce((a, b) => a + b, 0);
     const widths = weights.map((w) => (usable * w) / total);
-    const header = () => this.drawCells(headers, widths, C_HEADER, '#ffffff', true);
+    const header = () => this.drawCells(headers, widths, C_HEADER, '#ffffff', true, columnSeparators);
     this.ensure(2);
     header();
     rows.forEach((row, i) => {
@@ -103,9 +109,62 @@ export class ReportWriter {
         this.newPage();
         header(); // repeat the header on every page the table continues onto
       }
-      this.drawCells(row.cells, widths, row.bg ?? (i % 2 === 0 ? C_ZEBRA_A : C_ZEBRA_B), '#1e293b', !!row.bold);
+      this.drawCells(row.cells, widths, row.bg ?? (i % 2 === 0 ? C_ZEBRA_A : C_ZEBRA_B), '#1e293b', !!row.bold, columnSeparators);
     });
     this.y += ROW_H * 0.5;
+  }
+
+  shapeCard(card: StirrupShapeCard) {
+    const height = Math.max(108, 44 + (Math.ceil(card.details.length / 2) - 1) * 22 + 32);
+    // Keep the compact card with the following placement header and first row.
+    this.ensure((height + 4 + ROW_H * 2) / ROW_H);
+    const top = this.y;
+    const width = Math.min(PAGE_W - MARGIN * 2, 780);
+    const left = this.x.rtl ? PAGE_W - MARGIN - width : MARGIN;
+    const diagramX = this.x.rtl ? left + width - 112 : left + 8;
+    this.pt.strokeRect(left, top, width, height, C_BORDER);
+    const points = card.shape.points;
+    const minX = points.length ? Math.min(...points.map((point) => point.x)) : 0;
+    const maxX = points.length ? Math.max(...points.map((point) => point.x)) : 0;
+    const minY = points.length ? Math.min(...points.map((point) => point.y)) : 0;
+    const maxY = points.length ? Math.max(...points.map((point) => point.y)) : 0;
+    const scale = 64 / Math.max(maxX - minX, maxY - minY, 1);
+    // A fixed visual area, centred without ever mirroring the saved geometry in RTL.
+    const screenX = (x: number) => diagramX + 52 + (x - (minX + maxX) / 2) * scale;
+    const screenY = (y: number) => top + (height - 14) / 2 + (y - (minY + maxY) / 2) * scale;
+    for (const segment of card.shape.segments) {
+      this.pt.line(screenX(segment.normalizedStart.x), screenY(segment.normalizedStart.y),
+        screenX(segment.normalizedEnd.x), screenY(segment.normalizedEnd.y), '#c2410c', 1.5);
+    }
+    // Keep the existing annotation density, but separate nearby labels using measured boxes.
+    const dimensions = card.shape.segments.slice(0, 6).map((segment) => ({
+      start: { x: screenX(segment.normalizedStart.x), y: screenY(segment.normalizedStart.y) },
+      end: { x: screenX(segment.normalizedEnd.x), y: screenY(segment.normalizedEnd.y) },
+      text: this.x.number(Math.round(segment.lengthM * 1000) / 10),
+    }));
+    const labels = placeStirrupPdfDimensions(dimensions,
+      { left: diagramX, top: top + 4, width: 104, height: height - 20 },
+      (text) => this.pt.measure(text, 8, false, 'ltr'));
+    for (const label of labels) {
+      if (label.leader) {
+        // Stop at the label edge so the connector never runs through its text.
+        const dx = label.midpoint.x - label.x, dy = label.midpoint.y - label.y;
+        const edge = 1 / Math.max(Math.abs(dx) / (label.width / 2 + 2), Math.abs(dy) / (label.height / 2 + 2));
+        this.pt.line(label.midpoint.x, label.midpoint.y, label.x + dx * edge, label.y + dy * edge, '#a8a29e', 0.5);
+      }
+      this.pt.fillText(label.text, label.x, label.y + 3,
+        { size: 8, direction: 'ltr', align: 'center', color: '#78716c', maxWidth: label.width });
+    }
+    this.pt.fillText(this.x.t('units.cm'), diagramX + 52, top + height - 7,
+      { size: 8, direction: 'ltr', align: 'center', color: '#78716c' });
+    const textWidth = width - 140;
+    const textX = this.x.rtl ? diagramX - 12 : left + 128;
+    this.pt.fillText(card.title, textX, top + 21, { size: 14, bold: true, maxWidth: textWidth });
+    const columnWidth = textWidth / 2;
+    card.details.forEach((detail, index) => this.pt.fillText(detail,
+      textX + this.sign * (index % 2) * columnWidth, top + 44 + Math.floor(index / 2) * 22,
+      { size: 11, maxWidth: columnWidth - 12 }));
+    this.y += height + 4;
   }
 
   note(text: string) {
@@ -127,7 +186,7 @@ const amountHeaders = ({ t }: ExportContext) => {
 };
 const amountCells = (a: CategoryAmount, fmt: (v: number | null | undefined) => string) => [fmt(a.quantityM2), fmt(a.orderM2), fmt(a.lengthM), fmt(a.orderLengthM)];
 
-export async function exportProjectToPdf(project: Project, plans: Plan[], content: ExportContent, language: Language) {
+export async function exportProjectToPdf(project: Project, plans: Plan[], content: ExportContent, language: Language, options: OpeningPdfOptions = {}) {
   const x = exportContext(language);
   const { t } = x;
   const fmt = (v: number | null | undefined) => (v == null ? DASH : x.number(v));
@@ -207,6 +266,15 @@ export async function exportProjectToPdf(project: Project, plans: Plan[], conten
           )
         )
       );
+    }
+  }
+
+  if (content.finishes) {
+    const deductions=openingPdfDeductions(plans,x);
+    const schedule=openingPdfSchedule(plans,x,options);
+    for(const table of [deductions,schedule]){
+      if(!table)continue;
+      report.section(table.title,4);report.table(table.headers,table.widths,table.rows.map(cells=>({cells})));
     }
   }
 

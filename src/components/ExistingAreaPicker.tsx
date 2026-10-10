@@ -52,7 +52,7 @@ export default function ExistingAreaPicker({
 
   if (!open) {
     return (
-      <button className="btn-ghost small concrete-from-rooms-toggle" onClick={() => { setOpen(true); setDone(null); }}>
+      <button className="btn-secondary structural-entry-action concrete-from-rooms-toggle" onClick={() => { setOpen(true); setDone(null); }}>
         <Icon name="copy" size={13} />
         {t('concrete.copy.open')}
       </button>

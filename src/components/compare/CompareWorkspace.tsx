@@ -1,3 +1,8 @@
+import { notify } from '../../lib/appDialogs';
+import { useWorkspaceLayout } from '../../hooks/useWorkspaceLayout';
+import AdaptiveInspector from '../AdaptiveInspector';
+import CompareCompactHeader from './CompareCompactHeader';
+import ViewModeSwitch from './ViewModeSwitch';
 import { useRef, useState } from 'react';
 import CompareTopBar from './CompareTopBar';
 import CompareCanvas, { type CompareCanvasHandle } from './CompareCanvas';
@@ -34,6 +39,9 @@ async function waitFor(check: () => boolean, timeoutMs = 8000): Promise<boolean>
 }
 
 export default function CompareWorkspace() {
+  const { layout, reviewOnly } = useWorkspaceLayout();
+  const review = reviewOnly || layout !== 'expanded';
+  const [panel, setPanel] = useState<'plan' | 'items' | 'quantities'>('plan');
   const t = useT();
   const language = useLanguage();
   const toolMode = useCompareStore((s) => s.toolMode);
@@ -98,11 +106,11 @@ export default function CompareWorkspace() {
       }
 
       if (composites.length === 0) {
-        alert(skipped.length > 0 ? t('compare.exportNothingSkipped', { skipped: skipped.join(', ') }) : t('compare.exportNothing'));
+        notify(skipped.length > 0 ? t('compare.exportNothingSkipped', { skipped: skipped.join(', ') }) : t('compare.exportNothing'));
         return null;
       }
       if (skipped.length > 0) {
-        alert(t('compare.exportSkipped', { skipped: skipped.join(', ') }));
+        notify(t('compare.exportSkipped', { skipped: skipped.join(', ') }));
       }
       const exportT = exportContext(language).t;
       const scopeName = pageScope === 'all' ? exportT('compare.exportScopeAll') : exportT('compare.exportScopePage', { page: restorePageKey });
@@ -137,11 +145,16 @@ export default function CompareWorkspace() {
 
   return (
     <div className="workspace">
-      <CompareTopBar onExport={runExport} exporting={exporting} />
+      {layout === 'expanded' && !reviewOnly ? <CompareTopBar onExport={runExport} exporting={exporting} /> : <CompareCompactHeader />}
+      {layout !== 'expanded' && <div className="compact-workspace-actions">
+        <span className="muted">{t('adaptive.browse')}</span>
+        <button className="btn-ghost" onClick={() => setPanel(panel === 'items' ? 'plan' : 'items')}>{t('adaptive.view')}</button>
+        <button className="btn-ghost" onClick={() => setPanel(panel === 'quantities' ? 'plan' : 'quantities')}>{t('compare.changes.title')}</button>
+      </div>}
       <div className="workspace-body">
         {/* The same icon-only rail as the takeoff workspace: canvas interaction only, the tool
             name carried by the tooltip. */}
-        <div className="toolbar">
+        {!review && <div className="toolbar">
           <button
             className={`tool-btn ${toolMode === 'select' ? 'active' : ''}`}
             onClick={() => setToolMode('select')}
@@ -174,40 +187,44 @@ export default function CompareWorkspace() {
           >
             <Icon name="move" size={20} />
           </button>
-        </div>
+        </div>}
         <div className="viewer-area">
           <CompareCanvas ref={canvasRef} />
-          <CompareCalibrationDialog />
+          {!review && <CompareCalibrationDialog />}
         </div>
-        <div className="sidebar">
+        <AdaptiveInspector open={panel === 'items'} onClose={() => setPanel('plan')} title={t('adaptive.view')}>
           {/* Comparison context (revision, page mapping, scale, alignment) above the tabs, so it is
               present in every tab rather than buried in the layer panel. */}
-          <CompareContextBar />
-          <div className="sidebar-tabs">
-            <button className={tab === 'layers' ? 'active' : ''} onClick={() => setTab('layers')}>
+          {!review && <CompareContextBar />}
+          {!review && <div className="sidebar-tabs">
+            <button className={!review && tab === 'layers' ? 'active' : ''} onClick={() => setTab('layers')}>
               {t('compare.tabs.layers')}
             </button>
-            <button className={tab === 'measure' ? 'active' : ''} onClick={() => setTab('measure')}>
+            <button className={!review && tab === 'measure' ? 'active' : ''} onClick={() => setTab('measure')}>
               {t('compare.tabs.measure')}
             </button>
-            <button className={tab === 'markup' ? 'active' : ''} onClick={() => setTab('markup')}>
+            <button className={!review && tab === 'markup' ? 'active' : ''} onClick={() => setTab('markup')}>
               {t('compare.tabs.markup')}
             </button>
-          </div>
+          </div>}
           <div className="sidebar-content">
-            {tab === 'layers' && (
+            {review && <><p className="muted">{t('adaptive.reviewOnly')}</p><ViewModeSwitch /></>}
+            {!review && tab === 'layers' && (
               <>
                 <LayerPanel />
                 <AlignmentTools />
               </>
             )}
-            {tab === 'measure' && <MeasureToolbar />}
-            {tab === 'markup' && <MarkupToolbar />}
+            {!review && tab === 'measure' && <MeasureToolbar />}
+            {!review && tab === 'markup' && <MarkupToolbar />}
           </div>
-        </div>
+        </AdaptiveInspector>
       </div>
       {/* Demolition / new construction review, across the full workspace width under the canvas. */}
-      <ChangesPanel />
+      <ChangesPanel mobileOpen={panel === 'quantities'} onMobileClose={() => setPanel('plan')} />
+      {layout === 'narrow' && <nav className="mobile-destinations">
+        {(['plan', 'items', 'quantities'] as const).map((next) => <button key={next} aria-current={panel === next ? 'page' : undefined} onClick={() => setPanel(next)}>{t(`adaptive.${next}`)}</button>)}
+      </nav>}
     </div>
   );
 }

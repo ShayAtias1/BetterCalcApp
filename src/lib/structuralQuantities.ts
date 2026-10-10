@@ -15,11 +15,14 @@
 import type { Plan } from '../types';
 import type { ConcreteKind, RebarLevel } from '../types/structural';
 import { calculateConcrete, type ConcreteStatus } from './concrete';
-import { calculateRebar, incompleteSpecCount, type RebarLayerCalc, type RebarStatus } from './rebar';
-import { calculateMeshSheets, type MeshSheetsResult, type ResolvedSheetSettings } from './meshSheets';
+import { calculateRebar, resolveStraightBars, incompleteSpecCount, type RebarLayerCalc, type RebarStatus } from './rebar';
+import { resolveMeshProcurement, type MeshProcurementResult, type ResolvedSheetSettings } from './meshSheets';
 import { round } from './geometry';
 import { CONCRETE_KINDS } from './structuralMutations';
-import { concreteOf, rebarOf } from './structuralPlan';
+import { resolveStirrupItem } from './stirrup';
+import { prepareStirrupShape } from './stirrupShape';
+import type { StirrupPlacementResult } from './stirrupPlacements';
+import { concreteOf, rebarOf, rebarItemsOnPages } from './structuralPlan';
 
 export interface ConcreteSummaryRow {
   pageNumber: number;
@@ -106,9 +109,9 @@ export interface RebarSummaryRow {
   /** Net length (m) and weight (kg). */
   lengthM: number;
   weightKg: number;
-  /** The same with each item's waste applied — what to order. */
+  /** Internal engineering order length retains waste. Mesh order weight is full-sheet procurement. */
   orderLengthM: number;
-  orderWeightKg: number;
+  orderWeightKg: number | null;
   /** Of the net values, the part that comes from estimated layers (0 when the row is exact). */
   estimatedLengthM: number;
   estimatedWeightKg: number;
@@ -135,7 +138,7 @@ export interface RebarSummary {
   lengthM: number;
   weightKg: number;
   orderLengthM: number;
-  orderWeightKg: number;
+  orderWeightKg: number | null;
   estimatedLengthM: number;
   estimatedWeightKg: number;
   /** null when nothing is calculable. */
@@ -149,16 +152,17 @@ interface Acc {
   weight: number;
   orderLength: number;
   orderWeight: number;
+  orderMissing: boolean;
   estimatedLength: number;
   estimatedWeight: number;
 }
-const emptyAcc = (): Acc => ({ lines: 0, estimatedLines: 0, length: 0, weight: 0, orderLength: 0, orderWeight: 0, estimatedLength: 0, estimatedWeight: 0 });
+const emptyAcc = (): Acc => ({ lines: 0, estimatedLines: 0, length: 0, weight: 0, orderLength: 0, orderWeight: 0, orderMissing: false, estimatedLength: 0, estimatedWeight: 0 });
 const basisOf = (a: Acc): RebarBasis | null => (a.lines === 0 ? null : a.estimatedLines === 0 ? 'exact' : a.estimatedLines === a.lines ? 'estimated' : 'mixed');
 
 /**
  * The plan's rebar by page and diameter. Mesh layers and manual bars are treated alike: every
- * contributing line is read from `calculateRebar` (nothing is calculated here), so only the engine's
- * output decides what a diameter's quantity is. An item that is not calculable adds to no row and no
+ * net contributing line is read from `calculateRebar`; Mesh purchase weights come from the physical
+ * procurement resolver and Bars order weights retain engineering waste. An item that is not calculable adds to no row and no
  * total — it is counted as missing, never as zero — and a calculable item's layers all count (the
  * engine reports no partial totals for an item with an unusable layer).
  *
@@ -171,7 +175,7 @@ export function buildRebarSummary(plan: Plan, onlyPages?: ReadonlySet<number>): 
   let missingItems = 0;
   let incompleteSpecs = 0;
 
-  const items = rebarOf(plan).filter((i) => !onlyPages || onlyPages.has(i.pageNumber));
+  const items = rebarItemsOnPages(plan, onlyPages);
   for (const item of items) {
     let page = perPage.get(item.pageNumber);
     if (!page) {
@@ -179,7 +183,9 @@ export function buildRebarSummary(plan: Plan, onlyPages?: ReadonlySet<number>): 
       perPage.set(item.pageNumber, page);
     }
 
-    const calc = calculateRebar(item, plan.pages[item.pageNumber]?.calibration ?? null);
+    const calc = calculateRebar(item, plan.pages[item.pageNumber]?.calibration ?? null, plan.pages);
+    const procurement = item.kind === 'mesh' ? resolveMeshProcurement(item, plan.pages[item.pageNumber]?.calibration ?? null) : null;
+    if (procurement?.procurementWeightKg === null) total.orderMissing = true;
     if (calc.status !== 'ok') {
       page.missingItems += 1;
       missingItems += 1;
@@ -204,7 +210,9 @@ export function buildRebarSummary(plan: Plan, onlyPages?: ReadonlySet<number>): 
         a.length += layer.totalLengthM!;
         a.weight += layer.weightKg!;
         a.orderLength += layer.totalLengthM! * factor;
-        a.orderWeight += layer.weightKg! * factor;
+        const purchase = procurement ? procurement.levels.find((l) => l.level === layer.level)?.layerProcurementWeightsKg[layer.layerId] ?? null : layer.weightKg! * factor;
+        a.orderMissing ||= purchase === null;
+        a.orderWeight += purchase ?? 0;
         if (layer.estimated) {
           a.estimatedLines += 1;
           a.estimatedLength += layer.totalLengthM!;
@@ -227,7 +235,7 @@ export function buildRebarSummary(plan: Plan, onlyPages?: ReadonlySet<number>): 
           lengthM: round(a.length, 2),
           weightKg: round(a.weight, 2),
           orderLengthM: round(a.orderLength, 2),
-          orderWeightKg: round(a.orderWeight, 2),
+          orderWeightKg: a.orderMissing ? null : round(a.orderWeight, 2),
           estimatedLengthM: round(a.estimatedLength, 2),
           estimatedWeightKg: round(a.estimatedWeight, 2),
           basis: basisOf(a)!,
@@ -244,7 +252,7 @@ export function buildRebarSummary(plan: Plan, onlyPages?: ReadonlySet<number>): 
     lengthM: round(total.length, 2),
     weightKg: round(total.weight, 2),
     orderLengthM: round(total.orderLength, 2),
-    orderWeightKg: round(total.orderWeight, 2),
+    orderWeightKg: total.orderMissing ? null : round(total.orderWeight, 2),
     estimatedLengthM: round(total.estimatedLength, 2),
     estimatedWeightKg: round(total.estimatedWeight, 2),
     basis: basisOf(total),
@@ -310,11 +318,12 @@ export function buildConcreteItems(plan: Plan, pages?: ReadonlySet<number>): Con
  */
 export interface RebarItemRow {
   itemId: string;
+  stirrup?: { shape: ReturnType<typeof prepareStirrupShape>; placements: StirrupPlacementResult[]; lengthSource: 'geometric' | 'manual'; geometricLengthM: number | null };
   pageNumber: number;
   /** The user's own mark, '' when automatic — print it with `markLabel` in the report language. */
   mark: string;
   autoNumber?: number;
-  kind: 'mesh' | 'bars';
+  kind: 'mesh' | 'bars' | 'stirrup';
   /** The reinforcement level of a mesh line; null for manual bars and for a mesh with none. */
   level: RebarLevel | null;
   diameterMm: number | null;
@@ -339,19 +348,30 @@ const spacingCmOf = (spacingM: number | null) => (spacingM === null ? null : Mat
 
 export function buildRebarItems(plan: Plan, pages?: ReadonlySet<number>): RebarItemRow[] {
   const rows: RebarItemRow[] = [];
-  const ordered = rebarOf(plan)
+  const ordered = rebarItemsOnPages(plan, pages)
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => !pages || pages.has(item.pageNumber))
     .sort((a, b) => a.item.pageNumber - b.item.pageNumber || a.index - b.index);
 
   for (const { item } of ordered) {
-    const calc = calculateRebar(item, plan.pages[item.pageNumber]?.calibration ?? null);
+    const calc = calculateRebar(item, plan.pages[item.pageNumber]?.calibration ?? null, plan.pages);
+    const procurement = item.kind === 'mesh' ? resolveMeshProcurement(item, plan.pages[item.pageNumber]?.calibration ?? null) : null;
     const ok = calc.status === 'ok';
     const factor = 1 + calc.wastePercent / 100;
     const base = { itemId: item.id, pageNumber: item.pageNumber, mark: item.mark, autoNumber: item.autoNumber, kind: item.kind, wastePercent: calc.wastePercent, status: calc.status };
     const none = { level: null, diameterMm: null, spacingCm: null, direction: null, barCount: null, barLengthM: null, netLengthM: null, netWeightKg: null, orderLengthM: null, orderWeightKg: null, estimated: false };
 
+    if (item.kind === 'stirrup') {
+      const resolved = resolveStirrupItem(item, plan.pages);
+      rows.push({ ...base, level: null, diameterMm: positiveOrNull(item.diameterMm), spacingCm: null, direction: null,
+        barCount: resolved.totalCount, barLengthM: resolved.effectiveUnitLength, netLengthM: resolved.totalSteelLength,
+        netWeightKg: resolved.netWeight, orderLengthM: resolved.orderLengthM, orderWeightKg: resolved.orderWeight,
+        estimated: false, stirrup: { shape: prepareStirrupShape(item.shape), placements: resolved.placementResults,
+          lengthSource: resolved.lengthSource, geometricLengthM: resolved.geometricLengthM } });
+      continue;
+    }
     if (item.kind === 'bars') {
+      const resolved = resolveStraightBars(item, plan.pages[item.pageNumber]?.calibration ?? null, plan.pages);
       const l = calc.layers[0];
       rows.push({
         ...base,
@@ -359,7 +379,7 @@ export function buildRebarItems(plan: Plan, pages?: ReadonlySet<number>): RebarI
         diameterMm: positiveOrNull(item.diameterMm),
         spacingCm: null,
         direction: null,
-        barCount: ok ? l.barCount : null,
+        barCount: resolved.mode === 'legacy' ? ok ? l.barCount : null : resolved.count,
         barLengthM: ok ? l.cutLengthM : null,
         netLengthM: ok ? l.totalLengthM : null,
         netWeightKg: ok ? l.weightKg : null,
@@ -387,6 +407,8 @@ export function buildRebarItems(plan: Plan, pages?: ReadonlySet<number>): RebarI
       const sum = (pick: (l: RebarLayerCalc) => number | null) => (ok && group.every((l) => pick(l) !== null) ? group.reduce((a, l) => a + pick(l)!, 0) : null);
       const net = sum((l) => l.totalLengthM);
       const weight = sum((l) => l.weightKg);
+      const purchases = group.map((l) => procurement?.levels.find((entry) => entry.level === l.level)?.layerProcurementWeightsKg[l.layerId] ?? null);
+      const purchase = purchases.every((w) => w !== null) ? purchases.reduce<number>((total, w) => total + w!, 0) : null;
       rows.push({
         ...base,
         level: first.level ?? null,
@@ -398,7 +420,7 @@ export function buildRebarItems(plan: Plan, pages?: ReadonlySet<number>): RebarI
         netLengthM: net,
         netWeightKg: weight,
         orderLengthM: net === null ? null : net * factor,
-        orderWeightKg: weight === null ? null : weight * factor,
+        orderWeightKg: purchase,
         estimated: ok && group.some((l) => l.estimated),
       });
     }
@@ -417,7 +439,7 @@ export interface RebarLevelRow {
   pageNumber: number;
   mark: string;
   autoNumber?: number;
-  kind: 'mesh' | 'bars';
+  kind: 'mesh' | 'bars' | 'stirrup';
   level: RebarLevel | null;
   /** The item rows the level is made of: one per direction (one for uniform and for manual bars). */
   parts: RebarItemRow[];
@@ -436,13 +458,13 @@ export interface RebarLevelRow {
 export function buildRebarLevelRows(plan: Plan, pages?: ReadonlySet<number>): RebarLevelRow[] {
   const out: RebarLevelRow[] = [];
   const meshes = new Map(rebarOf(plan).flatMap((i) => (i.kind === 'mesh' ? [[i.id, i] as const] : [])));
-  const sheetsOf = new Map<string, MeshSheetsResult>();
+  const sheetsOf = new Map<string, MeshProcurementResult>();
   const sheetsFor = (itemId: string, level: RebarLevel | null): RebarLevelRow['sheets'] => {
     const mesh = meshes.get(itemId);
     if (!mesh || level === null) return null;
     let result = sheetsOf.get(itemId);
     if (!result) {
-      result = calculateMeshSheets(mesh, plan.pages[mesh.pageNumber]?.calibration ?? null);
+      result = resolveMeshProcurement(mesh, plan.pages[mesh.pageNumber]?.calibration ?? null);
       sheetsOf.set(itemId, result);
     }
     return { count: result.levels.find((l) => l.level === level)?.sheets ?? null, settings: result.settings };
@@ -524,7 +546,7 @@ export interface ProjectRebarShare {
   lengthM: number;
   weightKg: number;
   orderLengthM: number;
-  orderWeightKg: number;
+  orderWeightKg: number | null;
   estimatedLengthM: number;
   estimatedWeightKg: number;
   basis: RebarBasis | null;
@@ -536,7 +558,7 @@ export interface ProjectRebarRow {
   lengthM: number;
   weightKg: number;
   orderLengthM: number;
-  orderWeightKg: number;
+  orderWeightKg: number | null;
   estimatedLengthM: number;
   estimatedWeightKg: number;
   /** exact / mixed / estimated across every plan and page that adds into this diameter. */
@@ -553,7 +575,7 @@ export interface ProjectRebar {
   lengthM: number;
   weightKg: number;
   orderLengthM: number;
-  orderWeightKg: number;
+  orderWeightKg: number | null;
   estimatedLengthM: number;
   estimatedWeightKg: number;
   basis: RebarBasis | null;
@@ -595,10 +617,11 @@ interface RebarSums {
   weight: number;
   orderLength: number;
   orderWeight: number;
+  orderMissing: boolean;
   estimatedLength: number;
   estimatedWeight: number;
 }
-const emptyRebar = (): RebarSums => ({ lines: 0, estimatedLines: 0, missingItems: 0, items: 0, length: 0, weight: 0, orderLength: 0, orderWeight: 0, estimatedLength: 0, estimatedWeight: 0 });
+const emptyRebar = (): RebarSums => ({ lines: 0, estimatedLines: 0, missingItems: 0, items: 0, length: 0, weight: 0, orderLength: 0, orderWeight: 0, orderMissing: false, estimatedLength: 0, estimatedWeight: 0 });
 const rebarBasis = (a: RebarSums): RebarBasis | null => (a.lines === 0 ? null : a.estimatedLines === 0 ? 'exact' : a.estimatedLines === a.lines ? 'estimated' : 'mixed');
 
 /**
@@ -670,6 +693,7 @@ export function buildProjectStructural(plans: Plan[]): ProjectStructural {
       }
       pp.itemIds.add(itemKey);
       rItems.add(itemKey);
+      if (row.kind === 'mesh' && row.orderWeightKg === null) { pp.sums.orderMissing = true; rTotal.orderMissing = true; }
       if (row.netLengthM === null || row.netWeightKg === null || row.diameterMm === null) {
         pp.missingIds.add(itemKey);
         rMissing.add(itemKey);
@@ -690,6 +714,7 @@ export function buildProjectStructural(plans: Plan[]): ProjectStructural {
         a.length += row.netLengthM;
         a.weight += row.netWeightKg;
         a.orderLength += row.orderLengthM ?? 0;
+        a.orderMissing ||= row.orderWeightKg === null;
         a.orderWeight += row.orderWeightKg ?? 0;
         if (row.estimated) {
           a.estimatedLines += 1;
@@ -744,7 +769,7 @@ export function buildProjectStructural(plans: Plan[]): ProjectStructural {
     lengthM: round(a.length, 2),
     weightKg: round(a.weight, 2),
     orderLengthM: round(a.orderLength, 2),
-    orderWeightKg: round(a.orderWeight, 2),
+    orderWeightKg: a.orderMissing ? null : round(a.orderWeight, 2),
     estimatedLengthM: round(a.estimatedLength, 2),
     estimatedWeightKg: round(a.estimatedWeight, 2),
     basis: rebarBasis(a),
@@ -762,7 +787,7 @@ export function buildProjectStructural(plans: Plan[]): ProjectStructural {
               lengthM: round(g.total.length, 2),
               weightKg: round(g.total.weight, 2),
               orderLengthM: round(g.total.orderLength, 2),
-              orderWeightKg: round(g.total.orderWeight, 2),
+              orderWeightKg: g.total.orderMissing ? null : round(g.total.orderWeight, 2),
               estimatedLengthM: round(g.total.estimatedLength, 2),
               estimatedWeightKg: round(g.total.estimatedWeight, 2),
               basis: rebarBasis(g.total)!,
@@ -774,7 +799,7 @@ export function buildProjectStructural(plans: Plan[]): ProjectStructural {
           lengthM: round(rTotal.length, 2),
           weightKg: round(rTotal.weight, 2),
           orderLengthM: round(rTotal.orderLength, 2),
-          orderWeightKg: round(rTotal.orderWeight, 2),
+          orderWeightKg: rTotal.orderMissing ? null : round(rTotal.orderWeight, 2),
           estimatedLengthM: round(rTotal.estimatedLength, 2),
           estimatedWeightKg: round(rTotal.estimatedWeight, 2),
           basis: rebarBasis(rTotal),

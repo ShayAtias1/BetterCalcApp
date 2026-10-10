@@ -1,6 +1,14 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { usePlanNavigation } from '../../hooks/usePlanNavigation';
+import { useWorkspaceLayout } from '../../hooks/useWorkspaceLayout';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { v4 as uuid } from 'uuid';
-import { loadPdfPlanSource, type PdfPlanSource } from '../../lib/planSource';
+import { loadPdfPlanSource } from '../../lib/planSource';
+import { isViewerRenderCancelled } from '../../lib/pdfViewerSource';
+import { initialPdfScale } from '../../lib/pdfRenderBudget';
+import { useViewerPdfSource } from '../../hooks/useViewerPdfSource';
+import { usePdfDetail } from '../../hooks/usePdfDetail';
+import type { CanvasView } from '../../hooks/useCanvasTransform';
+import type { PdfMatrix } from '../../lib/pdfium/protocol';
 import { loadComparePdfBlob } from '../../db/database';
 import { noteAlignment, trackError } from '../../lib/analytics';
 import { useCompareStore } from '../../store/compareStore';
@@ -24,7 +32,6 @@ import { useLanguage, useT, type Language } from '../../i18n';
 import { exportContext } from '../../lib/exportLanguage';
 import { labelDirection } from '../../lib/textDirection';
 
-const RENDER_SCALE = Math.min(4, Math.max(2, (window.devicePixelRatio || 1) * 2));
 /** New masks start opaque white, the colour of the paper they hide. */
 const MASK_COLOR = '#ffffff';
 
@@ -125,60 +132,64 @@ function MarkupShape({ markup, strokeW, draggable }: { markup: Markup; strokeW: 
 function useLayerRender(
   comparisonId: string | undefined,
   layer: string,
+  fileName: string | undefined,
   pageNumber: number,
   tint: string,
   useSourceColors: boolean,
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
+  containerRef: React.RefObject<HTMLDivElement | null>,
+  view: CanvasView,
+  getView: () => CanvasView,
   onSize: (size: { width: number; height: number }) => void,
   onNumPages: (n: number) => void,
-  /** Called with `${layer}:${pageNumber}` once this layer's raster has actually been painted. */
-  onRendered?: (key: string) => void
-): PdfPlanSource | null {
-  const [source, setSource] = useState<PdfPlanSource | null>(null);
+  onRendered: (key: string) => void,
+  nativeToPage?: PdfMatrix,
+) {
+  const loadBlob = useCallback(() => comparisonId && layer
+    ? loadComparePdfBlob(comparisonId, layer) : Promise.resolve(undefined), [comparisonId, layer]);
+  const { planSource: source } = useViewerPdfSource(
+    comparisonId && layer ? `compare:${comparisonId}:${layer}` : undefined,
+    fileName, loadBlob, pageNumber, onNumPages, 'Compare PDF load failed',
+  );
+  const options = useMemo(() => useSourceColors ? {} : { transparent: true, tint }, [useSourceColors, tint]);
+  const baseScaleRef = useRef(0);
+  const [paintedSource, setPaintedSource] = useState<typeof source>(null);
+  const [detailReady, setDetailReady] = useState(false);
 
   useEffect(() => {
-    if (!comparisonId || !layer) return;
-    let cancelled = false;
-    loadPdfPlanSource(`${comparisonId}:${layer}`, () => loadComparePdfBlob(comparisonId, layer), pageNumber)
-      .then(({ source: s, numPages }) => {
-        if (cancelled) return;
-        onNumPages(numPages);
-        setSource(s);
-      })
-      .catch((err) => {
-        /* surfaced via layer staying blank; comparison-level error handling can be added later */
-        if (!cancelled) trackError('compare_pdf_load', err);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [comparisonId, layer, pageNumber]);
-
-  useEffect(() => {
+    onRendered('');
+    setPaintedSource(null);
+    setDetailReady(false);
+    baseScaleRef.current = 0;
     if (!source || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const size = source.getNativeSize();
     onSize(size);
     canvas.style.width = `${size.width}px`;
     canvas.style.height = `${size.height}px`;
-    const handle = useSourceColors ? source.render(canvas, RENDER_SCALE) : source.renderTinted(canvas, RENDER_SCALE, tint);
+    const scale = initialPdfScale(size.width, size.height);
+    const handle = source.render(canvas, scale, options);
     let cancelled = false;
-    handle.promise
-      .then(() => {
-        if (!cancelled) onRendered?.(`${layer}:${pageNumber}`);
-      })
-      .catch(() => {
-        /* a cancelled/failed render simply never reports ready */
-      });
-    return () => {
-      cancelled = true;
-      handle.cancel();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source, tint, useSourceColors]);
+    void handle.promise.then(() => {
+      if (cancelled) return;
+      baseScaleRef.current = scale;
+      setPaintedSource(source);
+      setDetailReady(true);
+      onRendered(`${layer}:${pageNumber}`);
+    }, (error: unknown) => {
+      if (!cancelled && !isViewerRenderCancelled(error)) trackError('compare_pdf_load', error);
+    });
+    return () => { cancelled = true; handle.cancel(); };
+  }, [source, options, canvasRef, layer, pageNumber, onSize, onRendered]);
 
-  return source;
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    return () => { if (canvas) canvas.width = canvas.height = 0; };
+  }, [source, canvasRef]);
+  const detailHostRef = usePdfDetail(source, `${comparisonId}:${layer}:${pageNumber}`,
+    detailReady, containerRef, baseScaleRef, view, getView,
+    { renderOptions: options, nativeToPage, baseCanvasRef: canvasRef });
+  return { detailHostRef, ready: !!source && paintedSource === source };
 }
 
 export interface CompareCanvasHandle {
@@ -257,8 +268,11 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
   const measurementsVisible = useCompareStore((s) => s.measurementsVisible);
   const markupFontScale = useCompareStore((s) => s.markupFontScale);
 
-  const { containerRef, zoom, pan, screenToNative, handleWheel, fitToContainer, beginPanDrag, updatePanDrag, endPanDrag } =
-    useCanvasTransform();
+  const { layout, reviewOnly: inputReviewOnly } = useWorkspaceLayout();
+  const reviewOnly = inputReviewOnly || layout !== 'expanded';
+
+  const transform = useCanvasTransform();
+  const { containerRef, zoom, pan, screenToNative, handleWheel, fitToContainer, beginPanDrag, updatePanDrag, endPanDrag } = transform;
 
   const originalCanvasRef = useRef<HTMLCanvasElement>(null);
   const revisedCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -316,27 +330,24 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
   const scale = resolveCompareScale(page, revisionPage);
   const metersPerPixel = scale.metersPerPixel;
 
-  useLayerRender(
-    comparison?.id,
-    'original',
-    originalPageNumber,
-    comparison?.originalColorTint ?? '#9ca3af',
-    comparison?.originalUseSourceColors ?? false,
-    originalCanvasRef,
-    setPageSize,
-    setOriginalNumPages,
-    setRenderedOriginalKey
+  // Reuse the exact existing alignment for density/crop selection only; CSS and saved data stay unchanged.
+  const revisedNativeToPage = useMemo<PdfMatrix>(() => {
+    const origin = applyAlignment({ x: 0, y: 0 }, alignment, pivot);
+    const x = applyAlignment({ x: 1, y: 0 }, alignment, pivot);
+    const y = applyAlignment({ x: 0, y: 1 }, alignment, pivot);
+    return [x.x-origin.x,x.y-origin.y,y.x-origin.x,y.y-origin.y,origin.x,origin.y];
+  }, [alignment.offsetX, alignment.offsetY, alignment.rotationDeg, alignment.scale, pivot.x, pivot.y]);
+  const originalRaster = useLayerRender(
+    comparison?.id, 'original', comparison?.originalFileName, originalPageNumber,
+    comparison?.originalColorTint ?? '#9ca3af', comparison?.originalUseSourceColors ?? false,
+    originalCanvasRef, containerRef, { zoom, pan }, transform.getView,
+    setPageSize, setOriginalNumPages, setRenderedOriginalKey,
   );
-  useLayerRender(
-    comparison?.id,
-    activeRevisionId ? `revision:${activeRevisionId}` : '',
-    revisedPageNumber,
-    activeRevision?.colorTint ?? '#ef4444',
-    activeRevision?.useSourceColors ?? false,
-    revisedCanvasRef,
-    setRevisedPageSize,
-    setRevisedNumPages,
-    setRenderedLayerKey
+  const revisedRaster = useLayerRender(
+    comparison?.id, activeRevisionId ? `revision:${activeRevisionId}` : '', activeRevision?.fileName,
+    revisedPageNumber, activeRevision?.colorTint ?? '#ef4444', activeRevision?.useSourceColors ?? false,
+    revisedCanvasRef, containerRef, { zoom, pan }, transform.getView,
+    setRevisedPageSize, setRevisedNumPages, setRenderedLayerKey, revisedNativeToPage,
   );
 
   useEffect(() => {
@@ -442,6 +453,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (reviewOnly) return;
       if (e.key === 'Escape') {
         clearMeasurePoints();
         clearCalibration();
@@ -472,9 +484,10 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [measureTool, measurePoints, markupTool, markupPoints, selectedMarkupId, selectedMeasurementId, deleteMeasurement, undo, redo]);
+  }, [reviewOnly, measureTool, measurePoints, markupTool, markupPoints, selectedMarkupId, selectedMeasurementId, deleteMeasurement, undo, redo]);
 
   const handleMouseDown = (e: MouseEvent) => {
+    if (reviewOnly) return;
     if (toolMode === 'select') {
       const handleTarget = (e.target as Element).closest?.('[data-handle-markup-id]');
       if (handleTarget) {
@@ -523,6 +536,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
     }
   };
   const handleMouseMove = (e: MouseEvent) => {
+    if (reviewOnly) return;
     if (isPanning.current) {
       updatePanDrag(e.clientX, e.clientY);
       return;
@@ -613,6 +627,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
     }
   };
   const handleDoubleClick = (e: MouseEvent) => {
+    if (reviewOnly) return;
     if (toolMode !== 'select') return;
     // Double-clicking a text note reopens it for editing.
     const bodyTarget = (e.target as Element).closest?.('[data-markup-id]');
@@ -625,11 +640,13 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
   };
 
   const handleDividerMouseDown = (e: MouseEvent) => {
+    if (reviewOnly) return;
     e.stopPropagation();
     swipeDrag.current = true;
   };
 
   const handleClick = (e: MouseEvent) => {
+    if (reviewOnly) return;
     if (isPanning.current || alignDrag.current) return;
     const native = screenToNative(e.clientX, e.clientY);
 
@@ -738,12 +755,12 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
     () => ({
       isReadyFor: (revisionId: string, sourcePageKey: number) => {
         if (currentPageKey !== sourcePageKey) return false;
-        if (renderedOriginalKey !== `original:${originalPageNumber}`) return false;
+        if (!originalRaster.ready || renderedOriginalKey !== `original:${originalPageNumber}`) return false;
         // No revision at all (source-only comparison): the source raster is the whole picture.
         if (!revisionId) return true;
         if (revisionId !== activeRevisionId) return false;
         if (revisedPageMissing) return true;
-        return renderedLayerKey === `revision:${revisionId}:${revisedPageNumber}`;
+        return revisedRaster.ready && renderedLayerKey === `revision:${revisionId}:${revisedPageNumber}`;
       },
       isRevisedPageMissing: () => revisedPageMissing,
       exportComposite: async (exportLanguage) => {
@@ -773,15 +790,28 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
         const bctx = bodyCanvas.getContext('2d');
         if (!bctx) return null;
 
-        const originalRaster = originalCanvasRef.current;
-        const revisedRaster = revisedCanvasRef.current;
+        // Export stays on the legacy PDF.js path; never capture PDFium viewer/detail canvases.
+        const exportRaster = async (layer: string, pageNumber: number, sourceColors: boolean, tint: string) => {
+          const { source } = await loadPdfPlanSource(`${comparison.id}:${layer}`,
+            () => loadComparePdfBlob(comparison.id, layer), pageNumber);
+          const raster = document.createElement('canvas'); raster.dir = 'rtl'; raster.lang = 'he';
+          const density = Math.min(4, Math.max(2, (window.devicePixelRatio || 1) * 2));
+          await (sourceColors ? source.render(raster, density) : source.renderTinted(raster, density, tint)).promise;
+          return raster;
+        };
+        const originalRaster = comparison.originalVisible
+          ? await exportRaster('original', originalPageNumber, comparison.originalUseSourceColors, comparison.originalColorTint)
+          : null;
+        const revisedRaster = activeRevision?.visible && !revisedPageMissing
+          ? await exportRaster(`revision:${activeRevisionId}`, revisedPageNumber, activeRevision.useSourceColors, activeRevision.colorTint)
+          : null;
         bctx.fillStyle = '#ffffff';
         bctx.fillRect(0, 0, fullW, fullH);
-        if (comparison.originalVisible) {
+        if (originalRaster) {
           bctx.globalAlpha = comparison.originalOpacity;
           bctx.drawImage(originalRaster, 0, 0, fullW, fullH);
         }
-        if (activeRevision?.visible) {
+        if (revisedRaster && activeRevision) {
           bctx.globalAlpha = activeRevision.opacity;
           bctx.save();
           const px = pivot.x * mult;
@@ -795,6 +825,8 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
           bctx.restore();
         }
         bctx.globalAlpha = 1;
+        if (originalRaster) originalRaster.width = originalRaster.height = 0;
+        if (revisedRaster) revisedRaster.width = revisedRaster.height = 0;
 
         if (svgRef.current) {
           // Rasterized as a standalone image, the overlay inherits nothing from the page — its
@@ -906,11 +938,39 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
       revisedPageMissing,
       renderedLayerKey,
       renderedOriginalKey,
+      originalRaster.ready,
+      revisedRaster.ready,
       currentPageKey,
       originalPageNumber,
       revisedPageNumber,
     ]
   );
+
+  const desktopStart = useRef<Pick<ReturnType<typeof useCompareStore.getState>, 'comparison' | 'history' | 'future' | 'dirty'> | null>(null);
+  const navigation = usePlanNavigation({
+    transform, reviewOnly, contextKey: `${comparison?.id}:${activeRevisionId}:${currentPageKey}`,
+    onDesktopStart: () => {
+      const { comparison, history, future, dirty } = useCompareStore.getState();
+      desktopStart.current = { comparison, history, future, dirty };
+    },
+    onDesktopCancel: () => {
+      const before = desktopStart.current;
+      if (before && before.comparison?.id === useCompareStore.getState().comparison?.id && (handleDrag.current || markupDrag.current || alignDrag.current)) {
+        useCompareStore.setState(before);
+        void useCompareStore.getState().persist();
+      }
+      desktopStart.current = null;
+      handleDrag.current = null; markupDrag.current = null; alignDrag.current = null; swipeDrag.current = false;
+      isPanning.current = false; endPanDrag(); regionDragStart.current = null; setRegionDraft(null);
+    },
+    onTap: (_x, _y, target) => {
+      const element = target instanceof Element ? target : null;
+      const markupId = element?.closest('[data-markup-id]')?.getAttribute('data-markup-id');
+      const measurementId = element?.closest('[data-measurement-id]')?.getAttribute('data-measurement-id');
+      setSelectedMarkupId(annotationsVisible && markupId ? markupId : null);
+      setSelectedMeasurementId(measurementsVisible && measurementId ? measurementId : null);
+    },
+  });
 
   if (!comparison) return null;
 
@@ -946,6 +1006,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
     <div
       ref={containerRef}
       className={`pdf-viewport tool-${toolMode}`}
+      {...navigation}
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
@@ -958,44 +1019,33 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
         className="pdf-content"
         style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, width: pageSize.width, height: pageSize.height }}
       >
-        {/* The plan's own raster must not depend on the UI language: pdf.js lays its text out with the canvas's
-            direction and language, so the canvases are pinned to the Hebrew RTL context production has always used. */}
-        <canvas
-          ref={originalCanvasRef}
-          dir="rtl"
-          lang="he"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            opacity: originalOpacity,
-            clipPath: originalClip,
-          }}
-        />
+        {/* Shared page coordinates and Compare compositing stay outside the PDF renderer. */}
+        <div style={{ position: 'absolute', top: 0, left: 0, width: pageSize.width, height: pageSize.height,
+          opacity: originalOpacity, clipPath: originalClip, background: 'white',
+          visibility: originalRaster.ready ? 'visible' : 'hidden' }}>
+          <canvas ref={originalCanvasRef} dir="rtl" lang="he"
+            style={{ position: 'absolute', top: 0, left: 0,
+              background: comparison.originalUseSourceColors ? 'white' : 'transparent' }} />
+          <div ref={originalRaster.detailHostRef} aria-hidden="true"
+            style={{ position: 'absolute', top: 0, left: 0, width: pageSize.width, height: pageSize.height,
+              overflow: 'hidden', pointerEvents: 'none' }} />
+        </div>
         <div
           style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: revisedPageSize.width,
-            height: revisedPageSize.height,
+            position: 'absolute', top: 0, left: 0,
+            width: revisedPageSize.width, height: revisedPageSize.height,
             transformOrigin: '50% 50%',
             transform: `translate(${alignment.offsetX}px, ${alignment.offsetY}px) rotate(${alignment.rotationDeg}deg) scale(${alignment.scale})`,
-            clipPath: revisedClip,
+            clipPath: revisedClip, opacity: revisedOpacity,
+            visibility: revisedRaster.ready ? 'visible' : 'hidden',
           }}
         >
-          <canvas
-            ref={revisedCanvasRef}
-            dir="rtl"
-            lang="he"
-            className="revised-sheet"
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              opacity: revisedOpacity,
-            }}
-          />
+          <canvas ref={revisedCanvasRef} dir="rtl" lang="he" className="revised-sheet"
+            style={{ position: 'absolute', top: 0, left: 0,
+              background: activeRevision?.useSourceColors ? 'white' : 'transparent' }} />
+          <div ref={revisedRaster.detailHostRef} aria-hidden="true"
+            style={{ position: 'absolute', top: 0, left: 0, width: revisedPageSize.width, height: revisedPageSize.height,
+              overflow: 'hidden', pointerEvents: 'none' }} />
         </div>
 
         {pageSize.width > 0 && (
@@ -1060,7 +1110,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
               // Change items are pickable on the plan with the select tool, the same way markups
               // are — the Changes panel and the drawing select each other.
               const pickProps =
-                toolMode === 'select' && m.areaKind
+                (toolMode === 'select' || reviewOnly) && m.areaKind
                   ? { 'data-measurement-id': m.id, style: { pointerEvents: 'auto' as const, cursor: 'pointer' as const } }
                   : {};
               let labelX = 0;
@@ -1197,7 +1247,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
             {/* Finished markups */}
             {annotationsVisible &&
               orderMarkups(pageMarkups).map((m) => (
-                <MarkupShape key={m.id} markup={m} strokeW={strokeW} draggable={toolMode === 'select'} />
+                <MarkupShape key={m.id} markup={m} strokeW={strokeW} draggable={toolMode === 'select' || reviewOnly} />
               ))}
 
             {/* Resize/reshape handles for the selected markup (select tool only) */}
@@ -1260,7 +1310,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
         )}
       </div>
 
-      {textDraft && (
+      {!reviewOnly && textDraft && (
         <TextNoteDialog
           initialText={textDraft.text}
           initialRotation={textDraft.rotationDeg}
@@ -1309,6 +1359,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
 
       {pageSize.width > 0 && (
         <button
+          data-plan-control="fit"
           className="btn-secondary small reset-view-btn"
           onMouseDown={(e) => e.stopPropagation()}
           onMouseUp={(e) => e.stopPropagation()}

@@ -1,3 +1,4 @@
+import { promptDialog, confirmDialog } from '../../lib/appDialogs';
 import { useRef } from 'react';
 import { useCompareStore } from '../../store/compareStore';
 import { deleteComparePdfBlob, saveComparePdfBlob } from '../../db/database';
@@ -99,13 +100,13 @@ export default function LayerPanel() {
   };
 
   const handleRemove = async (id: string) => {
-    if (!confirm(t('compare.layers.removeConfirm'))) return;
+    if (!await confirmDialog(t('compare.layers.removeConfirm'), { destructive: true })) return;
     removeRevision(id);
     await deleteComparePdfBlob(comparison.id, `revision:${id}`);
   };
 
-  const handleRename = (id: string, current: string) => {
-    const label = window.prompt(t('compare.layers.renamePrompt'), current);
+  const handleRename = async (id: string, current: string) => {
+    const label = await promptDialog(t('compare.layers.renamePrompt'), current);
     if (label && label.trim()) renameRevision(id, label.trim());
   };
 

@@ -11,7 +11,7 @@ export function useQuantityExportInfo() {
   if (!project) return null;
   const hasAreaMeasurements = (project.measurements ?? []).some((m) => m.tool === 'area' && m.areaKind);
   const exportablePages = getExportablePageNumbers(project);
-  const available = availableContent(project, summaries.length > 0 || hasAreaMeasurements, exportablePages.length > 0);
+  const available = availableContent(project, summaries.length > 0 || hasAreaMeasurements || !!project.openings?.length, exportablePages.length > 0);
   // The workbook has no plan drawing: only the three quantity domains.
   const excelAvailable: ExportContent = { ...available, plan: false };
   return { project, summaries, exportablePages, available, excelAvailable };

@@ -4,6 +4,7 @@
  * export context, like every other export text.
  */
 
+import { round } from './geometry';
 import type { ConcreteStatus } from './concrete';
 import type { RebarStatus } from './rebar';
 import type { RebarBasis, RebarItemRow, RebarLevelRow } from './structuralQuantities';
@@ -76,6 +77,10 @@ export function sheetConfigText(settings: SheetSettings, x: ExportContext): stri
 export function levelSpecification(d: RebarLevelRow, x: ExportContext): string {
   const { t } = x;
   const notation = (r: RebarItemRow) => (r.diameterMm === null ? null : r.spacingCm === null ? `Ø${r.diameterMm}` : `Ø${r.diameterMm} @ ${x.number(r.spacingCm)}`);
+  if (d.kind === 'stirrup') {
+    const shape = d.parts[0].stirrup?.shape;
+    return `${notation(d.parts[0]) ?? '-'} · ${shape ? t(`rebar.stirrup.templates.${shape.template}`) : '-'}`;
+  }
   if (d.kind === 'bars') return notation(d.parts[0]) ?? '-';
   const first = d.parts[0];
   if (first.level === null) return '-';
@@ -88,9 +93,9 @@ export function levelSpecification(d: RebarLevelRow, x: ExportContext): string {
 
 /** `2 sheets` for a counted mesh level, `10 bars` for manual bars, a dash when there is no count (no layout, no bars). */
 export function levelQuantity(d: RebarLevelRow, { t }: ExportContext): string {
-  if (d.kind === 'bars') {
+  if (d.kind !== 'mesh') {
     const count = d.parts[0].barCount;
-    return count === null ? '-' : t('exports.structural.barsQty', { count });
+    return count === null ? '-' : t(d.kind === 'stirrup' ? 'rebar.stirrup.pieces' : 'exports.structural.barsQty', { count });
   }
   return d.sheets?.count == null ? '-' : t('exports.structural.sheetsQty', { count: d.sheets.count });
 }
@@ -98,4 +103,30 @@ export function levelQuantity(d: RebarLevelRow, { t }: ExportContext): string {
 /** Exact / Estimate for a calculated level, otherwise the short reason it has no quantity. */
 export function levelStatus(d: RebarLevelRow, x: ExportContext): string {
   return d.status === 'ok' ? basisText(d.estimated ? 'estimated' : 'exact', x) : rebarStatusText(d.status, x);
+}
+
+/** Length details added inside existing report cells; no new table/export model. */
+export function barsLengthDescription(d: RebarLevelRow, x: ExportContext): string {
+  const part = d.parts[0];
+  const length = (value: number | null) => value === null ? '-' : `${x.number(round(value, 2))} ${x.t('units.m')}`;
+  return `${x.t(d.kind === 'stirrup' ? 'rebar.stirrup.lengthUsed' : 'rebar.barLength')}: ${length(part.barLengthM)} · ${x.t('rebar.totalLength')}: ${length(part.netLengthM)}`;
+}
+
+export function stirrupDiameterText(d: RebarLevelRow, x: ExportContext): string {
+  return `${x.t('rebar.stirrup.report.diameter')}: Ø${d.parts[0].diameterMm ?? '-'} ${x.t('rebar.stirrup.report.mm')}`;
+}
+
+export function stirrupShapeText(d: RebarLevelRow, x: ExportContext): string {
+  const shape = d.parts[0].stirrup?.shape;
+  return `${x.t('rebar.stirrup.shape')}: ${shape ? x.t(`rebar.stirrup.report.templates.${shape.template}`) : '-'}`;
+}
+
+export function levelReportSpecification(d: RebarLevelRow, x: ExportContext): string {
+  if (d.kind === 'stirrup') {
+    const unitLength = d.parts[0].barLengthM;
+    const length = unitLength === null ? '-' : x.number(round(unitLength, 2));
+    return `${stirrupDiameterText(d, x)} · ${stirrupShapeText(d, x)} · ${x.t('rebar.stirrup.report.length')}: ${length} ${x.t('units.m')}`;
+  }
+  const specification = levelSpecification(d, x);
+  return d.kind !== 'mesh' ? `${specification} · ${barsLengthDescription(d, x)}` : specification;
 }

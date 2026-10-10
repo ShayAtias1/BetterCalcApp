@@ -2,6 +2,8 @@
 
 import { MEASUREMENT_DEFAULTS } from '../config/measurementDefaults';
 import type { ConcreteElement, RebarItem } from './structural';
+import type { PlanOpening } from './openings';
+export type { PlanOpening, PlanOpeningKind, NewPlanOpening, PlanOpeningPatch, LegacyOpeningRef } from './openings';
 
 export type TilingCategory = 'regular' | 'as';
 
@@ -64,6 +66,22 @@ export interface Point {
 }
 
 export interface Room {
+  /** Local AI provenance only; never used to calculate quantities. */
+  aiSource?: {
+    targetPoint?: Point;
+    detectionMode?: string;
+    overlapWarnings?: string[];
+    spaceId: string;
+    suggestedType: string | null;
+    geometryClass: string;
+    geometryConfidence?: string;
+    typeConfidence?: string;
+    requiresReview?: boolean;
+    ambiguities?: string[];
+    reason?: string | null;
+    reviewNotes: string[];
+    reviewedWarningIds: string[];
+  };
   id: string;
   pageNumber: number;
   /** Polygon vertices in PDF page coordinates (unscaled, at pdf.js scale=1). */
@@ -128,6 +146,7 @@ export interface Project {
  * `pdfFiles` under the plan id.
  */
 export interface Plan {
+  aiOpeningImportKeys?: string[];
   id: string;
   /** The owning project. Absent only on records saved before projects existed, until migrated. */
   projectId?: string;
@@ -139,6 +158,8 @@ export interface Plan {
   pdfFileName: string;
   pages: Record<number, PageData>;
   rooms: Room[];
+  /** Canonical physical openings; eligible approved records supplement legacy room quantities safely. */
+  openings?: PlanOpening[];
   measurements: Measurement[];
   markups: Markup[];
   /**

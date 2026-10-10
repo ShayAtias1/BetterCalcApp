@@ -42,7 +42,7 @@ export function hasStructuralData(plan: Pick<Plan, 'concreteElements' | 'rebarIt
 
 /** Pages that carry a concrete zone or a rebar item (manual bars count for the page they were added on). */
 export function structuralPageNumbers(plan: Pick<Plan, 'concreteElements' | 'rebarItems'>): number[] {
-  return [...new Set([...concreteOf(plan).map((e) => e.pageNumber), ...rebarOf(plan).map((i) => i.pageNumber)])].sort((a, b) => a - b);
+  return [...new Set([...concreteOf(plan).map((e) => e.pageNumber), ...rebarOf(plan).flatMap((i) => i.kind === 'stirrup' ? [i.pageNumber, ...i.placements.map((p) => p.pageNumber)] : [i.pageNumber])])].sort((a, b) => a - b);
 }
 
 /**
@@ -53,6 +53,17 @@ export function structuralPageNumbers(plan: Pick<Plan, 'concreteElements' | 'reb
 export function withStructuralPages(plan: Plan, pages: ReadonlySet<number>): Plan {
   const copy: Plan = { ...plan };
   if (Array.isArray(plan.concreteElements)) copy.concreteElements = plan.concreteElements.filter((e) => pages.has(e.pageNumber));
-  if (Array.isArray(plan.rebarItems)) copy.rebarItems = plan.rebarItems.filter((i) => pages.has(i.pageNumber));
+  if (Array.isArray(plan.rebarItems)) copy.rebarItems = rebarItemsOnPages(plan, pages);
   return copy;
+}
+
+/** Report filtering keeps one Stirrup type with only the placements on requested pages. */
+export function rebarItemsOnPages(plan: Pick<Plan, 'rebarItems'>, pages?: ReadonlySet<number>): RebarItem[] {
+  if (!pages) return rebarOf(plan);
+  return rebarOf(plan).flatMap<RebarItem>((item) => {
+    if (item.kind !== 'stirrup') return pages.has(item.pageNumber) ? [item] : [];
+    const placements = item.placements.filter((p) => pages.has(p.pageNumber));
+    if (!placements.length && !(item.placements.length === 0 && pages.has(item.pageNumber))) return [];
+    return [{ ...item, pageNumber: pages.has(item.pageNumber) ? item.pageNumber : placements[0].pageNumber, placements }];
+  });
 }

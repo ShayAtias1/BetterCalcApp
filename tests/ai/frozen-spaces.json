@@ -1,0 +1,1376 @@
+{
+  "spaces": [
+    {
+      "spaceId": "space-001",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.401,
+          0.257
+        ],
+        [
+          0.504,
+          0.257
+        ],
+        [
+          0.504,
+          0.39
+        ],
+        [
+          0.401,
+          0.39
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Protected bedroom",
+      "typeConfidence": "HIGH",
+      "geometryConfidence": "HIGH",
+      "requiresReview": false,
+      "ambiguities": [],
+      "geometryTile": "TILE_A",
+      "reason": null
+    },
+    {
+      "spaceId": "space-002",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.737,
+          0.257
+        ],
+        [
+          0.839,
+          0.257
+        ],
+        [
+          0.839,
+          0.39
+        ],
+        [
+          0.737,
+          0.39
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Protected bedroom",
+      "typeConfidence": "HIGH",
+      "geometryConfidence": "HIGH",
+      "requiresReview": false,
+      "ambiguities": [],
+      "geometryTile": "TILE_A",
+      "reason": null
+    },
+    {
+      "spaceId": "space-003",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.32,
+          0.451
+        ],
+        [
+          0.422,
+          0.451
+        ],
+        [
+          0.422,
+          0.61
+        ],
+        [
+          0.395,
+          0.61
+        ],
+        [
+          0.395,
+          0.577
+        ],
+        [
+          0.32,
+          0.577
+        ]
+      ],
+      "vertexCount": 6,
+      "type": "Bedroom",
+      "typeConfidence": "MEDIUM",
+      "geometryConfidence": "HIGH",
+      "requiresReview": false,
+      "ambiguities": [],
+      "geometryTile": "TILE_A",
+      "reason": null
+    },
+    {
+      "spaceId": "space-004",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.425,
+          0.451
+        ],
+        [
+          0.511,
+          0.451
+        ],
+        [
+          0.511,
+          0.607
+        ],
+        [
+          0.425,
+          0.607
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Bedroom",
+      "typeConfidence": "MEDIUM",
+      "geometryConfidence": "HIGH",
+      "requiresReview": false,
+      "ambiguities": [],
+      "geometryTile": "TILE_A",
+      "reason": null
+    },
+    {
+      "spaceId": "space-005",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.729,
+          0.451
+        ],
+        [
+          0.815,
+          0.451
+        ],
+        [
+          0.815,
+          0.607
+        ],
+        [
+          0.729,
+          0.607
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Bedroom",
+      "typeConfidence": "MEDIUM",
+      "geometryConfidence": "HIGH",
+      "requiresReview": false,
+      "ambiguities": [],
+      "geometryTile": "TILE_A",
+      "reason": null
+    },
+    {
+      "spaceId": "space-006",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.822,
+          0.451
+        ],
+        [
+          0.921,
+          0.451
+        ],
+        [
+          0.921,
+          0.577
+        ],
+        [
+          0.847,
+          0.577
+        ],
+        [
+          0.847,
+          0.61
+        ],
+        [
+          0.822,
+          0.61
+        ]
+      ],
+      "vertexCount": 6,
+      "type": "Bedroom",
+      "typeConfidence": "MEDIUM",
+      "geometryConfidence": "HIGH",
+      "requiresReview": false,
+      "ambiguities": [],
+      "geometryTile": "TILE_A",
+      "reason": null
+    },
+    {
+      "spaceId": "space-007",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.32,
+          0.648
+        ],
+        [
+          0.428,
+          0.648
+        ],
+        [
+          0.428,
+          0.718
+        ],
+        [
+          0.474,
+          0.718
+        ],
+        [
+          0.474,
+          0.78
+        ],
+        [
+          0.32,
+          0.78
+        ]
+      ],
+      "vertexCount": 6,
+      "type": "Bedroom",
+      "typeConfidence": "MEDIUM",
+      "geometryConfidence": "MEDIUM",
+      "requiresReview": true,
+      "ambiguities": [
+        "Short internal wall returns may represent retained partitions."
+      ],
+      "geometryTile": "TILE_A",
+      "reason": null
+    },
+    {
+      "spaceId": "space-008",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.43,
+          0.649
+        ],
+        [
+          0.474,
+          0.649
+        ],
+        [
+          0.474,
+          0.715
+        ],
+        [
+          0.43,
+          0.715
+        ]
+      ],
+      "vertexCount": 4,
+      "type": null,
+      "typeConfidence": "LOW",
+      "geometryConfidence": "HIGH",
+      "requiresReview": true,
+      "ambiguities": [
+        "Small enclosure has no readable use label or fixtures."
+      ],
+      "geometryTile": "TILE_A",
+      "reason": null
+    },
+    {
+      "spaceId": "space-009",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.767,
+          0.649
+        ],
+        [
+          0.81,
+          0.649
+        ],
+        [
+          0.81,
+          0.715
+        ],
+        [
+          0.767,
+          0.715
+        ]
+      ],
+      "vertexCount": 4,
+      "type": null,
+      "typeConfidence": "LOW",
+      "geometryConfidence": "HIGH",
+      "requiresReview": true,
+      "ambiguities": [
+        "Small enclosure has no readable use label or fixtures."
+      ],
+      "geometryTile": "TILE_A",
+      "reason": null
+    },
+    {
+      "spaceId": "space-010",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.812,
+          0.648
+        ],
+        [
+          0.921,
+          0.648
+        ],
+        [
+          0.921,
+          0.78
+        ],
+        [
+          0.767,
+          0.78
+        ],
+        [
+          0.767,
+          0.718
+        ],
+        [
+          0.812,
+          0.718
+        ]
+      ],
+      "vertexCount": 6,
+      "type": "Bedroom",
+      "typeConfidence": "MEDIUM",
+      "geometryConfidence": "MEDIUM",
+      "requiresReview": true,
+      "ambiguities": [
+        "Short internal wall returns may represent retained partitions."
+      ],
+      "geometryTile": "TILE_A",
+      "reason": null
+    },
+    {
+      "spaceId": "space-011",
+      "geometryClass": "OPEN_CONNECTED",
+      "polygon": [
+        [
+          0.471,
+          0.4
+        ],
+        [
+          0.616,
+          0.4
+        ],
+        [
+          0.616,
+          0.753
+        ],
+        [
+          0.579,
+          0.753
+        ],
+        [
+          0.579,
+          0.909
+        ],
+        [
+          0.475,
+          0.909
+        ],
+        [
+          0.475,
+          0.846
+        ],
+        [
+          0.496,
+          0.846
+        ],
+        [
+          0.496,
+          0.755
+        ],
+        [
+          0.476,
+          0.755
+        ],
+        [
+          0.476,
+          0.645
+        ],
+        [
+          0.419,
+          0.645
+        ],
+        [
+          0.419,
+          0.61
+        ],
+        [
+          0.514,
+          0.61
+        ],
+        [
+          0.514,
+          0.451
+        ],
+        [
+          0.471,
+          0.451
+        ]
+      ],
+      "vertexCount": 16,
+      "type": "Living kitchen and circulation",
+      "typeConfidence": "HIGH",
+      "geometryConfidence": "MEDIUM",
+      "requiresReview": true,
+      "ambiguities": [
+        "Yellow demolition line interpreted as removed wall connecting proposed living extension.",
+        "Doorway thresholds inferred."
+      ],
+      "geometryTile": "TILE_A",
+      "reason": null
+    },
+    {
+      "spaceId": "space-012",
+      "geometryClass": "OPEN_CONNECTED",
+      "polygon": [
+        [
+          0.624,
+          0.4
+        ],
+        [
+          0.769,
+          0.4
+        ],
+        [
+          0.769,
+          0.451
+        ],
+        [
+          0.726,
+          0.451
+        ],
+        [
+          0.726,
+          0.61
+        ],
+        [
+          0.822,
+          0.61
+        ],
+        [
+          0.822,
+          0.645
+        ],
+        [
+          0.764,
+          0.645
+        ],
+        [
+          0.764,
+          0.755
+        ],
+        [
+          0.742,
+          0.755
+        ],
+        [
+          0.742,
+          0.846
+        ],
+        [
+          0.774,
+          0.846
+        ],
+        [
+          0.774,
+          0.909
+        ],
+        [
+          0.666,
+          0.909
+        ],
+        [
+          0.666,
+          0.753
+        ],
+        [
+          0.624,
+          0.753
+        ]
+      ],
+      "vertexCount": 16,
+      "type": "Living kitchen and circulation",
+      "typeConfidence": "HIGH",
+      "geometryConfidence": "MEDIUM",
+      "requiresReview": true,
+      "ambiguities": [
+        "Yellow demolition line interpreted as removed wall connecting proposed living extension.",
+        "Doorway thresholds inferred."
+      ],
+      "geometryTile": "TILE_A",
+      "reason": null
+    },
+    {
+      "spaceId": "space-013",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.514,
+          0.351
+        ],
+        [
+          0.611,
+          0.351
+        ],
+        [
+          0.611,
+          0.389
+        ],
+        [
+          0.514,
+          0.389
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Balcony",
+      "typeConfidence": "HIGH",
+      "geometryConfidence": "MEDIUM",
+      "requiresReview": true,
+      "ambiguities": [
+        "Adjacent overlaid balcony outline belongs to another level and is excluded."
+      ],
+      "geometryTile": "TILE_A",
+      "reason": null
+    },
+    {
+      "spaceId": "space-014",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.624,
+          0.351
+        ],
+        [
+          0.727,
+          0.351
+        ],
+        [
+          0.727,
+          0.389
+        ],
+        [
+          0.624,
+          0.389
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Balcony",
+      "typeConfidence": "HIGH",
+      "geometryConfidence": "MEDIUM",
+      "requiresReview": true,
+      "ambiguities": [
+        "Adjacent overlaid balcony outline belongs to another level and is excluded."
+      ],
+      "geometryTile": "TILE_A",
+      "reason": null
+    },
+    {
+      "spaceId": "space-015",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.253,
+          0.623
+        ],
+        [
+          0.308,
+          0.623
+        ],
+        [
+          0.308,
+          0.789
+        ],
+        [
+          0.253,
+          0.789
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Balcony",
+      "typeConfidence": "HIGH",
+      "geometryConfidence": "HIGH",
+      "requiresReview": false,
+      "ambiguities": [],
+      "geometryTile": "TILE_A",
+      "reason": null
+    },
+    {
+      "spaceId": "space-016",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.936,
+          0.623
+        ],
+        [
+          0.989,
+          0.623
+        ],
+        [
+          0.989,
+          0.789
+        ],
+        [
+          0.936,
+          0.789
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Balcony",
+      "typeConfidence": "HIGH",
+      "geometryConfidence": "HIGH",
+      "requiresReview": false,
+      "ambiguities": [],
+      "geometryTile": "TILE_A",
+      "reason": null
+    },
+    {
+      "spaceId": "space-017",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.426,
+          0.799
+        ],
+        [
+          0.459,
+          0.799
+        ],
+        [
+          0.459,
+          0.909
+        ],
+        [
+          0.426,
+          0.909
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Utility room",
+      "typeConfidence": "MEDIUM",
+      "geometryConfidence": "MEDIUM",
+      "requiresReview": true,
+      "ambiguities": [
+        "Laundry and principal-area annotations overlap; enclosure use uncertain."
+      ],
+      "geometryTile": "TILE_A",
+      "reason": null
+    },
+    {
+      "spaceId": "space-018",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.786,
+          0.799
+        ],
+        [
+          0.82,
+          0.799
+        ],
+        [
+          0.82,
+          0.909
+        ],
+        [
+          0.786,
+          0.909
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Utility room",
+      "typeConfidence": "MEDIUM",
+      "geometryConfidence": "MEDIUM",
+      "requiresReview": true,
+      "ambiguities": [
+        "Laundry and principal-area annotations overlap; enclosure use uncertain."
+      ],
+      "geometryTile": "TILE_A",
+      "reason": null
+    },
+    {
+      "spaceId": "space-019",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.42,
+          0.54
+        ],
+        [
+          0.504,
+          0.54
+        ],
+        [
+          0.504,
+          0.699
+        ],
+        [
+          0.42,
+          0.699
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Protected bedroom",
+      "typeConfidence": "HIGH",
+      "geometryConfidence": "HIGH",
+      "requiresReview": false,
+      "ambiguities": [],
+      "geometryTile": "TILE_C",
+      "reason": null
+    },
+    {
+      "spaceId": "space-020",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.737,
+          0.54
+        ],
+        [
+          0.82,
+          0.54
+        ],
+        [
+          0.82,
+          0.699
+        ],
+        [
+          0.737,
+          0.699
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Protected bedroom",
+      "typeConfidence": "HIGH",
+      "geometryConfidence": "HIGH",
+      "requiresReview": false,
+      "ambiguities": [],
+      "geometryTile": "TILE_C",
+      "reason": null
+    },
+    {
+      "spaceId": "space-021",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.33,
+          0.305
+        ],
+        [
+          0.391,
+          0.305
+        ],
+        [
+          0.391,
+          0.321
+        ],
+        [
+          0.419,
+          0.321
+        ],
+        [
+          0.419,
+          0.479
+        ],
+        [
+          0.33,
+          0.479
+        ]
+      ],
+      "vertexCount": 6,
+      "type": "Bedroom",
+      "typeConfidence": "MEDIUM",
+      "geometryConfidence": "HIGH",
+      "requiresReview": false,
+      "ambiguities": [],
+      "geometryTile": "TILE_C",
+      "reason": null
+    },
+    {
+      "spaceId": "space-022",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.422,
+          0.321
+        ],
+        [
+          0.511,
+          0.321
+        ],
+        [
+          0.511,
+          0.479
+        ],
+        [
+          0.422,
+          0.479
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Bedroom",
+      "typeConfidence": "MEDIUM",
+      "geometryConfidence": "HIGH",
+      "requiresReview": false,
+      "ambiguities": [],
+      "geometryTile": "TILE_C",
+      "reason": null
+    },
+    {
+      "spaceId": "space-023",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.729,
+          0.321
+        ],
+        [
+          0.819,
+          0.321
+        ],
+        [
+          0.819,
+          0.479
+        ],
+        [
+          0.729,
+          0.479
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Bedroom",
+      "typeConfidence": "MEDIUM",
+      "geometryConfidence": "HIGH",
+      "requiresReview": false,
+      "ambiguities": [],
+      "geometryTile": "TILE_C",
+      "reason": null
+    },
+    {
+      "spaceId": "space-024",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.826,
+          0.321
+        ],
+        [
+          0.848,
+          0.321
+        ],
+        [
+          0.848,
+          0.305
+        ],
+        [
+          0.911,
+          0.305
+        ],
+        [
+          0.911,
+          0.479
+        ],
+        [
+          0.826,
+          0.479
+        ]
+      ],
+      "vertexCount": 6,
+      "type": "Bedroom",
+      "typeConfidence": "MEDIUM",
+      "geometryConfidence": "HIGH",
+      "requiresReview": false,
+      "ambiguities": [],
+      "geometryTile": "TILE_C",
+      "reason": null
+    },
+    {
+      "spaceId": "space-025",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.33,
+          0.229
+        ],
+        [
+          0.403,
+          0.229
+        ],
+        [
+          0.403,
+          0.269
+        ],
+        [
+          0.39,
+          0.269
+        ],
+        [
+          0.39,
+          0.301
+        ],
+        [
+          0.33,
+          0.301
+        ]
+      ],
+      "vertexCount": 6,
+      "type": null,
+      "typeConfidence": "LOW",
+      "geometryConfidence": "MEDIUM",
+      "requiresReview": true,
+      "ambiguities": [
+        "Unlabelled enclosure; use cannot be established."
+      ],
+      "geometryTile": "TILE_C",
+      "reason": null
+    },
+    {
+      "spaceId": "space-026",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.406,
+          0.229
+        ],
+        [
+          0.457,
+          0.229
+        ],
+        [
+          0.457,
+          0.269
+        ],
+        [
+          0.406,
+          0.269
+        ]
+      ],
+      "vertexCount": 4,
+      "type": null,
+      "typeConfidence": "LOW",
+      "geometryConfidence": "HIGH",
+      "requiresReview": true,
+      "ambiguities": [
+        "Unlabelled small enclosure."
+      ],
+      "geometryTile": "TILE_C",
+      "reason": null
+    },
+    {
+      "spaceId": "space-027",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.783,
+          0.229
+        ],
+        [
+          0.835,
+          0.229
+        ],
+        [
+          0.835,
+          0.269
+        ],
+        [
+          0.783,
+          0.269
+        ]
+      ],
+      "vertexCount": 4,
+      "type": null,
+      "typeConfidence": "LOW",
+      "geometryConfidence": "HIGH",
+      "requiresReview": true,
+      "ambiguities": [
+        "Unlabelled small enclosure."
+      ],
+      "geometryTile": "TILE_C",
+      "reason": null
+    },
+    {
+      "spaceId": "space-028",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.838,
+          0.229
+        ],
+        [
+          0.911,
+          0.229
+        ],
+        [
+          0.911,
+          0.301
+        ],
+        [
+          0.85,
+          0.301
+        ],
+        [
+          0.85,
+          0.269
+        ],
+        [
+          0.838,
+          0.269
+        ]
+      ],
+      "vertexCount": 6,
+      "type": null,
+      "typeConfidence": "LOW",
+      "geometryConfidence": "MEDIUM",
+      "requiresReview": true,
+      "ambiguities": [
+        "Unlabelled enclosure; use cannot be established."
+      ],
+      "geometryTile": "TILE_C",
+      "reason": null
+    },
+    {
+      "spaceId": "space-029",
+      "geometryClass": "OPEN_CONNECTED",
+      "polygon": [
+        [
+          0.499,
+          0.099
+        ],
+        [
+          0.578,
+          0.099
+        ],
+        [
+          0.578,
+          0.227
+        ],
+        [
+          0.616,
+          0.227
+        ],
+        [
+          0.616,
+          0.531
+        ],
+        [
+          0.472,
+          0.531
+        ],
+        [
+          0.472,
+          0.489
+        ],
+        [
+          0.514,
+          0.489
+        ],
+        [
+          0.514,
+          0.32
+        ],
+        [
+          0.419,
+          0.32
+        ],
+        [
+          0.419,
+          0.272
+        ],
+        [
+          0.459,
+          0.272
+        ],
+        [
+          0.459,
+          0.219
+        ],
+        [
+          0.495,
+          0.219
+        ],
+        [
+          0.495,
+          0.131
+        ],
+        [
+          0.499,
+          0.131
+        ]
+      ],
+      "vertexCount": 16,
+      "type": "Living kitchen and circulation",
+      "typeConfidence": "HIGH",
+      "geometryConfidence": "MEDIUM",
+      "requiresReview": true,
+      "ambiguities": [
+        "Proposed extension connected across yellow demolition line.",
+        "Short door thresholds inferred."
+      ],
+      "geometryTile": "TILE_C",
+      "reason": null
+    },
+    {
+      "spaceId": "space-030",
+      "geometryClass": "OPEN_CONNECTED",
+      "polygon": [
+        [
+          0.666,
+          0.099
+        ],
+        [
+          0.741,
+          0.099
+        ],
+        [
+          0.741,
+          0.219
+        ],
+        [
+          0.78,
+          0.219
+        ],
+        [
+          0.78,
+          0.272
+        ],
+        [
+          0.822,
+          0.272
+        ],
+        [
+          0.822,
+          0.32
+        ],
+        [
+          0.726,
+          0.32
+        ],
+        [
+          0.726,
+          0.489
+        ],
+        [
+          0.768,
+          0.489
+        ],
+        [
+          0.768,
+          0.531
+        ],
+        [
+          0.624,
+          0.531
+        ],
+        [
+          0.624,
+          0.227
+        ],
+        [
+          0.666,
+          0.227
+        ]
+      ],
+      "vertexCount": 14,
+      "type": "Living kitchen and circulation",
+      "typeConfidence": "HIGH",
+      "geometryConfidence": "MEDIUM",
+      "requiresReview": true,
+      "ambiguities": [
+        "Proposed extension connected across yellow demolition line.",
+        "Short door thresholds inferred."
+      ],
+      "geometryTile": "TILE_C",
+      "reason": null
+    },
+    {
+      "spaceId": "space-031",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.26,
+          0.356
+        ],
+        [
+          0.318,
+          0.356
+        ],
+        [
+          0.318,
+          0.513
+        ],
+        [
+          0.26,
+          0.513
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Balcony",
+      "typeConfidence": "HIGH",
+      "geometryConfidence": "HIGH",
+      "requiresReview": false,
+      "ambiguities": [],
+      "geometryTile": "TILE_C",
+      "reason": null
+    },
+    {
+      "spaceId": "space-032",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.924,
+          0.356
+        ],
+        [
+          0.98,
+          0.356
+        ],
+        [
+          0.98,
+          0.513
+        ],
+        [
+          0.924,
+          0.513
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Balcony",
+      "typeConfidence": "HIGH",
+      "geometryConfidence": "HIGH",
+      "requiresReview": false,
+      "ambiguities": [],
+      "geometryTile": "TILE_C",
+      "reason": null
+    },
+    {
+      "spaceId": "space-033",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.514,
+          0.541
+        ],
+        [
+          0.611,
+          0.541
+        ],
+        [
+          0.611,
+          0.582
+        ],
+        [
+          0.514,
+          0.582
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Balcony",
+      "typeConfidence": "HIGH",
+      "geometryConfidence": "MEDIUM",
+      "requiresReview": true,
+      "ambiguities": [
+        "Larger outline below is annotated as a different-level balcony and excluded."
+      ],
+      "geometryTile": "TILE_C",
+      "reason": null
+    },
+    {
+      "spaceId": "space-034",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.624,
+          0.541
+        ],
+        [
+          0.727,
+          0.541
+        ],
+        [
+          0.727,
+          0.582
+        ],
+        [
+          0.624,
+          0.582
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Balcony",
+      "typeConfidence": "HIGH",
+      "geometryConfidence": "MEDIUM",
+      "requiresReview": true,
+      "ambiguities": [
+        "Larger outline below is annotated as a different-level balcony and excluded."
+      ],
+      "geometryTile": "TILE_C",
+      "reason": null
+    },
+    {
+      "spaceId": "space-035",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.426,
+          0.099
+        ],
+        [
+          0.459,
+          0.099
+        ],
+        [
+          0.459,
+          0.211
+        ],
+        [
+          0.426,
+          0.211
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Utility room",
+      "typeConfidence": "MEDIUM",
+      "geometryConfidence": "MEDIUM",
+      "requiresReview": true,
+      "ambiguities": [
+        "Laundry and proposed principal-area annotations overlap."
+      ],
+      "geometryTile": "TILE_C",
+      "reason": null
+    },
+    {
+      "spaceId": "space-036",
+      "geometryClass": "CLOSED",
+      "polygon": [
+        [
+          0.787,
+          0.099
+        ],
+        [
+          0.82,
+          0.099
+        ],
+        [
+          0.82,
+          0.211
+        ],
+        [
+          0.787,
+          0.211
+        ]
+      ],
+      "vertexCount": 4,
+      "type": "Utility room",
+      "typeConfidence": "MEDIUM",
+      "geometryConfidence": "MEDIUM",
+      "requiresReview": true,
+      "ambiguities": [
+        "Laundry and proposed principal-area annotations overlap."
+      ],
+      "geometryTile": "TILE_C",
+      "reason": null
+    }
+  ]
+}

@@ -1,9 +1,12 @@
-import type { RebarItem, RebarMesh } from '../types/structural';
+import { memo } from 'react';
+import type { RebarBars, RebarItem, RebarMesh } from '../types/structural';
 import { polygonCentroid } from '../lib/geometry';
 import { labelDirection } from '../lib/textDirection';
 import { markLabel } from '../lib/structuralMarks';
 import { REBAR_COLOR, rebarZoneRows } from '../lib/structuralOverlay';
-import { useLanguage, useT } from '../i18n';
+import { formatNumber, useLanguage, useT } from '../i18n';
+import type { Calibration, Plan } from '../types';
+import { prepareStraightBarsOverlay } from '../lib/straightBarsOverlay';
 
 export { REBAR_COLOR };
 
@@ -11,27 +14,41 @@ export { REBAR_COLOR };
  * Rebar mesh zones of the page on screen: a lightweight dotted outline with a faint tint and a
  * short label — the mark, then one line per reinforcement level (`Bottom: Ø12 @ 20 — 2 directions`,
  * or `Bottom: Long Ø12@20 | Short Ø10@15`). On a zone too small for that, the mark and a compact
- * B / T tag. Individual bars are never drawn. Purely visual and not interactive: selecting happens through the
- * viewer's click handler, in the Rebar tab only. Manual bars have no shape, so no overlay.
+ * B / T tag. Spatial Bars use the same prepared lines as plan exports. This overlay stays purely visual;
+ * selection and dragging use the viewer's existing handlers. Legacy numerical Bars have no overlay.
  */
 export default function RebarZones({
   items,
   selectedId,
   strokeW,
   zoom,
+  calibration,
+  selectedBarId,
+  pageNumber,
+  pages,
 }: {
   items: RebarItem[];
   selectedId: string | null;
   strokeW: number;
   zoom: number;
+  calibration: Calibration | null;
+  selectedBarId: string | null;
+  pageNumber: number;
+  pages: Plan['pages'];
 }) {
   const t = useT();
   const language = useLanguage();
   const meshes = items.filter((i): i is RebarMesh => i.kind === 'mesh' && i.points.length >= 3);
-  if (meshes.length === 0) return null;
+  const bars = items.filter((i) => i.kind === 'bars' && (i.barsZone || i.drawnBars !== undefined));
 
   return (
     <g className="rebar-zones" pointerEvents="none">
+      {bars.map((item) => {
+        if (item.kind !== 'bars') return null;
+        return <BarsOverlay key={item.id} item={item} selected={item.id === selectedId}
+          selectedBarId={item.id === selectedId ? selectedBarId : null} calibration={calibration}
+          pages={pages} pageNumber={pageNumber} zoom={zoom} strokeW={strokeW} />;
+      })}
       {meshes.map((m) => {
         const selected = m.id === selectedId;
         const pts = m.points.map((p) => `${p.x},${p.y}`).join(' ');
@@ -80,3 +97,29 @@ export default function RebarZones({
     </g>
   );
 }
+
+// Only the edited item needs its existing bar resolver during a geometry preview.
+const BarsOverlay = memo(function BarsOverlay({ item, selected, selectedBarId, calibration, pages, pageNumber, zoom, strokeW }: {
+  item: RebarBars; selected: boolean; selectedBarId: string | null; calibration: Calibration | null;
+  pages: Plan['pages']; pageNumber: number; zoom: number; strokeW: number;
+}) {
+  const t = useT();
+  const language = useLanguage();
+        const overlay = prepareStraightBarsOverlay(item, calibration, t, formatNumber, pageNumber, pages);
+        return <g>
+          {overlay.points.length >= 3 && <polygon points={overlay.points.map((p) => `${p.x},${p.y}`).join(' ')} fill={REBAR_COLOR} fillOpacity={selected ? 0.09 : 0.03}
+            stroke={REBAR_COLOR} strokeWidth={strokeW} strokeDasharray={`${3 / zoom} ${3 / zoom}`} />}
+          {overlay.lines.map((line, index) => {
+            const active = selected && line.physicalId !== null && line.physicalId === selectedBarId;
+            return <g key={line.physicalId ?? index}>
+              <line x1={line.start.x} y1={line.start.y} x2={line.end.x} y2={line.end.y}
+                stroke={REBAR_COLOR} strokeWidth={active ? strokeW * 2 : selected ? strokeW * 1.5 : strokeW} />
+              {active && [line.start, line.end].map((p, end) => <circle key={end} cx={p.x} cy={p.y} r={4 / zoom}
+                fill="#fff" stroke={REBAR_COLOR} strokeWidth={strokeW} />)}
+            </g>;
+          })}
+          {overlay.center && overlay.rows.map((row, index) => <text key={index} x={overlay.center!.x} y={overlay.center!.y + index * 12 / zoom}
+            fontSize={10.5 / zoom} fill={REBAR_COLOR} textAnchor="middle" direction={labelDirection(row, language)}
+            paintOrder="stroke" stroke="#fff" strokeWidth={3 / zoom} strokeLinejoin="round">{row}</text>)}
+        </g>;
+});
