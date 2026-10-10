@@ -19,7 +19,7 @@ import { t, type TranslateFn } from '../i18n';
 
 export type TilingCategoryKey = 'regular' | 'as';
 
-export type RoomProfileKey = 'bath' | 'wc' | 'service' | 'kitchen' | 'balcony' | 'safe' | 'living' | 'bedroom' | 'hall' | 'storage';
+export type RoomProfileKey = 'bath' | 'wc' | 'service' | 'kitchen' | 'balcony' | 'service_balcony' | 'safe' | 'living' | 'bedroom' | 'hall' | 'storage';
 
 export interface RoomProfile {
   key: RoomProfileKey;
@@ -47,7 +47,8 @@ export const ROOM_PROFILES: RoomProfile[] = [
   { key: 'wc', labels: ['שירותי אורחים', 'שרותי אורחים', 'שירותים', 'שרותים', 'אסלה', 'שירות אורחים'], tiling: 'as', cladding: true, panels: false, waterproofing: true },
   { key: 'service', labels: ['חדר שירות', 'חדר כביסה', 'כביסה', 'חדר רחצה שירות'], tiling: 'as', cladding: false, panels: false, waterproofing: true },
   { key: 'kitchen', labels: ['מטבח', 'מטבחון'], tiling: 'regular', cladding: true, panels: true, painting: true },
-  { key: 'balcony', labels: ['מרפסת שירות', 'מרפסת שמש', 'מרפסת'], tiling: 'as', cladding: false, panels: false, waterproofing: true },
+  { key: 'service_balcony', labels: ['מרפסת שירות'], tiling: 'as', cladding: false, panels: false, waterproofing: true },
+  { key: 'balcony', labels: ['מרפסת שמש', 'מרפסת'], tiling: 'as', cladding: false, panels: false, waterproofing: true },
   { key: 'safe', labels: ['ממ"ד', 'ממ״ד', 'ממד', 'מרחב מוגן', 'מקלט'], tiling: 'regular', cladding: false, panels: true, painting: true },
   { key: 'living', labels: ['סלון', 'חדר מגורים', 'מגורים', 'פינת אוכל'], tiling: 'regular', cladding: false, panels: true, painting: true },
   { key: 'bedroom', labels: ['חדר שינה', 'חדר הורים', 'חדר ילדים', 'חדר שינה הורים', 'שינה', 'חדר'], tiling: 'regular', cladding: false, panels: true, painting: true },

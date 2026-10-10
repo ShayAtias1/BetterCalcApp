@@ -341,6 +341,7 @@ export const he = {
     service: 'חדר שירות',
     kitchen: 'מטבח',
     balcony: 'מרפסת',
+    service_balcony: 'מרפסת שירות',
     safe: 'ממ"ד',
     living: 'סלון',
     bedroom: 'חדר שינה',

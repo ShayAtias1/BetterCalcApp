@@ -24,7 +24,7 @@ export type InAppBrowser = 'instagram' | 'facebook' | 'none';
 export type CountBucket = '0' | '1' | '2_5' | '6_20' | '21_plus';
 export type PdfSizeBucket = 'lt_1mb' | '1_5mb' | '5_20mb' | 'gt_20mb' | 'unknown';
 export type WorkTypeName = 'tiling' | 'cladding' | 'panels' | 'painting' | 'plaster' | 'waterproofing';
-export type RoomTemplateKey = 'bath' | 'wc' | 'service' | 'kitchen' | 'balcony' | 'safe' | 'living' | 'bedroom' | 'hall' | 'storage';
+export type RoomTemplateKey = 'bath' | 'wc' | 'service' | 'kitchen' | 'balcony' | 'service_balcony' | 'safe' | 'living' | 'bedroom' | 'hall' | 'storage';
 export type ExportKind =
   | 'quantity_excel'
   | 'quantity_pdf'

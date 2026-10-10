@@ -346,6 +346,7 @@ export const en: Dictionary = {
     service: 'Utility Room',
     kitchen: 'Kitchen',
     balcony: 'Balcony',
+    service_balcony: 'Service Balcony',
     safe: 'Safe Room',
     living: 'Living Room',
     bedroom: 'Bedroom',
