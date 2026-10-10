@@ -1,8 +1,9 @@
+import { parseOneClickResult, targetCrop } from '../../src/lib/ai/oneClick.ts';
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseLocalAiResult, polygonProblems } from '../../src/lib/localAiImport.ts';
 import { reshapeArea } from '../../src/lib/areaGeometryEditing.ts';
-import { roomMetrics } from '../../src/lib/quantities.ts';
+import { roomMetrics, buildRoomSummaries } from '../../src/lib/quantities.ts';
 import { aiWarnings, aiProfileKey, aiCandidateLabel } from '../../src/lib/localAiReview.ts';
 import { translate } from '../../src/i18n/index.ts';
 import { PLAN_A } from './fixtures.ts';
@@ -159,7 +160,7 @@ test('AI warnings retain exact evidence, can be reviewed individually or per pag
   open();
   const candidate = store().detectionCandidates[0];
   const metadata = structuredClone(candidate.localAi!);
-  const warnings = aiWarnings(metadata);
+  const warnings = aiWarnings(metadata, (key, ...args) => translate('en', key, ...args));
   assert.ok(warnings.some(w => w.id === 'geometryClass'));
   assert.equal(warnings.find(w => w.id === 'ambiguity:0')!.text, space.ambiguities[0]);
   assert.ok(!warnings.some(w => w.id === 'reason')); // No fabricated cross-tile reason.
@@ -226,4 +227,36 @@ test('One-Click target containment remains an approval gate after edits and norm
   assert.equal(store().acceptDetectionCandidate(candidate.id),candidate.id);
   const room=store().project!.rooms.at(-1)!;assert.deepEqual(room.aiSource?.targetPoint,{x:60,y:60});
   assert.equal(room.aiSource?.detectionMode,'one-click-v1');assert.deepEqual(room.workItems,[]);
+});
+
+
+test('One-Click native geometry is revealed for review and remains a normal visible room after approval',()=>{
+  open();
+  const original=structuredClone(store().project!.rooms);
+  const preserved=structuredClone(store().detectionCandidates);
+  const manifest={preparationVersion:'one-click-v1',renderer:'embedpdf-pdfium' as const,planId:PLAN_A.id,pageNumber:1,sourceHash:'verified-hash',nativeWidth:100,nativeHeight:80,rotation:90,userUnit:1,view:[0,0,80,100],pageDimensions:[5500,4400] as [number,number],renderScale:55,tiles:[],coordinateMapping:'PAGE normalized',targetPoint:{x:50,y:40},crop:targetCrop(5500,4400,{x:50,y:40},55)};
+  const [target]=parseOneClickResult({status:'FOUND',space:{polygon:[[.2,.2],[.8,.2],[.8,.8],[.2,.8]],type:'bedroom',geometryConfidence:'MEDIUM',ambiguities:[]}},manifest,'one-click-job',[]);
+  assert.deepEqual(target.points,[{x:20,y:16},{x:80,y:16},{x:80,y:64},{x:20,y:64}]);
+  assert.deepEqual(target.validationProblems,[]);
+  useAppStore.setState({detectionCandidates:[...preserved,target]});
+  store().setOverlayVisible('finishes',false);
+  const otherOverlays={...store().overlayVisible};
+  store().selectDetectionCandidate(target.id);
+  assert.equal(store().overlayVisible.finishes,true);
+  assert.equal(store().selectedDetectionCandidateId,target.id);
+  assert.deepEqual(store().overlayVisible,{...otherOverlays,finishes:true});
+  store().setOverlayVisible('finishes',false);
+  assert.equal(store().acceptDetectionCandidate(target.id),target.id);
+  assert.equal(store().overlayVisible.finishes,true);
+  const room=store().project!.rooms.find(r=>r.id===target.id)!;
+  assert.equal(room.pageNumber,store().currentPage);
+  assert.deepEqual(room.points,target.points);
+  assert.deepEqual(room.workItems,[]);
+  assert.deepEqual(store().project!.rooms.slice(0,-1),original);
+  assert.deepEqual(store().detectionCandidates,preserved);
+  const summary=buildRoomSummaries(store().project!).find(s=>s.roomId===room.id)!;
+  assert.ok(summary);
+  assert.ok(roomMetrics(room,store().project!.pages[1].calibration!).areaM2>0);
+  store().addWorkItem(room.id,'tiling');
+  assert.ok(buildRoomSummaries(store().project!).find(s=>s.roomId===room.id)!.tilingRegularAreaM2!>0);
 });

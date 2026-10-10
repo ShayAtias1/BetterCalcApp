@@ -5,34 +5,51 @@ import Icon from './Icon';
 export const OPEN_OPENINGS_REVIEW = 'bettercalc:open-openings-review';
 
 /** Independent, opt-in review window anchored above its fixed launcher. */
-export default function AiReviewWindow({ title, progress, meaning, scope, bodyId, openEvent, selectedId, children }: {
+export default function AiReviewWindow({ title, progress, meaning, scope, bodyId, openEvent, selectedId, onOpen, children }: {
   title: string; progress: string; meaning: string; scope: string; bodyId: string;
-  openEvent?: string; selectedId?: string | null; children: ReactNode;
+  openEvent?: string; selectedId?: string | null; onOpen?: () => void; children: ReactNode;
 }) {
   const t = useT();
-  const [open, setOpen] = useState(false), [extended, setExtended] = useState(false);
+  const [open, setOpen] = useState(false), [extended, setExtended] = useState(true);
+  const [availableHeight, setAvailableHeight] = useState<number>();
+  const launcherRef = useRef<HTMLElement>(null);
   const windowRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { setOpen(false); setExtended(false); }, [scope]);
+  useEffect(() => { setOpen(false); setExtended(true); }, [scope]);
+  useEffect(() => {
+    if (!open) return;
+    const launcher = launcherRef.current;
+    const workspace = launcher?.closest('.workspace');
+    const navigation = workspace?.querySelector(':scope > .top-bar, :scope > .adaptive-header');
+    if (!launcher || !workspace || !navigation) return;
+    const measure = () => setAvailableHeight(Math.max(0, launcher.getBoundingClientRect().top - navigation.getBoundingClientRect().bottom - 12));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(workspace);
+    observer.observe(navigation);
+    for (const child of workspace.children) observer.observe(child);
+    window.addEventListener('resize', measure);
+    return () => { observer.disconnect(); window.removeEventListener('resize', measure); };
+  }, [open]);
   useEffect(() => {
     if (!openEvent) return;
-    const show = () => setOpen(true);
+    const show = () => { setExtended(true); setOpen(true); };
     window.addEventListener(openEvent, show);
     return () => window.removeEventListener(openEvent, show);
   }, [openEvent, scope]);
   useEffect(() => {
     if (open) windowRef.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [open, selectedId]);
-  return <section className="ai-review-workspace" aria-label={title}>
+  return <section ref={launcherRef} className="ai-review-workspace" aria-label={title}>
     <header className="ai-review-workspace-head ai-review-launcher">
-      <button className="btn-ghost small" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen(v => !v)}>{title}</button>
+      <button className="btn-ghost small" aria-expanded={open} aria-controls={bodyId} onClick={() => { if (!open) { setExtended(true); onOpen?.(); } setOpen(v => !v); }}>{title}</button>
       <span className="muted" title={meaning} role="status">{progress}</span>
     </header>
-    {open && <div ref={windowRef} className={`ai-review-window${extended ? ' extended' : ''}`}>
+    {open && <div ref={windowRef} className={`ai-review-window${extended ? ' extended' : ''}`} style={extended && availableHeight !== undefined ? { height: availableHeight } : undefined}>
       <header className="ai-review-workspace-head">
         <strong>{title}</strong>
         <div className="ai-review-window-actions">
           <button className="icon-btn" title={t(extended ? 'aiReviewWindow.reduce' : 'aiReviewWindow.extend')} aria-label={t(extended ? 'aiReviewWindow.reduce' : 'aiReviewWindow.extend')} onClick={() => setExtended(v => !v)}><Icon name={extended ? 'collapse' : 'expand'} /></button>
-          <button className="icon-btn" title={t('aiReviewWindow.close')} aria-label={t('aiReviewWindow.close')} onClick={() => { setOpen(false); setExtended(false); }}><Icon name="close" /></button>
+          <button className="icon-btn" title={t('aiReviewWindow.close')} aria-label={t('aiReviewWindow.close')} onClick={() => { setOpen(false); setExtended(true); }}><Icon name="close" /></button>
         </div>
       </header>
       <div className="ai-review-workspace-body" id={bodyId}>{children}</div>

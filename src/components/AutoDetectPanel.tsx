@@ -1,8 +1,9 @@
+import { aiWarningText } from '../lib/aiWarningText';
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { useState } from 'react';
 import { useAppStore } from '../store/appStore';
 import { roomProfileLabel, ROOM_PROFILES, roomProfileName } from '../lib/roomProfiles';
-import { aiWarnings, aiCandidateLabel, aiCandidateTypeKey } from '../lib/localAiReview';
+import { aiCandidateLabel, aiCandidateTypeKey } from '../lib/localAiReview';
 import Icon from './Icon';
 import { useT } from '../i18n';
 
@@ -111,8 +112,6 @@ export function DetectionReviewPanel() {
   const selectedCandidateId = useAppStore(s => s.selectedDetectionCandidateId);
   const selectCandidate = useAppStore(s => s.selectDetectionCandidate);
   const restoreCandidate = useAppStore(s => s.restoreDetectionCandidate);
-  const setWarningReviewed = useAppStore(s => s.setDetectionWarningReviewed);
-  const setAllWarningsReviewed = useAppStore(s => s.setAllDetectionWarningsReviewed);
   const setCandidateType = useAppStore(s => s.setDetectionCandidateType);
   const confirmCandidateType = useAppStore(s => s.confirmDetectionCandidateType);
   const [message, setMessage] = useState<string | null>(null);
@@ -158,10 +157,6 @@ export function DetectionReviewPanel() {
             ? t('autoDetect.assignToApartment', { apartment: activeApartmentNumber })
             : t('autoDetect.assignToNone')}
         </p>
-        {pageCandidates.some(c => c.localAi && aiWarnings(c.localAi).length > 0) && <div className="ai-review-warning-actions">
-          <button className="btn-secondary small" disabled={!pageCandidates.some(c => c.localAi && aiWarnings(c.localAi).some(w => !c.reviewedWarningIds?.includes(w.id)))} onClick={() => setAllWarningsReviewed(true)}>{t('aiReview.reviewAll')}</button>
-          <button className="btn-secondary small" disabled={!pageCandidates.some(c => c.reviewedWarningIds?.length)} onClick={() => setAllWarningsReviewed(false)}>{t('aiReview.restoreWarnings')}</button>
-        </div>}
         {pageCandidates.some(c => c.localAi) && <p className="auto-detect-hint">{t('aiReview.typeUnconfirmed')} {t('aiReview.noFinishes')}</p>}
         <ul className="detect-candidate-list">
           {pageCandidates.map((c) => (
@@ -182,23 +177,6 @@ export function DetectionReviewPanel() {
                     {t(c.semanticTypeConfirmed ? 'aiReview.typeConfirmed' : 'aiReview.confirmType')}
                   </button>}
                   </div>
-                  {aiWarnings(c.localAi, t).length > 0 && <details className="ai-review-warnings">
-                    <summary>
-                      {aiWarnings(c.localAi, t).some(w => !c.reviewedWarningIds?.includes(w.id)) && <Icon name="alert" size={12} />}
-                      {t('aiReview.warnings', { count: aiWarnings(c.localAi, t).filter(w => !c.reviewedWarningIds?.includes(w.id)).length })}
-                    </summary>
-                    {aiWarnings(c.localAi, t).filter(w => !c.reviewedWarningIds?.includes(w.id)).map(w => <label key={w.id} className="ai-review-warning">
-                      <input type="checkbox" checked={false} onChange={() => setWarningReviewed(c.id, w.id, true)} aria-label={`${t('aiReview.reviewed')}: ${w.text}`} />
-                      <span dir="auto">{w.text}</span>
-                    </label>)}
-                    {c.reviewedWarningIds?.length ? <details>
-                      <summary>{t('aiReview.reviewed')}</summary>
-                      {aiWarnings(c.localAi, t).filter(w => c.reviewedWarningIds?.includes(w.id)).map(w => <label key={w.id} className="ai-review-warning muted">
-                        <input type="checkbox" checked onChange={() => setWarningReviewed(c.id, w.id, false)} aria-label={`${t('aiReview.reviewed')}: ${w.text}`} />
-                        <span dir="auto">{w.text}</span>
-                      </label>)}
-                    </details> : null}
-                  </details>}
                 </> : <>
                   {c.roomTypeKey ? <span className="cal-ok"><Icon name="check" size={12} /> {t('autoDetect.detectedType', { type: roomProfileLabel(c.roomTypeKey) ?? '' })}</span>
                     : <span className="muted">{t('autoDetect.typeUnknown')}</span>}
@@ -206,7 +184,7 @@ export function DetectionReviewPanel() {
                 </>}
                 {!!c.validationProblems?.length && <div className="ai-review-errors" role="status">
                   <strong>{t('aiReview.blocked')}</strong>
-                  {c.validationProblems.map(problem => <div key={problem} dir="auto">{problem}</div>)}
+                  {c.validationProblems.map(problem => <div key={problem} dir="auto">{aiWarningText(problem,t)}</div>)}
                 </div>}
               </div>
               <span className="list-item-actions">

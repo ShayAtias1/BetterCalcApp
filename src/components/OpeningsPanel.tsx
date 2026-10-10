@@ -159,8 +159,7 @@ export default function OpeningsPanel({ readOnly = false, editorOnly = false, hi
     </div>}
     {o && <fieldset key={o.id} disabled={readOnly} className="opening-editor">
       {o.aiDetection && <div className="opening-placement-note"><strong>{o.approval.status==='draft'?t('openingAi.draft'):text(o.approval.status)}</strong>
-        <p>{[...(o.aiDetection.provenance?.original.evidence??o.aiDetection.deferred?.evidence??[]),...(o.aiDetection.provenance?.original.ambiguities??[])].join(' · ')}</p>
-        {!o.geometry && <><p>{t('openingAi.deferred')}</p><button type="button" className="btn-secondary" onClick={()=>state.beginOpeningEndpointEdit(o.id)}>{t('openingAi.place')}</button></>}
+        {!o.geometry && <><button type="button" className="btn-secondary" onClick={()=>state.beginOpeningEndpointEdit(o.id)}>{t('openingAi.place')}</button></>}
       </div>}
       {feedback && <div className="opening-quantity-feedback" aria-label={t('openingQuantities.eligibility')}>
         <strong role="status">{quantityStatus(o)}</strong>

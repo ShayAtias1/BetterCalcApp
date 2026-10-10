@@ -1,7 +1,9 @@
+import { aiWarningText } from '../lib/aiWarningText';
+import { useEffect } from 'react';
 import AiReviewWindow from './AiReviewWindow';
 import { useAppStore } from '../store/appStore';
-import { useAiWorkflow } from '../lib/ai/workflow';
-import { aiCandidateLabel, aiCandidateTypeKey, aiWarnings, aiReviewProgress } from '../lib/localAiReview';
+import { useAiWorkflow, initializeAiWorkflow, activateAiPage } from '../lib/ai/workflow';
+import { aiCandidateLabel, aiCandidateTypeKey, aiReviewProgress, pendingAiReviewCandidates } from '../lib/localAiReview';
 import { ROOM_PROFILES, roomProfileName } from '../lib/roomProfiles';
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { useT } from '../i18n';
@@ -13,19 +15,23 @@ export default function AiReviewWorkspace(){
   const project=useAppStore(s=>s.project),pageNumber=useAppStore(s=>s.currentPage);
   const candidates=useAppStore(s=>s.detectionCandidates);
   const selectedId=useAppStore(s=>s.selectedDetectionCandidateId);
-  const {resolvedIds:storedResolvedIds,sourceHash,reviewScope}=useAiWorkflow();
+  const workflow=useAiWorkflow();
+  const {resolvedIds:storedResolvedIds,reviewScope}=workflow;
+  const planId=project?.id;
+  useEffect(()=>{
+    let alive=true;
+    void initializeAiWorkflow().then(()=>{if(alive&&planId)return activateAiPage(planId,pageNumber);});
+    return ()=>{alive=false;};
+  },[planId,pageNumber]);
   const resolvedIds=reviewScope?.planId===project?.id&&reviewScope?.pageNumber===pageNumber?storedResolvedIds:[];
-  const pending=candidates.filter(c=>c.localAi && c.localAi.planId===project?.id && c.pageNumber===pageNumber && (!sourceHash||c.localAi.sourceHash===sourceHash) && !resolvedIds.includes(c.id) && !project?.rooms.some(room=>room.id===c.id));
-  const selected=pending.find(c=>c.id===selectedId);
+  const pending=pendingAiReviewCandidates(candidates,project,pageNumber,workflow);
+  const selected=pending.find(c=>c.id===selectedId)??pending[0];
   const progress=aiReviewProgress(pending.map(c=>c.id),resolvedIds);
-  const warnings=selected?.localAi?aiWarnings(selected.localAi,t):[];
-  const activeWarnings=warnings.filter(w=>!selected?.reviewedWarningIds?.includes(w.id));
-  const reviewedWarnings=warnings.filter(w=>selected?.reviewedWarningIds?.includes(w.id));
   const validCount=pending.filter(c=>!c.validationProblems?.length).length;
   if(!project||(!pending.length&&!progress.total)||reviewOnly)return null;
   const actions=()=>useAppStore.getState();
   const select=(id:string)=>{actions().setDrawTarget('room');actions().setToolMode('select');actions().selectDetectionCandidate(id);};
-  const index=pending.findIndex(c=>c.id===selectedId);
+  const index=pending.findIndex(c=>c.id===selected?.id);
   const advance=(offset:number)=>{if(pending.length)select(pending[(index<0?0:(index+offset+pending.length)%pending.length)].id);};
   const resolve=(approve:boolean)=>{
     if(!selected)return;
@@ -35,7 +41,7 @@ export default function AiReviewWorkspace(){
     if(neighbor)select(neighbor.id);
   };
   return <AiReviewWindow title={t('aiReviewWorkspace.title')} progress={t('aiReviewWorkspace.progress',progress)} meaning={t('aiReviewWorkspace.progressMeaning')}
-    scope={`${project.id}:${pageNumber}`} bodyId="ai-review-workspace-body" selectedId={selectedId}>
+    scope={`${project.id}:${pageNumber}`} bodyId="ai-review-workspace-body" selectedId={selected?.id} onOpen={()=>{if(selected)select(selected.id);}}>
       <nav className="ai-review-queue" aria-label={t('aiReviewWorkspace.pending',{count:pending.length})}>
         <div className="ai-review-queue-head">
           <strong>{t('aiReviewWorkspace.pending',{count:pending.length})}</strong>
@@ -43,15 +49,12 @@ export default function AiReviewWorkspace(){
           <button className="btn-secondary small" disabled={!pending.length} onClick={()=>advance(1)} aria-label={t('aiReviewWorkspace.next')}>{t('aiReviewWorkspace.nextShort')}</button>
         </div>
         <ul>
-          {pending.map(c=>{
-            const count=aiWarnings(c.localAi!,t).filter(w=>!c.reviewedWarningIds?.includes(w.id)).length;
-            return <li key={c.id}><button className={`ai-review-queue-row${c.id===selectedId?' active':''}`} aria-current={c.id===selectedId?'true':undefined} onClick={()=>select(c.id)}>
+          {pending.map(c=><li key={c.id}><button className={`ai-review-queue-row${c.id===selected?.id?' active':''}`} aria-current={c.id===selected?.id?'true':undefined} onClick={()=>select(c.id)}>
               <span className="ai-review-queue-name" dir="auto">{aiCandidateLabel(c,t)}</span>
               <small dir="ltr">{c.localAi!.spaceId}</small>
               <span className="ai-review-queue-state">{c.validationProblems?.length?<span className="ai-review-hard-error"><Icon name="alert" size={12}/>{t('aiReviewWorkspace.blocked')}</span>
-                :count?<span className="ai-review-uncertainty"><Icon name="alert" size={12}/>{t('aiReviewWorkspace.warningCount',{count})}</span>:t('aiReviewWorkspace.pendingState')}</span>
-            </button></li>;
-          })}
+                :t('aiReviewWorkspace.pendingState')}</span>
+            </button></li>)}
         </ul>
       </nav>
       <div className="ai-review-detail" key={selected?.id??'none'}>
@@ -63,24 +66,18 @@ export default function AiReviewWorkspace(){
             <button className="btn-primary small" disabled={!!selected.validationProblems?.length} onClick={()=>resolve(true)}>{t('aiReviewWorkspace.approve')}</button>
             <button className="btn-secondary small" onClick={()=>resolve(false)}>{t('aiReviewWorkspace.reject')}</button>
           </div>
-          {!!selected.validationProblems?.length&&<div className="ai-review-hard-error" role="status"><strong>{t('aiReview.blocked')}</strong>{selected.validationProblems.map(problem=><p key={problem} dir="auto">{problem}</p>)}</div>}
+          {!!selected.validationProblems?.length&&<div className="ai-review-hard-error" role="status"><strong>{t('aiReview.blocked')}</strong>{selected.validationProblems.map(problem=><p key={problem} dir="auto">{aiWarningText(problem,t)}</p>)}</div>}
           <div className="ai-review-type">
             <label>{t('aiReview.type')}<select value={aiCandidateTypeKey(selected)??''} onChange={event=>actions().setDetectionCandidateType(selected.id,event.target.value||null)}><option value="">{t('aiReview.unknown')}</option>{ROOM_PROFILES.map(profile=><option key={profile.key} value={profile.key}>{roomProfileName(profile,t)}</option>)}</select></label>
             {aiCandidateTypeKey(selected)&&<button className="btn-secondary small" disabled={selected.semanticTypeConfirmed} onClick={()=>actions().confirmDetectionCandidateType(selected.id)}>{t(selected.semanticTypeConfirmed?'aiReview.typeConfirmed':'aiReview.confirmType')}</button>}
           </div>
           <p className="muted">{t('aiReview.typeUnconfirmed')} {t('aiReview.noFinishes')}</p>
-          {activeWarnings.length?<section className="ai-review-warning-details"><strong>{t('aiReviewWorkspace.warningCount',{count:activeWarnings.length})}</strong>
-            {activeWarnings.map(w=><label className="ai-review-warning" key={w.id}><input type="checkbox" checked={false} aria-label={`${t('aiReview.reviewed')}: ${w.text}`} onChange={()=>actions().setDetectionWarningReviewed(selected.id,w.id,true)}/><span dir="auto">{w.text}</span></label>)}
-          </section>:<p className="muted">{t('aiReviewWorkspace.noWarnings')}</p>}
-          {!!reviewedWarnings.length&&<details><summary>{t('aiReviewWorkspace.reviewedWarnings')}</summary>{reviewedWarnings.map(w=><label className="ai-review-warning" key={w.id}><input type="checkbox" checked aria-label={`${t('aiReview.reviewed')}: ${w.text}`} onChange={()=>actions().setDetectionWarningReviewed(selected.id,w.id,false)}/><span dir="auto">{w.text}</span></label>)}</details>}
           {!touchInput&&<p className="muted">{t('aiReviewWorkspace.editing')}</p>}
         </>:<p className="muted">{t(pending.length?'aiReviewWorkspace.choose':'aiReviewWorkspace.complete')}</p>}
       </div>
       <footer className="ai-review-workspace-footer">
         <span className="muted">{t('aiReviewWorkspace.progressMeaning')}</span>
         <div className="ai-review-detail-actions">
-          <button className="btn-secondary small" disabled={!pending.some(c=>aiWarnings(c.localAi!,t).some(w=>!c.reviewedWarningIds?.includes(w.id)))} onClick={()=>actions().setAllDetectionWarningsReviewed(true)}>{t('aiReview.reviewAll')}</button>
-          <button className="btn-secondary small" disabled={!pending.some(c=>c.reviewedWarningIds?.length)} onClick={()=>actions().setAllDetectionWarningsReviewed(false)}>{t('aiReview.restoreWarnings')}</button>
           <button className="btn-primary small" disabled={!validCount} onClick={()=>actions().acceptAllDetectionCandidates()}>{t('aiReviewWorkspace.approveAll',{count:validCount})}</button>
           <button className="btn-secondary small" disabled={!pending.length} onClick={()=>{
             if(pending.length===actions().detectionCandidates.length)actions().clearDetectionCandidates();

@@ -1006,6 +1006,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectDetectionCandidate: (id) => {
     const { project, currentPage, detectionCandidates } = get();
     const candidate = detectionCandidates.find(c => c.id === id && c.pageNumber === currentPage && c.localAi?.planId === project?.id);
+    if (candidate) ensureOverlayVisible('finishes', get, set);
     set({ selectedDetectionCandidateId: candidate?.id ?? null,
       ...(candidate ? { selectedRoomId: null, selectedOpeningId: null, selectedRoomIds: [], selectedOpeningIds: [], openingPlacement: null, selectedMarkupId: null } : {}) });
   },
@@ -1065,6 +1066,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     historyTracker.push(get, set, project);
     const room = roomFromCandidate(candidate, project, project.rooms.length, get().activeApartmentNumber);
+    ensureOverlayVisible('finishes', get, set);
     set({
       project: { ...project, rooms: [...project.rooms, room], updatedAt: Date.now() },
       // The candidate leaves the review list; the rest stay for review. Candidates are session
@@ -1089,6 +1091,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     let seed = project.rooms.length;
     const activeApartment = get().activeApartmentNumber;
     const rooms = accepted.map((c) => roomFromCandidate(c, project, seed++, activeApartment));
+    ensureOverlayVisible('finishes', get, set);
     set({
       project: { ...project, rooms: [...project.rooms, ...rooms], updatedAt: Date.now() },
       selectedDetectionCandidateId: accepted.some(c => c.id === get().selectedDetectionCandidateId) ? null : get().selectedDetectionCandidateId,
@@ -1491,7 +1494,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!previous || (kind === 'bars' && !isRectangle(points))) return;
     if (previous.length === points.length && previous.every((point, index) => point.x === points[index].x && point.y === points[index].y)) return;
     const geometry = structuredClone(points);
-    const next = kind === 'room' ? { ...project, rooms: project.rooms.map((room) => room.id === id ? { ...room, points: geometry } : room) }
+    const next = kind === 'room' ? withOpeningRoomChanges(project, project.rooms.map((room) => room.id === id ? { ...room, points: geometry } : room), Date.now())
       : kind === 'concrete' ? updateConcrete(project, id, { points: geometry })
       : 'kind' in source && source.kind === 'bars' && source.barsZone
         ? updateRebar(project, id, { barsZone: { ...source.barsZone, points: geometry } })

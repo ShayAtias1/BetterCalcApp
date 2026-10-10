@@ -52,7 +52,7 @@ function Workspace() {
   useEffect(() => { setTab('rooms'); setDestination('plan'); }, [planId]);
 
   return (
-    <div className="workspace">
+    <div className="workspace takeoff-workspace">
       {layout === 'expanded' && !reviewOnly ? <TopBar /> : <CompactPlanHeader />}
       {layout !== 'expanded' && <div className="compact-workspace-actions">
         <span className="muted">{t('adaptive.browse')}</span>

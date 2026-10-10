@@ -67,15 +67,14 @@ export default function OpeningsOverlay({ zoom, screenToNative, hoverPoint, edit
             onMouseUp={e=>{if(editable&&!placement&&!isPanGesture())e.stopPropagation();}}
             onPointerDown={e=>{if(!editable||isPanGesture()||placement||e.button!==0)return;e.preventDefault();e.stopPropagation();useAppStore.getState().selectPlanOpening(o.id);}}
             onClick={e=>{if(!editable||placement)return;e.stopPropagation();useAppStore.getState().selectPlanOpening(o.id);}}/>
-          <text x={(b.x1+b.x2)/2} y={(b.y1+b.y2)/2} fill="#d97706" fontSize={16*scale} pointerEvents="none">?</text>
-          <title>{t('openingAi.deferred')}</title>
+          <title>{o.label||t('openingAi.draft')}</title>
         </g>;
       }
       const g=preview?.id===o.id?preview.geometry:o.geometry!;
       const a=g.endpointA,b=g.endpointB,dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy);
       const angle=Math.atan2(dy,dx)*180/Math.PI;
       const preset=presetOf(o),color=colors[preset],active=selected===o.id||selectedIds.includes(o.id);
-      const uncertain=o.kind==='unknown'||o.mechanism==='unknown'||o.walkableAccess==='unknown'||o.approval.status==='rejected';
+      const uncertain=!o.aiDetection&&(o.kind==='unknown'||o.mechanism==='unknown'||o.walkableAccess==='unknown'||o.approval.status==='rejected');
       const status=t(`openingTools.${o.approval.status}`)+(uncertain?` · ${t('openingTools.uncertain')}`:'');
       const type=o.kind==='door' && o.mechanism==='unknown' ? t('openingTools.unclassifiedDoor') : o.kind==='custom'?t('openingTools.custom'):t(`openingTools.${preset}`);
       const events={onPointerMove:move,onPointerUp:finish,onPointerCancel:()=>{drag.current=null;setPreview(null);},onMouseDown:stopMouse,onMouseUp:stopMouse,

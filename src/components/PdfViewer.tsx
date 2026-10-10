@@ -61,7 +61,7 @@ import { concreteOf, rebarOf } from '../lib/structuralPlan';
 import { updateConcreteElement, updateRebarItem } from '../lib/structuralMutations';
 import type { DrawnStraightBar } from '../types/structural';
 import { hitStraightBar, translateBar } from '../lib/straightBarsGeometry';
-import { reshapeArea, translateArea, type AreaGeometryKind } from '../lib/areaGeometryEditing';
+import { insertPolygonVertex, reshapeArea, translateArea, type AreaGeometryKind } from '../lib/areaGeometryEditing';
 import AreaGeometryHandles from './AreaGeometryHandles';
 import StirrupOverlay from './StirrupOverlay';
 import { CONCRETE_COLOR, REBAR_COLOR } from '../lib/structuralOverlay';
@@ -697,7 +697,7 @@ export default function PdfViewer() {
     if(useAiWorkflow.getState().oneClickArmed)return;
     if (e.button === 0 && toolMode === 'select' && drawTarget === 'room' && overlayVisible.finishes && !touchInput) {
       const native = screenToNative(e.clientX, e.clientY);
-      const child = (e.target as Element).closest?.('[data-markup-id], [data-handle-markup-id], [data-opening-id], [data-suggestion-edge]');
+      const child = (e.target as Element).closest?.('[data-markup-id], [data-handle-markup-id], [data-opening-id], [data-suggestion-edge], [data-polygon-edge]');
       const hitRoom = project?.rooms.some(r => r.pageNumber === currentPage && pointInPolygon(native, r.points));
       const hitSuggestion = detectionCandidates.some(c => c.pageNumber === currentPage && pointInPolygon(native, c.points));
       if (!child && (e.shiftKey || (!hitRoom && !hitSuggestion))) {
@@ -709,15 +709,21 @@ export default function PdfViewer() {
 
     const addEdge = !touchInput && toolMode === 'select' && drawTarget === 'room'
       ? (e.target as Element).closest?.('[data-suggestion-edge]') : null;
-    if (e.button === 0 && selectedArea?.kind === 'suggestion' && addEdge) {
+    if (e.button === 0 && selectedArea && (selectedArea.kind === 'room' || selectedArea.kind === 'suggestion') && addEdge) {
       const index = Number(addEdge.getAttribute('data-suggestion-edge'));
       const a = selectedArea.points[index], b = selectedArea.points[(index + 1) % selectedArea.points.length];
       if (a && b) {
-        const points = selectedArea.points.map(p => ({ ...p }));
-        points.splice(index + 1, 0, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
-        editDetectionCandidate(selectedArea.id, points);
+        const points = insertPolygonVertex(selectedArea.points, index, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+        if (points) {
+          if (selectedArea.kind === 'suggestion') editDetectionCandidate(selectedArea.id, points);
+          else editAreaGeometry('room', selectedArea.id, points);
+        }
         suppressStructuralClick.current = true;
       }
+      return;
+    }
+    if (e.button === 0 && selectedArea && (e.target as Element).closest?.('[data-polygon-edge]')) {
+      suppressStructuralClick.current = true;
       return;
     }
     if (e.button === 0 && selectedArea) {
@@ -945,6 +951,16 @@ export default function PdfViewer() {
     if (reviewOnly) return;
     if (useAiWorkflow.getState().oneClickArmed) return;
     if (toolMode !== 'select' || drawTarget !== 'room' || !overlayVisible.finishes || spaceHeld.current) return;
+    const edgeTarget = !touchInput && (e.target as Element).closest?.('[data-polygon-edge]');
+    if (edgeTarget && selectedArea && (selectedArea.kind === 'room' || selectedArea.kind === 'suggestion')) {
+      const points = insertPolygonVertex(selectedArea.points, Number(edgeTarget.getAttribute('data-polygon-edge')), screenToNative(e.clientX, e.clientY));
+      if (points) {
+        e.stopPropagation();
+        if (selectedArea.kind === 'suggestion') editDetectionCandidate(selectedArea.id, points);
+        else editAreaGeometry('room', selectedArea.id, points);
+      }
+      return;
+    }
     if (!touchInput && selectedArea?.kind === 'suggestion') {
       const index = nearestPointIndex(selectedArea.points, screenToNative(e.clientX, e.clientY), VERTEX_HIT_RADIUS_SCREEN / zoom);
       if (index >= 0 && selectedArea.points.length > 3) {
@@ -1338,14 +1354,19 @@ export default function PdfViewer() {
             {selectedArea && selectedArea.points.length >= 3 && <g>
               <polygon points={selectedArea.points.map((point) => `${point.x},${point.y}`).join(' ')} fill="transparent"
                 pointerEvents={selectedArea.kind === 'suggestion' ? "none" : "all"} style={{ cursor: structuralDrag.current ? 'grabbing' : 'grab' }} />
+              {!touchInput && !reviewOnly && (selectedArea.kind === 'room' || selectedArea.kind === 'suggestion') && selectedArea.points.map((a, index) => {
+                const b = selectedArea.points[(index + 1) % selectedArea.points.length];
+                return <line key={`polygon-edge-${index}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                  stroke="transparent" strokeWidth={12 / zoom} pointerEvents="stroke" data-polygon-edge={index} style={{ cursor: 'copy' }} />;
+              })}
               <AreaGeometryHandles points={selectedArea.points} color={selectedArea.color} zoom={zoom} touch={touchInput} polygon={selectedArea.kind === 'suggestion'} />
-              {selectedArea.kind === 'suggestion' && selectedArea.points.map((a, index) => {
+              {!touchInput && !reviewOnly && (selectedArea.kind === 'room' || selectedArea.kind === 'suggestion') && selectedArea.points.map((a, index) => {
                 const b = selectedArea.points[(index + 1) % selectedArea.points.length];
                 const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
                 return <g key={`edge-${index}`}>
-                  <circle cx={x} cy={y} r={5 / zoom} fill="#fff" stroke={CANDIDATE_COLOR} strokeWidth={1.5 / zoom}
+                  <circle cx={x} cy={y} r={5 / zoom} fill="#fff" stroke={selectedArea.color} strokeWidth={1.5 / zoom}
                     pointerEvents="all" data-suggestion-edge={index} style={{ cursor: 'copy' }}><title>Add vertex on edge</title></circle>
-                  <text x={x} y={y} textAnchor="middle" dominantBaseline="central" fontSize={10 / zoom} fill={CANDIDATE_COLOR} pointerEvents="none">+</text>
+                  <text x={x} y={y} textAnchor="middle" dominantBaseline="central" fontSize={10 / zoom} fill={selectedArea.color} pointerEvents="none">+</text>
                 </g>;
               })}
             </g>}

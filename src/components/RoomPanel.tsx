@@ -1,7 +1,6 @@
 import OpeningsPanel from './OpeningsPanel';
 import { useBulkTakeoffDialog } from './bulkTakeoffEntry';
 import { promptDialog, confirmDialog } from '../lib/appDialogs';
-import { roomHasPendingDetectionWarning } from '../lib/localAiReview';
 import AiSpaceDetectionPanel from './AiSpaceDetectionPanel';
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import ReviewFields from './ReviewFields';
@@ -496,11 +495,6 @@ function RoomsAndAreasPanel({ readOnly = false }: { readOnly?: boolean }) {
                     />}
                     <span className="color-dot" style={{ background: r.color }} />
                     <span className="room-list-name" dir="auto">{r.name || t('rooms.unnamed')}</span>
-                    {roomHasPendingDetectionWarning(r) && (
-                      <span className="room-review-flag" title={t('rooms.reviewFlag')}>
-                        <Icon name="alert" size={13} />
-                      </span>
-                    )}
                     {/* The page number is only information when it is NOT the page on screen. */}
                     {r.pageNumber !== currentPage && <span className="room-list-page">{t('rooms.page', { page: r.pageNumber })}</span>}
                     {/* Editing, deletion and selection remain visible at the inline end. */}
