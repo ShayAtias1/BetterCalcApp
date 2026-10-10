@@ -7,7 +7,7 @@ import type { Point } from '../../types';
 import { canAuthorTakeoff, isTouchInput } from '../workspaceCapabilities';
 import { parseOneClickResult, type OneClickManifest } from './oneClick';
 import { pdfFingerprint, prepareAiPage, prepareOneClickPage } from './preparePage';
-import { submitSpaceJob, getSpaceJob, findSpaceJob } from './jobClient';
+import { checkSpaceService, submitSpaceJob, getSpaceJob, findSpaceJob } from './jobClient';
 import { aiReviewKey, aiImportManifest, type AiJobRecord, type AiJobResponse } from './contracts';
 
 export const useAiWorkflow=create<{jobs:AiJobRecord[];oneClickArmed:boolean;ready:boolean;error:string|null;sourceHash:string|null;resolvedIds:string[];reviewScope:{planId:string;pageNumber:number}|null}>(()=>({jobs:[],oneClickArmed:false,ready:false,error:null,sourceHash:null,resolvedIds:[],reviewScope:null}));
@@ -17,7 +17,7 @@ let binding:{planId:string;pageNumber:number;sourceHash:string;key:string}|null=
 let writes:Promise<void>=Promise.resolve();
 let pendingWrites=0;
 const polling=new Set<string>();
-const busy=(job:AiJobRecord)=>job.status==='PREPARING'||job.status==='PROCESSING';
+const busy=(job:AiJobRecord)=>job.status==='PREPARING'||job.status==='PROCESSING'||!!job.recoveryPending;
 function errorText(error:unknown){return error instanceof Error?error.message:'AI workflow failed.';}
 function storageError(error:unknown){useAiWorkflow.setState({error:`AI local persistence failed: ${errorText(error)}`});}
 function track(job:AiJobRecord){useAiWorkflow.setState(s=>({jobs:[...s.jobs.filter(j=>j.requestId!==job.requestId),job]}));}
@@ -38,6 +38,7 @@ async function initialize(){
     const current=binding;
     const candidates=structuredClone(next.detectionCandidates.filter(c=>c.localAi?.sourceHash===current.sourceHash));
     const removed=previous.detectionCandidates.filter(c=>c.localAi?.sourceHash===current.sourceHash && !candidates.some(n=>n.id===c.id)).map(c=>c.id);
+    const approvedPlan=removed.some(id=>next.project?.rooms.some(room=>room.id===id))?structuredClone(next.project!):undefined;
     // A cache of the existing persisted tombstones, not a second approval/warning state.
     if(removed.length)useAiWorkflow.setState(s=>({resolvedIds:[...new Set([...s.resolvedIds,...removed])]}));
     pendingWrites++;
@@ -48,7 +49,7 @@ async function initialize(){
       for(const id of removed)merged.delete(id);
       for(const candidate of candidates)if(!resolvedIds.includes(candidate.id))merged.set(candidate.id,candidate);
       return {...current,candidates:[...merged.values()],resolvedIds,updatedAt:Date.now()};
-    })).finally(()=>{pendingWrites--;});
+    },approvedPlan)).finally(()=>{pendingWrites--;});
     void writes.catch(storageError);
   });
   subscribePdfBlobChanges(id=>{
@@ -63,7 +64,7 @@ async function initialize(){
     const jobs=await listAiJobs();useAiWorkflow.setState({jobs});
     for(const job of jobs){
       if(job.status==='PREPARING')await record({...job,status:'FAILED',updatedAt:Date.now(),error:'Page preparation was interrupted by refresh. Retry explicitly; no request was resubmitted.'});
-      if(job.status==='PROCESSING')void poll(job);
+      if(job.status==='PROCESSING'||job.recoveryPending)void poll(job);
     }
   }catch(error){storageError(error);}
 }
@@ -100,7 +101,7 @@ async function completed(job:AiJobRecord,response:AiJobResponse){
     for(const candidate of candidates)if(!resolvedIds.includes(candidate.id)&&!merged.has(candidate.id))merged.set(candidate.id,candidate);
     return {key,planId:job.planId,pageNumber:job.pageNumber,sourceHash:job.sourceHash,candidates:[...merged.values()],resolvedIds,updatedAt:Date.now()};
   });
-  const updated={...job,jobId:response.id,status:'COMPLETED' as const,updatedAt:Date.now(),metrics:response.metrics,error:undefined,resultSummary:job.mode==='one-click-v1'&&!candidates.length?String((response.result as {reason?:string}).reason||'The target boundary could not be reliably identified.'):undefined};
+  const updated={...job,jobId:response.id,status:'COMPLETED' as const,recoveryPending:false,updatedAt:Date.now(),metrics:response.metrics,error:undefined,resultSummary:job.mode==='one-click-v1'&&!candidates.length?String((response.result as {reason?:string}).reason||'The target boundary could not be reliably identified.'):undefined};
   await record(updated);
   const state=useAppStore.getState();
   if(state.project?.id===job.planId && state.currentPage===job.pageNumber){
@@ -117,20 +118,22 @@ async function poll(initial:AiJobRecord){
         const response=job.jobId?await getSpaceJob(job.jobId):await findSpaceJob(job.requestId);
         if(response.requestId!==job.requestId)throw new Error('Job response identity mismatch.');
         if(response.status==='COMPLETED'){
-          try{await completed(job,response);}catch(error){await record({...job,status:'FAILED',updatedAt:Date.now(),error:errorText(error)});}
+          try{await completed(job,response);}catch(error){await record({...job,status:'FAILED',recoveryPending:false,updatedAt:Date.now(),error:errorText(error)});}
           return;
         }
         if(response.status==='FAILED'||response.status==='CANCELLED'){
-          await record({...job,jobId:response.id,status:response.status,updatedAt:Date.now(),error:response.error??'Inference did not complete.',metrics:response.metrics});return;
+          await record({...job,jobId:response.id,status:response.status,recoveryPending:false,updatedAt:Date.now(),error:response.error??'Inference did not complete.',metrics:response.metrics});return;
         }
-        if(!job.jobId){job={...job,jobId:response.id};await record(job);}
+        job={...job,jobId:response.id,status:'PROCESSING',recoveryPending:false,error:undefined};await record(job);
         useAiWorkflow.setState({error:null});
       }catch(error){
         const status=(error as {status?:number}).status;
-        if(status===404||status===410){await record({...job,status:'FAILED',updatedAt:Date.now(),error:errorText(error)});return;}
+        if(status===404||status===410){await record({...job,status:'FAILED',recoveryPending:false,updatedAt:Date.now(),error:errorText(error)});return;}
         // Only repeat free GETs. Never retry a paid POST or silently discard completed results.
+        job={...job,status:'FAILED',recoveryPending:true,updatedAt:Date.now(),error:errorText(error)};
+        track(job);await record(job);
         useAiWorkflow.setState({error:errorText(error)});
-        if(Date.now()-job.createdAt>60*60*1000){await record({...job,status:'FAILED',updatedAt:Date.now(),error:'Job recovery expired. Check the local service before retrying.'});return;}
+        if(Date.now()-job.createdAt>60*60*1000)return;
       }
       await new Promise(resolve=>setTimeout(resolve,2500));
     }
@@ -169,6 +172,20 @@ async function startPreparedAiPage(source:{planId:string;pageNumber:number;sourc
   let posted=false;
   try{
     await record(job);
+    await checkSpaceService();
+    // A new request ID must not bypass an earlier failed paid admission for this source.
+    const prior=useAiWorkflow.getState().jobs.filter(j=>j.requestId!==requestId&&j.planId===source.planId&&j.pageNumber===source.pageNumber&&j.sourceHash===source.sourceHash&&j.manifest&&j.status==='FAILED');
+    for(const previous of prior){
+      let response:AiJobResponse;
+      try{response=await findSpaceJob(previous.requestId);}catch(error){
+        if((error as {status?:number}).status===404)continue;
+        throw error;
+      }
+      if(response.requestId!==previous.requestId)throw new Error('Job response identity mismatch.');
+      if(response.status==='COMPLETED')await completed(previous,response);
+      else if(response.status==='PROCESSING')void poll(previous);
+      throw new Error('An earlier paid submission already exists. Its result or status was recovered; no new request was submitted.');
+    }
     const blob=await loadPdfBlob(source.planId);if(!blob||await pdfFingerprint(blob)!==source.sourceHash)throw new Error('The source PDF changed before preparation.');
     const prepared=targetPoint?await prepareOneClickPage(source.planId,source.pageNumber,blob,source.sourceHash,targetPoint):await prepareAiPage(source.planId,source.pageNumber,blob,source.sourceHash);
     const current=await loadPdfBlob(source.planId);if(!current||await pdfFingerprint(current)!==source.sourceHash)throw new Error('The source PDF changed during preparation.');

@@ -18,6 +18,8 @@ export interface AiJobRecord {
   status:AiJobStatus; createdAt:number; updatedAt:number; manifest?:AiManifest;
   /** Missing mode identifies checkpoint full-page jobs. */
   mode?:'full-page-v1'|'one-click-v1';
+  /** Admission may have succeeded; free recovery must precede another paid request. */
+  recoveryPending?:boolean;
   resultSummary?:string;
   error?:string; metrics?:AiMetrics;
 }

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createStore } from 'zustand/vanilla';
 import { aiTiles, AI_PREPARATION_VERSION, aiReviewKey } from '../../src/lib/ai/contracts.ts';
 const hash='a'.repeat(64),newHash='b'.repeat(64);
+const approvedPlans=new Map();
 const reviews=new Map(),pdfs=new Map([['restore',new Blob([hash])]]),jobs=new Map(),batches=new Map();
 const result=JSON.parse(readFileSync(new URL('./frozen-spaces.json',import.meta.url)));
 function manifest(planId,pageNumber=1){return {preparationVersion:AI_PREPARATION_VERSION,renderer:'embedpdf-pdfium',planId,pageNumber,sourceHash:hash,nativeWidth:100,nativeHeight:80,rotation:0,userUnit:1,view:[0,0,100,80],pageDimensions:[5500,4400],renderScale:55,tiles:aiTiles(5500,4400)};}
@@ -13,12 +14,12 @@ await mock.module(new URL('../../src/db/database.ts',import.meta.url).href,{name
   listAiBatches:async()=>structuredClone([...batches.values()]),saveAiBatch:async batch=>batches.set(batch.id,structuredClone(batch)),
   loadPlan:async id=>({id,rooms:[]}),
   loadPdfBlob:async id=>pdfs.get(id),loadAiReview:async key=>structuredClone(reviews.get(key)),
-  updateAiReview:async(key,update)=>{reviews.set(key,structuredClone(update(reviews.get(key))));},
+  updateAiReview:async(key,update,approvedPlan)=>{if(approvedPlan)approvedPlans.set(approvedPlan.id,structuredClone(approvedPlan));reviews.set(key,structuredClone(update(reviews.get(key))));},
   saveAiJob:async job=>{jobs.set(job.requestId,structuredClone(job));},listAiJobs:async()=>[...jobs.values()]
 }});
 await mock.module(new URL('../../src/lib/pdfViewerSource.ts',import.meta.url).href,{namedExports:{ViewerPdfDocument:{open:async()=>{throw new Error('PDF rendering is outside this workflow fixture.');}}}});
 await mock.module(new URL('../../src/store/appStore.ts',import.meta.url).href,{namedExports:{useAppStore:app}});
-let prepareGate=null,postCalls=0,rejectPost=false;
+let prepareGate=null,postCalls=0,rejectPost=false,healthError=false,pollError=false;
 const oneClickRequests=new Set();
 const oneClickResult={status:'FOUND',reason:'',space:{polygon:[[.2,.2],[.8,.2],[.8,.8],[.2,.8]],type:'bedroom',geometryConfidence:'MEDIUM',ambiguities:[]}};
 await mock.module(new URL('../../src/lib/ai/preparePage.ts',import.meta.url).href,{namedExports:{
@@ -27,8 +28,9 @@ await mock.module(new URL('../../src/lib/ai/preparePage.ts',import.meta.url).hre
 }});
 const response=requestId=>({id:requestId==='restored-request'?'restored-job':requestId,requestId,status:'COMPLETED',result:oneClickRequests.has(requestId)?oneClickResult:result});
 await mock.module(new URL('../../src/lib/ai/jobClient.ts',import.meta.url).href,{namedExports:{
+  checkSpaceService:async()=>{if(healthError)throw new Error('Start npm run dev:ai.');},
   submitSpaceJob:async(requestId,m)=>{if(m.preparationVersion==='one-click-v1')oneClickRequests.add(requestId);postCalls++;if(rejectPost)throw Object.assign(new Error('Cap reached.'),{status:429});return {id:requestId,requestId,status:'PROCESSING'};},
-  getSpaceJob:async id=>response(id==='restored-job'?'restored-request':id),findSpaceJob:async id=>response(id)
+  getSpaceJob:async id=>{if(pollError)throw new Error('Invalid local AI response.');return response(id==='restored-job'?'restored-request':id);},findSpaceJob:async id=>response(id)
 }});
 const {initializeAiWorkflow,activateAiPage,startAiDetection,startAiPageDetection,useAiWorkflow}=await import('../../src/lib/ai/workflow.ts');
 const {notifyPdfBlobChanged}=await import('../../src/lib/pdfBlobEvents.ts');
@@ -146,4 +148,47 @@ test('batch confirmation treats target-only/uncertain reviews as queued and runs
   const cached=await prepareBatch('folder',selection,['area']);
   assert.deepEqual(cached.pages.map(p=>p.status),['completed','completed']);
   await runBatch(cached);assert.equal(postCalls,before+2);
+});
+
+
+test('missing service fails before any paid POST and clears preparation state',async()=>{
+  healthError=true;const before=postCalls;
+  try{
+    await startAiPageDetection({planId:'offline',pageNumber:1,sourceHash:hash},'offline-request');
+    const job=useAiWorkflow.getState().jobs.find(j=>j.requestId==='offline-request');
+    assert.equal(job.status,'FAILED');assert.match(job.error,/dev:ai/);assert.equal(postCalls,before);
+  }finally{healthError=false;}
+});
+test('lost status response clears processing, blocks duplicate admission, and recovers with free GETs',async()=>{
+  pollError=true;const before=postCalls;pdfs.set('lost-response',new Blob([hash]));
+  try{
+    await startAiPageDetection({planId:'lost-response',pageNumber:1,sourceHash:hash},'lost-response-request');
+    await until(()=>useAiWorkflow.getState().jobs.find(j=>j.requestId==='lost-response-request')?.recoveryPending);
+    assert.equal(useAiWorkflow.getState().jobs.find(j=>j.requestId==='lost-response-request').status,'FAILED');
+    await assert.rejects(startAiPageDetection({planId:'lost-response',pageNumber:1,sourceHash:hash},'duplicate-request'),/already active/);
+    assert.equal(postCalls,before+1);
+  }finally{pollError=false;}
+  for(let i=0;i<80;i++){
+    if(useAiWorkflow.getState().jobs.find(j=>j.requestId==='lost-response-request')?.status==='COMPLETED')break;
+    await new Promise(resolve=>setTimeout(resolve,50));
+  }
+  const recovered=useAiWorkflow.getState().jobs.find(j=>j.requestId==='lost-response-request');
+  assert.equal(recovered.status,'COMPLETED');assert.equal(recovered.recoveryPending,false);assert.equal(postCalls,before+1);
+  useAiWorkflow.setState(s=>({jobs:s.jobs.map(j=>j.requestId===recovered.requestId?{...j,status:'FAILED'}:j)}));
+  await startAiPageDetection({planId:'lost-response',pageNumber:1,sourceHash:hash},'retry-known-paid-request');
+  assert.equal(postCalls,before+1);assert.equal(useAiWorkflow.getState().jobs.find(j=>j.requestId===recovered.requestId).status,'COMPLETED');
+});
+
+test('approval persists its room together with the resolved review before debounced autosave',async()=>{
+  pdfs.set('atomic-approval',new Blob([hash]));
+  app.setState({project:{id:'atomic-approval',rooms:[]},currentPage:1,detectionCandidates:[]});
+  await activateAiPage('atomic-approval',1);
+  const candidate={id:'atomic-room',pageNumber:1,points:[{x:1,y:1},{x:3,y:1},{x:3,y:3}],localAi:{planId:'atomic-approval',sourceHash:hash}};
+  app.setState({detectionCandidates:[candidate]});
+  await until(()=>reviews.get(aiReviewKey('atomic-approval',1,hash))?.candidates.length===1);
+  const room={id:candidate.id,points:candidate.points};
+  app.setState({project:{id:'atomic-approval',rooms:[room]},detectionCandidates:[]});
+  await until(()=>reviews.get(aiReviewKey('atomic-approval',1,hash))?.resolvedIds.includes(candidate.id));
+  assert.deepEqual(approvedPlans.get('atomic-approval').rooms,[room]);
+  assert.equal(reviews.get(aiReviewKey('atomic-approval',1,hash)).candidates.length,0);
 });

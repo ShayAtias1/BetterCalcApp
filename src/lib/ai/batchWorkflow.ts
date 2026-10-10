@@ -100,7 +100,7 @@ export async function runBatch(input:AiBatch){
         const reuse=reusableJob(useAiWorkflow.getState().jobs,page);
         const review=await loadAiReview(page.reviewKey);
         if(review&&reuse){page.requestId=reuse?.requestId;page.status='completed';return;}
-        if(useAiWorkflow.getState().jobs.some(j=>j.status==='PROCESSING'||j.status==='PREPARING'))throw new Error('An AI job is active. Resume when it finishes.');
+        if(useAiWorkflow.getState().jobs.some(j=>j.status==='PROCESSING'||j.status==='PREPARING'||j.recoveryPending))throw new Error('An AI job is active. Resume when it finishes.');
         page.requestId=crypto.randomUUID();page.status='processing';
         await write({...batch,updatedAt:Date.now()}); // durable identity before any paid POST
         // Existing service POST atomically checks active job, request cap and spending ledger
@@ -109,6 +109,7 @@ export async function runBatch(input:AiBatch){
       }
       await terminal(page.requestId);
       const job=useAiWorkflow.getState().jobs.find(j=>j.requestId===page.requestId)!;
+      if(job.recoveryPending)throw new Error(job.error??'Recover the existing AI submission before resuming.');
       page.status=job.status==='COMPLETED'?'completed':'failed';page.error=job.error;
     },()=>stopped.has(batch.id),()=>write({...batch,updatedAt:Date.now()}));
   };

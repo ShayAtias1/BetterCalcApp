@@ -479,9 +479,12 @@ export async function deleteComparePdfBlob(comparisonId: string, layer: string):
 
 // ---------- page-bound AI development reviews and jobs ----------
 export async function loadAiReview(key:string):Promise<AiReviewRecord|undefined>{return (await getDb()).get('aiReviews',key);}
-export async function updateAiReview(key:string,update:(previous:AiReviewRecord|undefined)=>AiReviewRecord):Promise<void>{
-  const db=await getDb(),tx=db.transaction('aiReviews','readwrite');
-  await tx.store.put(update(await tx.store.get(key)));await tx.done;
+export async function updateAiReview(key:string,update:(previous:AiReviewRecord|undefined)=>AiReviewRecord,approvedPlan?:Plan):Promise<void>{
+  const db=await getDb(),tx=db.transaction(['aiReviews','projects'],'readwrite');
+  const reviews=tx.objectStore('aiReviews');
+  // An approval must never become durable before the room it creates.
+  if(approvedPlan)await tx.objectStore('projects').put(approvedPlan);
+  await reviews.put(update(await reviews.get(key)));await tx.done;
 }
 export async function saveAiJob(job:AiJobRecord):Promise<void>{await (await getDb()).put('aiJobs',job);}
 export async function listAiJobs():Promise<AiJobRecord[]>{return (await getDb()).getAll('aiJobs');}
