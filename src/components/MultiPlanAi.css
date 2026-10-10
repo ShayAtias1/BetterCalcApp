@@ -1,7 +1,7 @@
 /* The batch dialog uses BetterCalc's surfaces, type scale and 4px spacing rhythm.
    Only the content region scrolls; the project identity, stages and actions remain visible. */
-.multi-plan-backdrop { z-index: 120; padding: var(--s-5); }
-.multi-plan-dialog { width: min(1080px, 100%); height: min(820px, calc(100svh - 48px)); max-height: 100%; min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; background: var(--bg-surface); color: var(--text); border-radius: var(--r-lg); box-shadow: var(--shadow-page); overflow: hidden; outline: none; }
+.multi-plan-backdrop { z-index: 120; padding: var(--s-5); padding-inline: 24px !important; }
+.multi-plan-dialog { width: 100%; max-width: 1100px; min-width: 0; height: min(820px, calc(100svh - 48px)); max-height: 100%; min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; background: var(--bg-surface); color: var(--text); border-radius: var(--r-lg); box-shadow: var(--shadow-page); overflow: hidden; outline: none; }
 .multi-plan-dialog :is(button, label, p, strong, span, summary, h3, dt, dd) { white-space: normal; overflow-wrap: anywhere; }
 .multi-plan-dialog button { height: auto; min-height: 36px; }
 .multi-plan-dialog input[type='checkbox'] { width: 18px; height: 18px; margin: 0; padding: 0; flex: none; accent-color: var(--accent); cursor: pointer; }
@@ -18,7 +18,8 @@
 .mp-step-number { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex: none; border-radius: var(--r-pill); background: var(--bg-subtle); font: var(--t-meta); }
 .mp-stepper .current .mp-step-number { color: white; background: var(--accent); }
 .mp-stepper .past .mp-step-number { background: var(--accent-bg); color: var(--accent); }
-.mp-content { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: var(--s-5); }
+.mp-content { min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: var(--s-5); }
+.mp-calculation-groups > *, .mp-review-layout > *, .mp-result-row > * { min-width: 0; }
 .mp-stage-heading { margin-block-end: var(--s-5); }
 .mp-stage-heading h3 { font: var(--t-title); margin-block-end: var(--s-2); }
 .mp-stage-heading h3:focus { outline: none; }
@@ -37,7 +38,7 @@
 .mp-selection-state:is(.all, .some) { color: var(--accent); }
 .mp-plan:is(.all,.some) .mp-document-icon { color: var(--accent); }
 .mp-expand { flex: none; }
-.mp-page-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: var(--s-2); background: var(--bg-subtle); padding: var(--s-4); margin-block-end: var(--s-4); border-radius: var(--r-md); }
+.mp-page-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(110px, 100%), 1fr)); gap: var(--s-2); background: var(--bg-subtle); padding: var(--s-4); margin-block-end: var(--s-4); border-radius: var(--r-md); }
 .mp-page-choice { display: flex; align-items: center; gap: var(--s-2); min-height: 44px; padding: var(--s-3); border-radius: var(--r-sm); background: var(--bg-surface); cursor: pointer; }
 .mp-page-choice:hover { background: var(--bg-stage); }
 .mp-page-choice.selected { color: var(--accent); background: var(--accent-bg); }
