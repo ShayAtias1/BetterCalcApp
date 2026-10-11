@@ -48,3 +48,32 @@ export default function PageStatusBar({ readOnly = false }: { readOnly?: boolean
     </div>
   );
 }
+
+/**
+ * The same scale state as a compact chip in the desktop top bar, beside the sheet navigation:
+ * "✓ Calibrated · Recalibrate", or a warning with "Calibrate now" on a sheet without a scale.
+ */
+export function HeaderCalibration() {
+  const project = useAppStore((s) => s.project);
+  const currentPage = useAppStore((s) => s.currentPage);
+  const toolMode = useAppStore((s) => s.toolMode);
+  const setToolMode = useAppStore((s) => s.setToolMode);
+  const t = useT();
+  if (!project) return null;
+  const calibrated = isPageCalibrated(project, currentPage);
+  return (
+    <div className={`header-calibration ${calibrated ? 'ok' : 'missing'}`}>
+      <span className="header-calibration-state">
+        <Icon name={calibrated ? 'check' : 'alert'} size={12} />
+        <span className="header-calibration-label">{calibrated ? t('pageStatus.calibrated') : t('pageStatus.notCalibrated')}</span>
+      </span>
+      <button
+        className={`header-calibration-action ${toolMode === 'calibrate' ? 'active' : ''}`}
+        aria-pressed={toolMode === 'calibrate'}
+        onClick={() => setToolMode(toolMode === 'calibrate' ? 'select' : 'calibrate')}
+      >
+        {calibrated ? t('pageStatus.recalibrate') : t('pageStatus.calibrateNow')}
+      </button>
+    </div>
+  );
+}

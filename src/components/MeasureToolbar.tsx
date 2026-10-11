@@ -1,14 +1,15 @@
 import { useAppStore } from '../store/appStore';
-import type { AreaCalcMode, AreaKind, AreaShape, MeasureTool } from '../types';
+import type { AreaCalcMode, AreaKind, AreaShape } from '../types';
 import { MEASUREMENT_DEFAULTS } from '../config/measurementDefaults';
 import { round } from '../lib/geometry';
 import { measurementLabel } from '../lib/measurementValues';
 import { isPageCalibrated } from '../lib/quantities';
 import Icon, { type IconName } from './Icon';
+import { InspectorEmpty, type PanelPart } from './PanelPart';
+import { useMeasureHint } from './toolHints';
+import { MEASURE_ICONS, MEASURE_TOOLS } from './toolLists';
 import { useT } from '../i18n';
 
-const MEASURE_TOOLS: MeasureTool[] = ['distance', 'area', 'perimeter'];
-const MEASURE_ICONS: Record<MeasureTool, IconName> = { distance: 'ruler', area: 'square', perimeter: 'circle' };
 // Labels: `measure.shapes.<shape>` and `measure.calcModes.<mode>`.
 const AREA_SHAPES: { shape: AreaShape; icon: IconName }[] = [
   { shape: 'polygon', icon: 'polygon' },
@@ -20,26 +21,16 @@ const AREA_CALC_MODES: { mode: AreaCalcMode; icon: IconName }[] = [
 ];
 const AREA_KINDS: AreaKind[] = ['demolition', 'construction'];
 
-export default function MeasureToolbar() {
+export default function MeasureToolbar({ part }: { part?: PanelPart } = {}) {
   const t = useT();
   const project = useAppStore((s) => s.project);
   const currentPage = useAppStore((s) => s.currentPage);
   const toolMode = useAppStore((s) => s.toolMode);
   const measureTool = useAppStore((s) => s.measureTool);
   const setMeasureTool = useAppStore((s) => s.setMeasureTool);
-  const measurePoints = useAppStore((s) => s.measurePoints);
-  const areaShape = useAppStore((s) => s.areaShape);
-  const setAreaShape = useAppStore((s) => s.setAreaShape);
-  const areaCalcMode = useAppStore((s) => s.areaCalcMode);
-  const setAreaCalcMode = useAppStore((s) => s.setAreaCalcMode);
-  const pendingAreaKind = useAppStore((s) => s.pendingAreaKind);
-  const setPendingAreaKind = useAppStore((s) => s.setPendingAreaKind);
-  const setAreaKindColor = useAppStore((s) => s.setAreaKindColor);
-  const orthoSnap = useAppStore((s) => s.orthoSnap);
-  const setOrthoSnap = useAppStore((s) => s.setOrthoSnap);
   const deleteMeasurement = useAppStore((s) => s.deleteMeasurement);
   const updateMeasurement = useAppStore((s) => s.updateMeasurement);
-  const updateProjectMeta = useAppStore((s) => s.updateProjectMeta);
+  const hint = useMeasureHint();
 
   if (!project) return null;
   const hasCalibration = isPageCalibrated(project, currentPage);
@@ -61,14 +52,22 @@ export default function MeasureToolbar() {
   const grandTally = tallyByKind(areaMeasurements);
   const currentPageTally = tallyByKind(areaMeasurements.filter((m) => m.pageNumber === currentPage));
 
+  // Desktop inspector (approved design, board 07): the tool options live in the bar above the dock,
+  // so the inspector only carries the page's calibration state. Measurements have no selection of
+  // their own; they are edited and deleted in the list.
+  if (part === 'detail') return (
+    <div className="measure-toolbar">
+      {!hasCalibration && <div className="warning-box">{t('measure.notCalibrated')}</div>}
+      <InspectorEmpty text={t('workspace.inspector.empty.measure')} />
+    </div>
+  );
+
   return (
     <div className="measure-toolbar">
+      {/* Tablet and phone: one panel with the tools, their options and the list. */}
+      {part !== 'list' && <>
       <h4>{t('measure.title')}</h4>
-      {/* Calibration now lives in the toolbar and in the page-status strip above the tabs. */}
       {!hasCalibration && <div className="warning-box">{t('measure.notCalibrated')}</div>}
-
-      {/* Each row of identical buttons is now one labelled segmented control, so it is obvious
-          what decision the row represents rather than three anonymous icons. */}
       <div className="tool-group">
         <span className="section-label">{t('measure.tools')}</span>
         <div className="segmented grid">
@@ -85,7 +84,144 @@ export default function MeasureToolbar() {
           ))}
         </div>
       </div>
+      <MeasureToolOptions />
+      {hint && (
+        <p className="tool-hint">
+          <Icon name="alert" size={13} />
+          {hint}
+        </p>
+      )}
+      </>}
 
+      {/* The list: value-first rows, then the area summary card (approved design, board 07). */}
+      {pageMeasurements.length === 0 ? (
+        <div className="empty-state">
+          <Icon name="ruler" size={24} />
+          <p>{t('measure.empty')}</p>
+        </div>
+      ) : (
+        <ul className="measurement-list measurement-list-compact">
+          {pageMeasurements.map((m) => {
+            const isWall = m.tool === 'area' && m.calcMode === 'wall';
+            return (
+              <li key={m.id}>
+                {m.areaKind
+                  ? <span className="measurement-swatch" style={{ background: areaKindColors[m.areaKind] }} />
+                  : <span className="measurement-swatch line" />}
+                <span className="measurement-name">
+                  <span>{m.areaKind ? t(`areaKinds.${m.areaKind}`) : t(`measureTools.${m.tool}`)}</span>
+                  {isWall && (
+                    <small>
+                      {t('measure.wallLength', { length: round(m.wallLengthM ?? 0, 2) })}{' '}
+                      <input
+                        type="number"
+                        step="0.05"
+                        min="0.1"
+                        className="inline-number"
+                        aria-label={t('measure.wallHeightDefault')}
+                        value={m.wallHeightM ?? wallHeightDefaultM}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          const h = parseFloat(e.target.value) || 0;
+                          const area = round((m.wallLengthM ?? 0) * h, 2);
+                          updateMeasurement(m.id, { wallHeightM: h, areaM2: area });
+                        }}
+                      />
+                      {' '}
+                      {t('units.m')})
+                    </small>
+                  )}
+                </span>
+                <strong className="measurement-value" dir="ltr">{measurementLabel(m)}</strong>
+                <span className="list-item-actions">
+                  <button className="icon-btn danger" title={t('measure.delete')} onClick={() => deleteMeasurement(m.id)}>
+                    <Icon name="trash" />
+                  </button>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {areaMeasurements.length > 0 && (
+        <div className="area-summary">
+          <h4>{t('measure.areaSummary')}</h4>
+          {pageNumbersWithAreas.length > 1 && (
+            <div className="area-summary-page">
+              <div className="area-summary-page-title">{t('measure.currentPage', { page: currentPage })}</div>
+              {AREA_KINDS.map((k) => (
+                <div key={k} className="area-summary-row">
+                  <div className="area-summary-row-header">
+                    <span className="color-dot" style={{ background: areaKindColors[k] }} />
+                    <span className="area-summary-label">{t(`areaKinds.${k}`)}</span>
+                    <span className="area-summary-count">{t('measure.marks', { count: currentPageTally.counts[k] })}</span>
+                  </div>
+                  <span className="area-summary-total">
+                    {round(currentPageTally.totals[k], 2)} {t('units.m2')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {pageNumbersWithAreas.length > 1 && <div className="area-summary-page-title">{t('measure.allPages')}</div>}
+          {AREA_KINDS.map((k) => (
+            <div key={k} className="area-summary-row">
+              <div className="area-summary-row-header">
+                <span className="color-dot" style={{ background: areaKindColors[k] }} />
+                <span className="area-summary-label">{t(`areaKinds.${k}`)}</span>
+                <span className="area-summary-count">{t('measure.marks', { count: grandTally.counts[k] })}</span>
+              </div>
+              <span className="area-summary-total">
+                {round(grandTally.totals[k], 2)} {t('units.m2')}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The active measure tool's options. Desktop shows them in the contextual bar above the canvas
+ * dock (approved design, board 07); tablet and phone keep them in the measure panel.
+ */
+export function MeasureToolOptions({ bar = false }: { bar?: boolean } = {}) {
+  const t = useT();
+  const project = useAppStore((s) => s.project);
+  const toolMode = useAppStore((s) => s.toolMode);
+  const measureTool = useAppStore((s) => s.measureTool);
+  const setMeasureTool = useAppStore((s) => s.setMeasureTool);
+  const areaShape = useAppStore((s) => s.areaShape);
+  const setAreaShape = useAppStore((s) => s.setAreaShape);
+  const areaCalcMode = useAppStore((s) => s.areaCalcMode);
+  const setAreaCalcMode = useAppStore((s) => s.setAreaCalcMode);
+  const pendingAreaKind = useAppStore((s) => s.pendingAreaKind);
+  const setPendingAreaKind = useAppStore((s) => s.setPendingAreaKind);
+  const setAreaKindColor = useAppStore((s) => s.setAreaKindColor);
+  const orthoSnap = useAppStore((s) => s.orthoSnap);
+  const setOrthoSnap = useAppStore((s) => s.setOrthoSnap);
+  const updateProjectMeta = useAppStore((s) => s.updateProjectMeta);
+  if (!project) return null;
+  const areaKindColors = project.areaKindColors ?? { demolition: '#eab308', construction: '#16a34a' };
+  const wallHeightDefaultM = project.wallHeightDefaultM ?? MEASUREMENT_DEFAULTS.wallHeightM;
+  return (
+    <>
+      {bar && (
+        <div className="segmented" role="group" aria-label={t('measure.tools')}>
+          {MEASURE_TOOLS.map((tool) => (
+            <button
+              key={tool}
+              className={`tool-btn ${toolMode === 'measure' && measureTool === tool ? 'active' : ''}`}
+              onClick={() => setMeasureTool(measureTool === tool ? null : tool)}
+              aria-pressed={toolMode === 'measure' && measureTool === tool}
+            >
+              <span className="tool-label">{t(`measureTools.${tool}`)}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {toolMode === 'measure' && measureTool === 'area' && (
         <>
           <div className="tool-group">
@@ -163,101 +299,6 @@ export default function MeasureToolbar() {
           </label>
         )}
 
-      {toolMode === 'measure' && measureTool && (
-        <p className="tool-hint">
-          <Icon name="alert" size={13} />
-          {measureTool === 'distance'
-            ? t('measure.hintDistance')
-            : measureTool === 'area' && areaShape === 'rectangle'
-              ? t('measure.hintRectangle')
-              : t('measure.hintPolygon', { count: measurePoints.length })}
-        </p>
-      )}
-
-      {areaMeasurements.length > 0 && (
-        <div className="area-summary">
-          <h4>{t('measure.areaSummary')}</h4>
-          {pageNumbersWithAreas.length > 1 && (
-            <div className="area-summary-page">
-              <div className="area-summary-page-title">{t('measure.currentPage', { page: currentPage })}</div>
-              {AREA_KINDS.map((k) => (
-                <div key={k} className="area-summary-row">
-                  <div className="area-summary-row-header">
-                    <span className="color-dot" style={{ background: areaKindColors[k] }} />
-                    <span className="area-summary-label">{t(`areaKinds.${k}`)}</span>
-                    <span className="area-summary-count">{t('measure.marks', { count: currentPageTally.counts[k] })}</span>
-                  </div>
-                  <span className="area-summary-total">
-                    {round(currentPageTally.totals[k], 2)} {t('units.m2')}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-          {pageNumbersWithAreas.length > 1 && <div className="area-summary-page-title">{t('measure.allPages')}</div>}
-          {AREA_KINDS.map((k) => (
-            <div key={k} className="area-summary-row">
-              <div className="area-summary-row-header">
-                <span className="color-dot" style={{ background: areaKindColors[k] }} />
-                <span className="area-summary-label">{t(`areaKinds.${k}`)}</span>
-                <span className="area-summary-count">{t('measure.marks', { count: grandTally.counts[k] })}</span>
-              </div>
-              <span className="area-summary-total">
-                {round(grandTally.totals[k], 2)} {t('units.m2')}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {pageMeasurements.length === 0 ? (
-        <div className="empty-state">
-          <Icon name="ruler" size={24} />
-          <p>{t('measure.empty')}</p>
-        </div>
-      ) : (
-        <ul className="measurement-list">
-          {pageMeasurements.map((m) => {
-            const isWall = m.tool === 'area' && m.calcMode === 'wall';
-            return (
-              <li key={m.id}>
-                <span>
-                  {m.areaKind ? (
-                    <span className="color-dot" style={{ background: areaKindColors[m.areaKind] }} />
-                  ) : null}{' '}
-                  {m.areaKind ? t(`areaKinds.${m.areaKind}`) : t(`measureTools.${m.tool}`)}: <strong>{measurementLabel(m)}</strong>
-                  {isWall && (
-                    <>
-                      {' '}
-                      {t('measure.wallLength', { length: round(m.wallLengthM ?? 0, 2) })}{' '}
-                      <input
-                        type="number"
-                        step="0.05"
-                        min="0.1"
-                        className="inline-number"
-                        value={m.wallHeightM ?? wallHeightDefaultM}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => {
-                          const h = parseFloat(e.target.value) || 0;
-                          const area = round((m.wallLengthM ?? 0) * h, 2);
-                          updateMeasurement(m.id, { wallHeightM: h, areaM2: area });
-                        }}
-                      />
-                      {' '}
-                      {t('units.m')})
-                    </>
-                  )}
-                </span>
-                <span className="list-item-actions">
-                  <button className="icon-btn danger" title={t('measure.delete')} onClick={() => deleteMeasurement(m.id)}>
-                    <Icon name="trash" />
-                  </button>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
+    </>
   );
 }

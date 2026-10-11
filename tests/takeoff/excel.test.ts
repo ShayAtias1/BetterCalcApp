@@ -75,7 +75,8 @@ test('project workbook: sheets, formulas and values', async (t) => {
   const sheets = await dump(buildProjectWorkbook(PROJECT, [PLAN_A, PLAN_B], 'he'));
   assert.deepEqual(
     sheets.map((s) => s.name),
-    ['סיכום פרויקט', 'תוכניות', 'חדרים', 'סוגי עבודה']
+    // The opening schedule follows the finishes sheets whenever a plan has openings (the fixtures have room openings).
+    ['סיכום פרויקט', 'תוכניות', 'חדרים', 'סוגי עבודה', 'ספירת פתחים פיזיים', 'טבלת פתחים']
   );
   assert.ok(sheets.every((s) => s.rightToLeft));
   assert.deepEqual(referencedSheets(sheets), ['תוכניות']);

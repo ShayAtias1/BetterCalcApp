@@ -33,7 +33,14 @@ const DASH = '-';
  *
  * Nothing here computes anything: every number comes from lib/quantities, unchanged.
  */
-export default function QuantityTable({ showDefaults = false }: { showDefaults?: boolean }) {
+export default function QuantityTable({ showDefaults = false, onCloseDefaults, compact = false }: {
+  showDefaults?: boolean;
+  onCloseDefaults?: () => void;
+  /** The open (not maximised) desktop panel: one dense header row, "net · order" per work type and a
+   *  totals row (approved design, board 01). The grouped two-row header and the totals table belong
+   *  to the maximised state (board 23). Same numbers either way. */
+  compact?: boolean;
+}) {
   const t = useT();
   const language = useLanguage();
   const project = useAppStore((s) => s.project);
@@ -53,10 +60,245 @@ export default function QuantityTable({ showDefaults = false }: { showDefaults?:
   const hasAreaMeasurements = (project.measurements ?? []).some((m) => m.tool === 'area' && m.areaKind);
 
   return (
-    <div className="quantity-table-wrap">
+    // The calculation defaults sit in a column at the panel's inline end, beside the table they affect.
+    <div className={`quantity-table-wrap ${showDefaults ? 'with-defaults' : ''}`}>
+      <div className="quantity-table-main">
       <OpeningQuantitySummary plan={project} />
+      {summaries.length === 0 ? (
+        <div className="empty-state">
+          <Icon name="table" size={28} />
+          <p>{hasAreaMeasurements ? t('quantityTable.emptyWithAreas') : t('quantityTable.empty')}</p>
+        </div>
+      ) : (
+        <>
+          {categories.length === 0 && (
+            <p className="qty-table-hint muted">{t('quantityTable.noWorkItems')}</p>
+          )}
+          <div className="qty-table-scroll">
+            <table className="qty-table qty-grid">
+              {compact ? (
+                <thead>
+                  <tr className="qty-col-row">
+                    <th className="sticky-col col-apt">{t('quantityTable.apartment')}</th>
+                    <th className="sticky-col col-room">{t('quantityTable.room')}</th>
+                    {categories.map((c) => (
+                      <th key={c} className="num group-edge">
+                        {t(`reportCategories.${c}`)} <span className="qty-group-unit">({categoryPrimaryUnit(c)})</span>
+                      </th>
+                    ))}
+                    <th className="group-edge">{t('quantityTable.openings')}</th>
+                    <th>{t('quantityTable.notes')}</th>
+                  </tr>
+                </thead>
+              ) : (
+                <thead>
+                  {/* Grouped by work type: each type the plan uses gets its net and to-order columns
+                      side by side, so one work type reads left to right in one place. Waste, the
+                      m² reading of skirting and opening deductions sit under the number they explain. */}
+                  <tr className="qty-group-row">
+                    <th className="spacer sticky-col col-apt" />
+                    <th className="spacer sticky-col col-room" />
+                    {categories.map((c) => (
+                      <th key={c} colSpan={2} className="group-edge">
+                        {t(`reportCategories.${c}`)} <span className="qty-group-unit">({categoryPrimaryUnit(c)})</span>
+                      </th>
+                    ))}
+                    <th colSpan={2} className="group-edge">
+                      {t('quantityTable.details')}
+                    </th>
+                  </tr>
+                  <tr className="qty-col-row">
+                    <th className="sticky-col col-apt">{t('quantityTable.apartment')}</th>
+                    <th className="sticky-col col-room">{t('quantityTable.room')}</th>
+                    {categories.map((c) => [
+                      <th key={`${c}-net`} className="num group-edge">
+                        {t('quantityTable.net')}
+                      </th>,
+                      <th key={`${c}-order`} className="num">
+                        {t('quantityTable.order')}
+                      </th>,
+                    ])}
+                    <th className="group-edge">{t('quantityTable.openings')}</th>
+                    <th>{t('quantityTable.notes')}</th>
+                  </tr>
+                </thead>
+              )}
+              <tbody>
+                {summaries.map((s) => {
+                  const room = roomsById.get(s.roomId);
+                  const openings = room?.openings ?? [];
+                  const canonicalDisplay = project.openings?.length ? roomOpeningDisplay(project,s.roomId,exportContext(language)) : null;
+                  const openingsText = canonicalDisplay?.text ?? openingCountsText(openings);
+                  const openingsArea = canonicalDisplay ? canonicalDisplay.areaM2 : round(openings.reduce((sum, o) => sum + openingAreaM2(o), 0), 2);
+                  return (
+                    <tr key={s.roomId}>
+                      <td className="sticky-col col-apt">{s.apartmentNumber || DASH}</td>
+                      <td className="sticky-col col-room">{s.roomName}</td>
+                      {categories.map((c) => {
+                        const q = roomCategoryQuantity(s, c);
+                        // The room has no item of this type: a quiet dash, not a number.
+                        if (q.wastePercent == null) {
+                          if (compact) return <td key={c} className="num group-edge qty-none">{DASH}</td>;
+                          return [
+                            <td key={`${c}-net`} className="num group-edge qty-none">{DASH}</td>,
+                            <td key={`${c}-order`} className="num qty-none">{DASH}</td>,
+                          ];
+                        }
+                        // An unscaled page: say why the cell is blank instead of showing 0.
+                        if (!s.pageCalibrated) {
+                          if (compact) return <td key={c} className="num group-edge"><span className="cal-missing">{t('quantities.notCalibrated')}</span></td>;
+                          return [
+                            <td key={`${c}-net`} className="num group-edge">
+                              <span className="cal-missing">{t('quantities.notCalibrated')}</span>
+                            </td>,
+                            <td key={`${c}-order`} className="num">
+                              <span className="qty-sub">{t('quantityTable.waste', { percent: q.wastePercent })}</span>
+                            </td>,
+                          ];
+                        }
+                        const panels = c === 'panels';
+                        const netSub: string[] = [];
+                        const orderSub: string[] = [t('quantityTable.waste', { percent: q.wastePercent })];
+                        // The deduction reads as one short word under the net; hovering spells out
+                        // gross − deduction = net.
+                        let netTitle: string | undefined;
+                        if (panels) {
+                          netSub.push(`${q.quantityM2 ?? 0} ${t('units.m2')}`);
+                          orderSub.push(`${q.orderM2 ?? 0} ${t('units.m2')}`);
+                          const doors = s.panelsDeductedLengthM ?? 0;
+                          if (doors > 0 && q.lengthM != null) {
+                            netSub.push(t('quantityTable.deduction', { amount: doors }));
+                            netTitle = t('quantityTable.doorsTitle', { gross: round(q.lengthM + doors, 2), doors, net: q.lengthM, unit: t('units.lm') });
+                          }
+                        } else {
+                          const deduction = s.openingDeductions.find((d) => d.category === c);
+                          if (deduction) {
+                            netSub.push(t('quantityTable.deduction', { amount: deduction.deductedM2 }));
+                            netTitle = t('quantityTable.openingsTitle', {
+                              gross: deduction.grossM2,
+                              deducted: deduction.deductedM2,
+                              net: deduction.netM2,
+                              unit: t('units.m2'),
+                            });
+                          }
+                        }
+                        if (compact) {
+                          return (
+                            <td key={c} className="num group-edge qty-pair" title={[netTitle, ...netSub, ...orderSub].filter(Boolean).join('\n')}>
+                              <span className="qty-pair-net">{panels ? q.lengthM : q.quantityM2}</span>
+                              <span className="qty-pair-sep" aria-hidden="true">·</span>
+                              <span className="qty-pair-order">{panels ? q.orderLengthM : q.orderM2}</span>
+                            </td>
+                          );
+                        }
+                        return [
+                          <td key={`${c}-net`} className="num group-edge" title={netTitle}>
+                            <span className="qty-main">{panels ? q.lengthM : q.quantityM2}</span>
+                            {netSub.length > 0 && <span className="qty-sub">{netSub.join(' · ')}</span>}
+                          </td>,
+                          <td key={`${c}-order`} className="num order">
+                            <span className="qty-main">{panels ? q.orderLengthM : q.orderM2}</span>
+                            <span className="qty-sub">{orderSub.join(' · ')}</span>
+                          </td>,
+                        ];
+                      })}
+                      <td
+                        className={`group-edge qty-openings ${openingsText ? '' : 'qty-none'}`}
+                        title={
+                          openings
+                            .map((o) =>
+                              t('quantityTable.openingTitle', { type: t(`openingTypes.${o.type}`), width: o.widthM, height: o.heightM, quantity: o.quantity })
+                            )
+                            .join('\n') || undefined
+                        }
+                      >
+                        {openingsText ? (
+                          <>
+                            <span className="qty-main">{openingsText}</span>
+                            <span className="qty-sub">
+                              {openingsArea === null ? DASH : openingsArea} {t('units.m2')}{canonicalDisplay?.partial ? ` · ${t('openingQuantities.partial')}` : ''}
+                            </span>
+                          </>
+                        ) : (
+                          DASH
+                        )}
+                      </td>
+                      <td className={`qty-notes ${s.notes ? '' : 'qty-none'}`} title={s.notes || undefined}>
+                        {s.notes || DASH}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {compact && (
+                <tfoot>
+                  <tr className="qty-total-row">
+                    <th className="sticky-col col-apt" scope="row">{t('quantityTable.total')}</th>
+                    <td className="sticky-col col-room qty-total-legend">{t('quantityTable.net')} · {t('quantityTable.order')}</td>
+                    {categories.map((c) => {
+                      const total = totals.find((item) => item.category === c);
+                      if (!total) return <td key={c} className="num group-edge qty-none">{DASH}</td>;
+                      const panels = c === 'panels';
+                      return (
+                        <td key={c} className="num group-edge qty-pair">
+                          <span className="qty-pair-net">{panels ? total.lengthM ?? DASH : total.quantityM2}</span>
+                          <span className="qty-pair-sep" aria-hidden="true">·</span>
+                          <span className="qty-pair-order">{panels ? total.orderLengthM ?? DASH : total.orderM2}</span>
+                        </td>
+                      );
+                    })}
+                    <td className="group-edge" />
+                    <td />
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+
+          {hasUncalibratedRooms && (
+            <div className="warning-box">
+              {t('quantityTable.uncalibratedWarning')}
+            </div>
+          )}
+
+          {!compact && <div className="qty-summary">
+            <h4 className="qty-totals-title">{t('quantityTable.total')}</h4>
+            <table className="qty-summary-table">
+              <thead>
+                <tr>
+                  <th>{t('quantityTable.totalsHeaders.item')}</th>
+                  <th>{t('quantityTable.totalsHeaders.length')}</th>
+                  <th>{t('quantityTable.totalsHeaders.net')}</th>
+                  <th>{t('quantityTable.totalsHeaders.waste')}</th>
+                  <th>{t('quantityTable.totalsHeaders.orderLength')}</th>
+                  <th>{t('quantityTable.totalsHeaders.order')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {totals.map((total) => (
+                  <tr key={total.category}>
+                    <td>{t(`reportCategories.${total.category}`)}</td>
+                    <td>{total.lengthM ?? DASH}</td>
+                    <td>{total.quantityM2}</td>
+                    <td>{total.wastePercent}%</td>
+                    <td className="order">{total.orderLengthM ?? DASH}</td>
+                    <td className="order">{total.orderM2}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>}
+        </>
+      )}
+      </div>
       {showDefaults && (
-        <div className="defaults-panel">
+        <aside className="defaults-panel" aria-label={t('quantitiesPanel.defaults')}>
+          <div className="defaults-head">
+            <strong>{t('quantitiesPanel.defaults')}</strong>
+            {onCloseDefaults && <button className="icon-btn" onClick={onCloseDefaults} title={t('adaptive.close')} aria-label={t('adaptive.close')}>
+              <Icon name="close" size={14} />
+            </button>}
+          </div>
           <p className="defaults-note">
             {t('quantityTable.defaultsNote')}
           </p>
@@ -150,186 +392,9 @@ export default function QuantityTable({ showDefaults = false }: { showDefaults?:
               </div>
             );
           })}
-        </div>
+        </aside>
       )}
 
-      {summaries.length === 0 ? (
-        <div className="empty-state">
-          <Icon name="table" size={28} />
-          <p>{hasAreaMeasurements ? t('quantityTable.emptyWithAreas') : t('quantityTable.empty')}</p>
-        </div>
-      ) : (
-        <>
-          {categories.length === 0 && (
-            <p className="qty-table-hint muted">{t('quantityTable.noWorkItems')}</p>
-          )}
-          <div className="qty-table-scroll">
-            <table className="qty-table qty-grid">
-              <thead>
-                {/* Grouped by work type: each type the plan uses gets its net and to-order columns
-                    side by side, so one work type reads left to right in one place. Waste, the
-                    m² reading of skirting and opening deductions sit under the number they explain. */}
-                <tr className="qty-group-row">
-                  <th className="spacer sticky-col col-apt" />
-                  <th className="spacer sticky-col col-room" />
-                  {categories.map((c) => (
-                    <th key={c} colSpan={2} className="group-edge">
-                      {t(`reportCategories.${c}`)} <span className="qty-group-unit">({categoryPrimaryUnit(c)})</span>
-                    </th>
-                  ))}
-                  <th colSpan={2} className="group-edge">
-                    {t('quantityTable.details')}
-                  </th>
-                </tr>
-                <tr className="qty-col-row">
-                  <th className="sticky-col col-apt">{t('quantityTable.apartment')}</th>
-                  <th className="sticky-col col-room">{t('quantityTable.room')}</th>
-                  {categories.map((c) => [
-                    <th key={`${c}-net`} className="num group-edge">
-                      {t('quantityTable.net')}
-                    </th>,
-                    <th key={`${c}-order`} className="num">
-                      {t('quantityTable.order')}
-                    </th>,
-                  ])}
-                  <th className="group-edge">{t('quantityTable.openings')}</th>
-                  <th>{t('quantityTable.notes')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summaries.map((s) => {
-                  const room = roomsById.get(s.roomId);
-                  const openings = room?.openings ?? [];
-                  const canonicalDisplay = project.openings?.length ? roomOpeningDisplay(project,s.roomId,exportContext(language)) : null;
-                  const openingsText = canonicalDisplay?.text ?? openingCountsText(openings);
-                  const openingsArea = canonicalDisplay ? canonicalDisplay.areaM2 : round(openings.reduce((sum, o) => sum + openingAreaM2(o), 0), 2);
-                  return (
-                    <tr key={s.roomId}>
-                      <td className="sticky-col col-apt">{s.apartmentNumber || DASH}</td>
-                      <td className="sticky-col col-room">{s.roomName}</td>
-                      {categories.map((c) => {
-                        const q = roomCategoryQuantity(s, c);
-                        // The room has no item of this type: a quiet dash, not a number.
-                        if (q.wastePercent == null) {
-                          return [
-                            <td key={`${c}-net`} className="num group-edge qty-none">{DASH}</td>,
-                            <td key={`${c}-order`} className="num qty-none">{DASH}</td>,
-                          ];
-                        }
-                        // An unscaled page: say why the cell is blank instead of showing 0.
-                        if (!s.pageCalibrated) {
-                          return [
-                            <td key={`${c}-net`} className="num group-edge">
-                              <span className="cal-missing">{t('quantities.notCalibrated')}</span>
-                            </td>,
-                            <td key={`${c}-order`} className="num">
-                              <span className="qty-sub">{t('quantityTable.waste', { percent: q.wastePercent })}</span>
-                            </td>,
-                          ];
-                        }
-                        const panels = c === 'panels';
-                        const netSub: string[] = [];
-                        const orderSub: string[] = [t('quantityTable.waste', { percent: q.wastePercent })];
-                        // The deduction reads as one short word under the net; hovering spells out
-                        // gross − deduction = net.
-                        let netTitle: string | undefined;
-                        if (panels) {
-                          netSub.push(`${q.quantityM2 ?? 0} ${t('units.m2')}`);
-                          orderSub.push(`${q.orderM2 ?? 0} ${t('units.m2')}`);
-                          const doors = s.panelsDeductedLengthM ?? 0;
-                          if (doors > 0 && q.lengthM != null) {
-                            netSub.push(t('quantityTable.deduction', { amount: doors }));
-                            netTitle = t('quantityTable.doorsTitle', { gross: round(q.lengthM + doors, 2), doors, net: q.lengthM, unit: t('units.lm') });
-                          }
-                        } else {
-                          const deduction = s.openingDeductions.find((d) => d.category === c);
-                          if (deduction) {
-                            netSub.push(t('quantityTable.deduction', { amount: deduction.deductedM2 }));
-                            netTitle = t('quantityTable.openingsTitle', {
-                              gross: deduction.grossM2,
-                              deducted: deduction.deductedM2,
-                              net: deduction.netM2,
-                              unit: t('units.m2'),
-                            });
-                          }
-                        }
-                        return [
-                          <td key={`${c}-net`} className="num group-edge" title={netTitle}>
-                            <span className="qty-main">{panels ? q.lengthM : q.quantityM2}</span>
-                            {netSub.length > 0 && <span className="qty-sub">{netSub.join(' · ')}</span>}
-                          </td>,
-                          <td key={`${c}-order`} className="num order">
-                            <span className="qty-main">{panels ? q.orderLengthM : q.orderM2}</span>
-                            <span className="qty-sub">{orderSub.join(' · ')}</span>
-                          </td>,
-                        ];
-                      })}
-                      <td
-                        className={`group-edge qty-openings ${openingsText ? '' : 'qty-none'}`}
-                        title={
-                          openings
-                            .map((o) =>
-                              t('quantityTable.openingTitle', { type: t(`openingTypes.${o.type}`), width: o.widthM, height: o.heightM, quantity: o.quantity })
-                            )
-                            .join('\n') || undefined
-                        }
-                      >
-                        {openingsText ? (
-                          <>
-                            <span className="qty-main">{openingsText}</span>
-                            <span className="qty-sub">
-                              {openingsArea === null ? DASH : openingsArea} {t('units.m2')}{canonicalDisplay?.partial ? ` · ${t('openingQuantities.partial')}` : ''}
-                            </span>
-                          </>
-                        ) : (
-                          DASH
-                        )}
-                      </td>
-                      <td className={`qty-notes ${s.notes ? '' : 'qty-none'}`} title={s.notes || undefined}>
-                        {s.notes || DASH}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {hasUncalibratedRooms && (
-            <div className="warning-box">
-              {t('quantityTable.uncalibratedWarning')}
-            </div>
-          )}
-
-          <div className="qty-summary">
-            <h4 className="qty-totals-title">{t('quantityTable.total')}</h4>
-            <table className="qty-summary-table">
-              <thead>
-                <tr>
-                  <th>{t('quantityTable.totalsHeaders.item')}</th>
-                  <th>{t('quantityTable.totalsHeaders.length')}</th>
-                  <th>{t('quantityTable.totalsHeaders.net')}</th>
-                  <th>{t('quantityTable.totalsHeaders.waste')}</th>
-                  <th>{t('quantityTable.totalsHeaders.orderLength')}</th>
-                  <th>{t('quantityTable.totalsHeaders.order')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {totals.map((total) => (
-                  <tr key={total.category}>
-                    <td>{t(`reportCategories.${total.category}`)}</td>
-                    <td>{total.lengthM ?? DASH}</td>
-                    <td>{total.quantityM2}</td>
-                    <td>{total.wastePercent}%</td>
-                    <td className="order">{total.orderLengthM ?? DASH}</td>
-                    <td className="order">{total.orderM2}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
     </div>
   );
 }

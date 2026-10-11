@@ -210,7 +210,7 @@ test('PDF layout: one BOQ per domain (items then a total row), ~ on estimates, d
   for (const t of tables) for (const r of t.rows) assert.equal(r.cells.length, t.headers.length);
 
   const [concrete, rebar] = tables;
-  assert.deepEqual(concrete.headers.slice(0, 5), ['Page', 'Type', 'Mark', 'Concrete grade', 'Dimension']);
+  assert.deepEqual(concrete.headers.slice(0, 5), ['Sheet', 'Type', 'Mark', 'Concrete grade', 'Dimension']);
   assert.equal(concrete.rows.length, 3); // two elements + the total
   assert.deepEqual(concrete.rows[0].cells.slice(0, 5), ['1', 'Slab', 'S01', 'B30', '20 cm']);
   assert.deepEqual(concrete.rows[1].cells.slice(3, 8), ['-', '-', '-', '-', 'Thickness missing']); // a missing element stays a row: dashes and a reason
@@ -219,10 +219,10 @@ test('PDF layout: one BOQ per domain (items then a total row), ~ on estimates, d
 
   assert.equal(rebar.rows.length, 5); // four items + the total
   const byMark = (mark: string) => rebar.rows.find((r) => r.cells[2] === mark)!;
-  assert.ok(byMark('M01').cells[7].startsWith('~ ')); // the printed estimate is marked
+  assert.match(byMark('M01').cells[7], /^Required: ~ \d/); // the printed estimate is marked (mesh weights beside bars carry their label)
   assert.deepEqual([byMark('M01').cells[5], byMark('M01').cells[6], byMark('M01').cells[9]], ['-', '-', 'Estimate']); // free polygon: no sheet layout
   assert.deepEqual([byMark('M02').cells[1], byMark('M02').cells[3], byMark('M02').cells[5], byMark('M02').cells[6], byMark('M02').cells[9]], ['Mesh', 'Bottom', '10 sheets', '6.00 × 2.50 m · 80 cm', 'Exact']);
-  assert.deepEqual([byMark('R01').cells[1], byMark('R01').cells[3], byMark('R01').cells[4], byMark('R01').cells[5]], ['Bars', '-', 'Ø16', '10 bars']);
+  assert.deepEqual([byMark('R01').cells[1], byMark('R01').cells[3], byMark('R01').cells[4], byMark('R01').cells[5]], ['Bars', '-', 'Ø16 · Length per bar: 6 m · Total length: 60 m', '10 bars']);
   assert.equal(byMark('M03').cells[9], 'Data missing');
   assert.deepEqual([rebar.rows.at(-1)!.cells[1], rebar.rows.at(-1)!.cells[5], rebar.rows.at(-1)!.cells[9]], ['Total', '', 'Includes estimate · Missing data: 1']);
   assert.ok(!JSON.stringify(blocks).includes('Bar lines'));

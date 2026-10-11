@@ -66,7 +66,7 @@ function BulkWorkspace({ plan, initialPage, onClose }: { plan: Plan; initialPage
     <p className="bulk-scope"><strong>{t('bulkTakeoff.scope', { name: plan.name })}</strong></p>
     <p className="muted">{t('bulkTakeoff.scopeNote')}</p>
     <ol className="bulk-steps" aria-label={t('bulkTakeoff.title')}>
-      {STEPS.map((key, i) => <li key={key} aria-current={step === i ? 'step' : undefined} className={step === i ? 'active' : ''}>{i + 1}. {t(`bulkTakeoff.${key}`)}</li>)}
+      {STEPS.map((key, i) => <li key={key} aria-current={step === i ? 'step' : undefined} className={step === i ? 'active' : i < step ? 'done' : ''}>{i + 1}. {t(`bulkTakeoff.${key}`)}</li>)}
     </ol>
     <section className="bulk-content" aria-labelledby="bulk-step-title">
       <h3 id="bulk-step-title">{t(`bulkTakeoff.${STEPS[step]}`)}</h3>
@@ -145,7 +145,7 @@ function BulkWorkspace({ plan, initialPage, onClose }: { plan: Plan; initialPage
         <p className="muted">{t('bulkTakeoff.blockedNote')}</p>
         <p className="muted">{t('bulkTakeoff.changedQuantityNote')}</p>
         <div className="bulk-table-scroll"><table className="bulk-preview-table"><thead><tr>
-          <th>{t('bulkTakeoff.room')}</th><th>{t('bulkTakeoff.page')}</th><th>{t('bulkTakeoff.status')}</th><th>{t('bulkTakeoff.changes')}</th><th>{t('bulkTakeoff.quantities')}</th>
+          <th className="bulk-col-room">{t('bulkTakeoff.room')}</th><th className="bulk-col-status">{t('bulkTakeoff.status')}</th><th>{t('bulkTakeoff.changes')}</th><th>{t('bulkTakeoff.quantities')}</th>
         </tr></thead><tbody>{preview.entries.map(e => <PreviewRow key={e.roomId} entry={e} plan={snapshot} policy={policy} />)}</tbody></table></div>
         {policy === 'update-existing' && <div className="bulk-notice"><p>{t('bulkTakeoff.updateWarning')}</p>
           <label className="bulk-check"><input type="checkbox" checked={confirmed && !stale} disabled={stale} onChange={e => setConfirmed(e.target.checked)} /><span>{t('bulkTakeoff.confirmUpdate')}</span></label>
@@ -168,8 +168,8 @@ function PreviewRow({ entry: e, plan, policy }: { entry: BulkRoomChange; plan: P
   const room = plan.rooms.find(r => r.id === e.roomId);
   const changes = [...e.additions, ...e.updates.map(u => u.config)];
   const metrics = room ? roomMetrics(room, plan.pages[room.pageNumber]?.calibration ?? null) : null;
-  return <tr><td><strong dir="auto">{room?.name ?? e.roomId}</strong><small>{room?.apartmentNumber ? t('rooms.apartment', { apartment: room.apartmentNumber }) : t('rooms.unassigned')}</small></td>
-    <td>{room?.pageNumber ?? '—'}</td><td><span className={`bulk-result ${e.status}`}>{t(e.status === 'updated' ? 'bulkTakeoff.willUpdate' : e.status === 'blocked' ? 'bulkTakeoff.willBlock' : 'bulkTakeoff.willSkip')}</span>
+  return <tr><td><strong dir="auto">{room?.name ?? e.roomId}</strong><small>{room?.apartmentNumber ? t('rooms.apartment', { apartment: room.apartmentNumber }) : t('rooms.unassigned')}{room ? ` · ${t('common.page', { page: room.pageNumber })}` : ''}</small></td>
+    <td><span className={`bulk-result ${e.status}`}>{t(e.status === 'updated' ? 'bulkTakeoff.willUpdate' : e.status === 'blocked' ? 'bulkTakeoff.willBlock' : 'bulkTakeoff.willSkip')}</span>
       {e.issues.map(issue => <small key={issue}>{t(`bulkTakeoff.${issue}`)}</small>)}
       {e.status === 'skipped' && <small>{t(policy === 'skip-conflicts' && e.conflicts.length ? 'bulkTakeoff.conflictSkipped' : 'bulkTakeoff.unchanged')}</small>}
     </td><td>{e.additions.length > 0 && <div>{t('bulkTakeoff.newItems', { count: e.additions.length })}</div>}{e.updates.length > 0 && <div>{t('bulkTakeoff.updatedItems', { count: e.updates.length })}</div>}

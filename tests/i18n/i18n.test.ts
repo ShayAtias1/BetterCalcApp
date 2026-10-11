@@ -74,8 +74,8 @@ test('interpolation, and English plurals chosen by count', () => {
   assert.equal(translate('en', 'defaultNames.room', { number: 3 }), 'Room 3');
   assert.equal(translate('en', 'startScreen.meta.rooms', { count: 1 }), '1 room');
   assert.equal(translate('en', 'startScreen.meta.rooms', { count: 4 }), '4 rooms');
-  assert.equal(translate('en', 'projectOverview.uncalibratedRooms', { count: 1 }), '1 room on uncalibrated pages is not included in the summary.');
-  assert.equal(translate('en', 'projectOverview.uncalibratedRooms', { count: 3 }), '3 rooms on uncalibrated pages are not included in the summary.');
+  assert.equal(translate('en', 'projectOverview.uncalibratedRooms', { count: 1 }), '1 room on uncalibrated sheets is not included in the summary.');
+  assert.equal(translate('en', 'projectOverview.uncalibratedRooms', { count: 3 }), '3 rooms on uncalibrated sheets are not included in the summary.');
   // Hebrew has no plural syntax: its text is exactly what it was.
   assert.equal(translate('he', 'startScreen.meta.rooms', { count: 1 }), '1 חדרים');
   // A placeholder that is not supplied stays visible rather than vanishing.

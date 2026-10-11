@@ -4,7 +4,7 @@ import type { Plan, PlanOpening, WorkType } from '../../src/types/index.ts';
 import { PLAN_A } from '../takeoff/fixtures.ts';
 import { buildRoomSummaries, calculateWorkItem } from '../../src/lib/quantities.ts';
 import { buildOpeningQuantityReport, openingReportTables } from '../../src/lib/openingQuantityReport.ts';
-import { buildPlanQuantityReport, buildProjectQuantities } from '../../src/lib/projectQuantities.ts';
+import { buildPlanQuantityReport, buildProjectQuantities, planStatusText } from '../../src/lib/projectQuantities.ts';
 import { exportContext } from '../../src/lib/exportLanguage.ts';
 import { buildQuantitiesWorkbook } from '../../src/lib/exportExcel.ts';
 import { buildProjectWorkbook } from '../../src/lib/exportProjectExcel.ts';
@@ -119,4 +119,46 @@ test('mixed legacy/canonical faces count one physical opening and require consis
  assert.equal(calc(p).deductedM2,2);assert.equal(calc(p,'painting',3,true,1).deductedM2,2);assert.equal(buildOpeningQuantityReport(p).doors,1);
  p.openings[0].heightM=2.5;assert.equal(calc(p).deductedM2,2);assert.equal(calc(p,'painting',3,true,1).deductedM2,0);assert.equal(calc(p,'painting',3,true,1).openingAudit![0].reason,'legacyConflict');
  p.openings[0]=opening(p,{roomIds:[]});assert.equal(buildOpeningQuantityReport(p).doors,1);assert.ok(buildOpeningQuantityReport(p).incomplete);
+});
+
+test('plan status text: incomplete openings on a calibrated plan are not reported as uncalibrated rooms', () => {
+ const he_ = exportContext('he').t, en_ = exportContext('en').t;
+ const draft = plan(); draft.openings = [opening(draft, { heightM: null })];
+ const report = buildPlanQuantityReport(draft);
+ assert.equal(report.status, 'partial'); assert.equal(report.uncalibratedRoomCount, 0);
+ assert.equal(planStatusText(report, he_), he.projectOverview.openingsIncompleteStatus);
+ assert.equal(planStatusText(report, en_), en.projectOverview.openingsIncompleteStatus);
+ const uncalibrated = plan(); uncalibrated.openings = [opening(uncalibrated, { heightM: null })];
+ uncalibrated.rooms = [...uncalibrated.rooms, { ...uncalibrated.rooms[0], id: 'far', name: 'far', pageNumber: 2 }];
+ const partial = buildPlanQuantityReport(uncalibrated);
+ assert.equal(partial.status, 'partial'); assert.ok(partial.uncalibratedRoomCount > 0);
+ assert.equal(planStatusText(partial, he_), he.planStatus.partial);
+ assert.equal(planStatusText(partial, en_), en.planStatus.partial);
+ const ready = plan(); ready.openings = [];
+ assert.equal(planStatusText(buildPlanQuantityReport(ready), en_), en.planStatus[buildPlanQuantityReport(ready).status]);
+});
+
+test('a rejected record is a resolved decision: report not partial, quantities and counts unchanged',()=>{
+ const p=plan();p.openings=[opening(p)];const before=calc(p);
+ p.openings.push(opening(p,{id:JSON.stringify(['openings-v1',p.id,1,'hash','import','o1']),kind:'window',mechanism:'fixed',walkableAccess:'unsupported',geometry:{endpointA:{x:2,y:0},endpointB:{x:3,y:0}},approval:{status:'rejected',reviewedAt:2}}));
+ const r=buildOpeningQuantityReport(p);
+ assert.equal(r.incomplete,false);assert.equal(buildPlanQuantityReport(p).status,'ready');
+ assert.deepEqual([r.doors,r.windows],[1,0]);assert.equal(calc(p).netM2,before.netM2);
+ const tables=openingReportTables([p],exportContext('en'));
+ assert.equal(tables.find(t=>t.title===en.openingQuantities.schedule)!.rows.length,1);
+ assert.equal(tables.find(t=>t.title===en.openingQuantities.exclusions),undefined);
+ p.openings[1].approval={status:'draft',reviewedAt:null};assert.ok(buildOpeningQuantityReport(p).incomplete);
+});
+
+test('opening reports describe openings and rooms by readable names, never internal ids or JSON keys',()=>{
+ const p=plan();p.rooms[1].name='';
+ p.openings=[opening(p,{id:JSON.stringify(['openings-v1',p.id,1,'hash','import','o1']),approval:{status:'draft',reviewedAt:null}})];
+ for(const language of ['he','en'] as const){
+  const x=exportContext(language),tables=openingReportTables([p],x);
+  const text=tables.flatMap(t=>t.rows.flat()).join('\n');
+  assert.doesNotMatch(text,/openings-v1|\["|\bright\b/);
+  const exclusions=tables.find(t=>t.title===x.t('openingQuantities.exclusions'))!;
+  assert.ok(exclusions.rows.every(row=>row[2]===`${x.t('openingTools.hinged')} · 1×2`));
+  assert.ok(exclusions.rows.some(row=>row[1]===x.t('exports.common.unnamedRoom')));
+ }
 });

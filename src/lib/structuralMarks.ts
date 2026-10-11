@@ -100,3 +100,12 @@ export function markPatch(
   }
   return { mark: text, markManual: true, autoNumber: undefined };
 }
+
+/**
+ * The short code shown in a list row's mark column: the user's mark verbatim, or the automatic
+ * number ("01") — the kind's name is shown beside it, so it is not repeated here.
+ */
+export function markCode(item: MarkFields & { kind: MarkKind }): string {
+  if (hasManualMark(item)) return item.mark;
+  return typeof item.autoNumber === 'number' ? pad(item.autoNumber) : '';
+}

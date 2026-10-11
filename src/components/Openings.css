@@ -296,3 +296,184 @@
 .openings-panel .opening-list-label > span,
 .openings-panel .opening-list-label > small { display: block; }
 .openings-panel .opening-list-label > small { white-space: normal; margin-block-start: 2px; font-size: 12px; line-height: 1.4; }
+
+/* Approved design (boards 04 / 22): the compact opening inspector. */
+.openings-panel .opening-editor.opening-editor-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.opening-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--divider);
+}
+.opening-detail-header .detail-kicker { flex: 0 1 auto; min-width: 0; }
+.opening-detail-actions { display: flex; align-items: center; gap: 2px; margin-inline-start: auto; }
+.opening-editor-compact .opening-fields {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+}
+.opening-editor-compact .opening-fields .form-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  flex-direction: row;
+}
+.opening-editor-compact .form-row :is(input, select, textarea) {
+  min-height: 32px;
+}
+.opening-section {
+  padding: 12px 0;
+  border-top: 1px solid var(--divider);
+}
+.opening-section > h4 {
+  margin: 0 0 8px;
+  font: 600 12.5px/1.3 var(--sans);
+  color: var(--text-h);
+}
+.opening-dims {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.opening-editor-compact .opening-dims .form-row {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 4px;
+  font-size: 11.5px;
+}
+.opening-dims input {
+  font-family: var(--mono);
+  text-align: end;
+}
+.opening-section > .btn-secondary.small {
+  margin-top: 8px;
+}
+.opening-section .opening-fields {
+  padding-bottom: 0;
+}
+.opening-section .opening-associations {
+  margin-block: 0;
+}
+.opening-editor-compact .opening-quantity-feedback {
+  border: 0;
+  border-top: 1px solid var(--divider);
+  border-radius: 0;
+  padding: 12px 0;
+  margin: 0;
+  font-size: 12px;
+}
+.opening-editor-compact .opening-advanced {
+  margin: 4px 0 12px;
+}
+/* The decision stays in view at the bottom of the inspector. */
+.inspector-panel .opening-editor-footer {
+  position: sticky;
+  bottom: -14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin: auto -16px -14px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
+  z-index: 2;
+}
+.inspector-panel .opening-editor-footer > .btn-primary { grid-column: 1; }
+.inspector-panel .opening-editor-footer > :only-child { grid-column: 1 / -1; }
+.inspector-panel .openings-panel:has(.opening-editor-compact) { min-height: 100%; display: flex; flex-direction: column; }
+.inspector-panel .openings-panel .opening-editor-compact { flex: 1; }
+
+/* Approved design (boards 04 / 21): compact opening rows. */
+.openings-panel .opening-list-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-block: var(--s-3) var(--s-1);
+  padding-inline: 4px;
+}
+.openings-panel .opening-list-heading h3 { margin: 0; }
+.opening-sheet-counts { display: flex; gap: 4px; margin-inline-start: auto; font-size: 11.5px; color: var(--text-2); white-space: nowrap; }
+.opening-sheet-count + .opening-sheet-count::before { content: '·'; margin-inline-end: 4px; color: var(--muted); }
+.opening-sheet-count.approved { color: #2e8a57; font-weight: 600; }
+.opening-sheet-count.rejected { color: var(--danger); font-weight: 600; }
+.openings-panel .opening-list { gap: 1px; margin-block: 0 var(--s-3); }
+.openings-panel .opening-list .opening-list-row {
+  position: relative;
+  min-height: 40px;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  overflow: visible;
+}
+.openings-panel .opening-list .opening-list-row:hover,
+.openings-panel .opening-list .opening-list-row:focus-within,
+.openings-panel .opening-list .opening-list-row.checked { background: var(--bg-subtle); }
+.openings-panel .opening-list .opening-list-row.selected { background: var(--accent-bg); }
+.openings-panel .opening-list .opening-list-row > .opening-list-item {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.openings-panel .opening-list .opening-list-label { flex: 1 1 auto; min-width: 0; line-height: 1.25; }
+.openings-panel .opening-list .opening-list-label > span,
+.openings-panel .opening-list .opening-list-label > small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.openings-panel .opening-list .opening-list-label > small { margin: 0; font-size: 11px; color: var(--muted); }
+.opening-list-mark {
+  flex: none;
+  min-width: 34px;
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 400 11.5px/1 var(--mono);
+  color: var(--text-h);
+}
+.opening-list-row.selected .opening-list-mark { color: var(--accent-hover); font-weight: 600; }
+.opening-list-row.selected .opening-list-label > span { font-weight: 600; }
+/* The checkbox shows on hover/focus, on checked rows, and on every row while a selection exists. */
+.openings-panel .opening-list .room-assignment-checkbox { width: 15px; height: 15px; opacity: 0; transition: opacity 0.12s ease; }
+.openings-panel .opening-list .opening-list-row:is(:hover, :focus-within) .room-assignment-checkbox,
+.openings-panel .opening-list.has-selection .room-assignment-checkbox { opacity: 1; }
+/* Row actions replace the status pill on hover or keyboard focus. */
+.openings-panel .opening-list .opening-list-row-actions {
+  position: absolute;
+  inset-inline-end: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  gap: 2px;
+  padding-inline-start: 6px;
+  background: inherit;
+  opacity: 0;
+  pointer-events: none;
+}
+.openings-panel .opening-list .opening-list-row:is(:hover, :focus-within) .opening-list-row-actions { opacity: 1; pointer-events: auto; background: var(--bg-subtle); }
+.openings-panel .opening-list .opening-list-row.selected:is(:hover, :focus-within) .opening-list-row-actions { background: var(--accent-bg); }
+.openings-panel .opening-list .opening-list-row:is(:hover, :focus-within) .opening-status-pill { visibility: hidden; }
+.openings-panel .opening-list .opening-list-row-actions .icon-btn { width: 24px; height: 24px; padding: 0; }
+@media (hover: none) {
+  .openings-panel .opening-list .room-assignment-checkbox { opacity: 1; }
+}
+.openings-panel .opening-list .opening-list-item > .opening-status-pill,
+.openings-panel .opening-list .opening-list-item > .opening-list-mark { flex: none; }

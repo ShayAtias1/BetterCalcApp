@@ -125,7 +125,7 @@ test('English project workbook: names, direction, formulas and numbers match the
   const en = await dump(buildProjectWorkbook(PROJECT, [PLAN_A, PLAN_B], 'en'));
   assert.deepEqual(
     en.map((s) => s.name),
-    ['Project Summary', 'Plans', 'Rooms', 'Work Types']
+    ['Project Summary', 'Plans', 'Rooms', 'Work Types', 'Physical opening counts', 'Opening schedule']
   );
   assert.ok(en.every((s) => !s.rightToLeft));
   assert.ok(he.every((s) => s.rightToLeft));

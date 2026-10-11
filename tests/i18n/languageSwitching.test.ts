@@ -98,11 +98,12 @@ test('translatorFor stays on its language while the UI language changes (an expo
 });
 
 test('every export is handed the UI language read at the moment the component renders (useLanguage), never a constant', () => {
+  // `language` is passed to every export; options such as the sheet set may follow it.
   const sites: [string, RegExp[]][] = [
-    ['src/components/QuantityExportDialogs.tsx', [/exportQuantitiesToExcel\([^\n]*, language\)/, /exportQuantitiesToPdf\([^\n]*, language\)/]],
-    ['src/components/TopBar.tsx', [/exportPlanPageToPdf\([^\n]*, language\)/, /exportAllPlanPagesToPdf\([^\n]*, language\)/]],
-    ['src/components/ProjectOverview.tsx', [/exportProjectToExcel\([^\n]*, language\)/, /exportProjectToPdf\([^\n]*, language\)/]],
-    ['src/components/compare/CompareWorkspace.tsx', [/exportComposite\(language\)/, /exportCompositesAsPdf\([^\n]*, language\)/]],
+    ['src/components/QuantityExportDialogs.tsx', [/exportQuantitiesToExcel\([^\n]*, language(?:, [^\n]*)?\)/, /exportQuantitiesToPdf\([^\n]*, language(?:, [^\n]*)?\)/]],
+    ['src/components/TopBar.tsx', [/exportPlanPageToPdf\([^\n]*, language(?:, [^\n]*)?\)/, /exportAllPlanPagesToPdf\([^\n]*, language(?:, [^\n]*)?\)/]],
+    ['src/components/ProjectOverview.tsx', [/exportProjectToExcel\([^\n]*, language(?:, [^\n]*)?\)/, /exportProjectToPdf\([^\n]*, language(?:, [^\n]*)?\)/]],
+    ['src/components/compare/CompareWorkspace.tsx', [/exportComposite\(language\)/, /exportCompositesAsPdf\([^\n]*, language(?:, [^\n]*)?\)/]],
   ];
   for (const [file, patterns] of sites) {
     const source = readFileSync(file, 'utf8');

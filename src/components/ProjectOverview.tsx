@@ -5,7 +5,7 @@ import { buildProjectStructural } from '../lib/structuralQuantities';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { formatDate, formatNumber, useLanguage, useT, type TranslateFn } from '../i18n';
 import { useAppStore } from '../store/appStore';
-import { buildProjectQuantities, planStatusLabel, type CategoryAmount } from '../lib/projectQuantities';
+import { buildProjectQuantities, planStatusText, type CategoryAmount } from '../lib/projectQuantities';
 import { exportProjectToExcel } from '../lib/exportProjectExcel';
 import { exportProjectToPdf } from '../lib/exportProjectPdf';
 import { projectExportDetails, trackedExport } from '../lib/analytics';
@@ -258,7 +258,7 @@ export default function ProjectOverview() {
                       {layout !== 'expanded' && <button className="icon-btn plan-open-action" title={t('projectOverview.openPlan')} aria-label={t('projectOverview.openPlan')}
                         onClick={(event) => { event.stopPropagation(); void openPlan(r.plan.id); }}><Icon name="chevron-next" /></button>}
                       <span className="plan-card-action-row">
-                      <span className={`plan-status plan-status-${r.status}`}>{planStatusLabel(r.status)}</span>
+                      <span className={`plan-status plan-status-${r.status}`}>{planStatusText(r)}</span>
                       <span className="list-item-actions" onClick={(e) => e.stopPropagation()}>
                         <button className="icon-btn" title={t('projectOverview.rename')} onClick={() => onRename(r.plan.id, r.plan.name)}>
                           <Icon name="text" />

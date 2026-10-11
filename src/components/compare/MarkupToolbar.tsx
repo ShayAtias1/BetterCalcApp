@@ -2,6 +2,7 @@ import { useCompareStore } from '../../store/compareStore';
 import type { MarkupTool } from '../../types/compare';
 import Icon, { type IconName } from '../Icon';
 import { useT } from '../../i18n';
+import type { PanelPart } from '../PanelPart';
 
 const MARKUP_TOOLS: MarkupTool[] = ['cloud', 'arrow', 'rectangle', 'text', 'dimension', 'mask'];
 const MARKUP_ICONS: Record<MarkupTool, IconName> = {
@@ -15,7 +16,7 @@ const MARKUP_ICONS: Record<MarkupTool, IconName> = {
 
 const MARKUP_COLORS = ['#ef4444', '#f59e0b', '#16a34a', '#2563eb', '#9333ea', '#0f172a'];
 
-export default function MarkupToolbar() {
+export default function MarkupToolbar({ part }: { part?: PanelPart } = {}) {
   const t = useT();
   const comparison = useCompareStore((s) => s.comparison);
   const currentPageKey = useCompareStore((s) => s.currentPageKey);
@@ -79,6 +80,8 @@ export default function MarkupToolbar() {
 
   return (
     <div className="markup-toolbar">
+      {/* Desktop split: tools and settings in the inspector, the page's markups in the side panel. */}
+      {part !== 'list' && <>
       <div className="markup-color-row" title={selectedMarkup ? t('markup.colorSelectedHint') : t('markup.colorNewHint')}>
         <span className="section-label">{selectedMarkup ? t('markup.colorSelected') : t('markup.color')}</span>
         {/* The swatches sit on their own line, in the same grey tray as the tool groups. */}
@@ -169,6 +172,8 @@ export default function MarkupToolbar() {
         </p>
       )}
 
+      </>}
+      {part !== 'detail' && <>
       {markups.length === 0 ? (
         <div className="empty-state">
           <Icon name="cloud" size={24} />
@@ -208,6 +213,7 @@ export default function MarkupToolbar() {
           ))}
         </ul>
       )}
+      </>}
     </div>
   );
 }

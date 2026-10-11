@@ -77,7 +77,7 @@ for (const language of ['en', 'he'] as const) {
     assert.ok(printed.includes(`${t('rebar.levelBottom')}: ${t('quantitiesPanel.sheetsQty', { count: 4 })}`));
     assert.ok(printed.includes(`${t('rebar.levelTop')}: ${t('quantitiesPanel.sheetsQty', { count: 4 })}`));
     assert.ok(printed.includes(`${t('rebar.sheets.total')}: ${t('quantitiesPanel.sheetsQty', { count: 8 })}`));
-    assert.ok(printed.includes(t('quantitiesPanel.cols.netWeight')));
+    assert.ok(printed.includes(t('rebar.requiredWeight')));
     assert.ok(printed.includes(t('rebar.purchaseWeight')));
     useAppStore.getState().setSelectedRebarId('bars');
     const barHtml = render(createElement(RebarPanel));
@@ -257,7 +257,7 @@ for (const language of ['en', 'he'] as const) {
     assert.ok(text(control()).includes(t('rebar.layout.edit')));
     assert.ok(!text(control()).includes(t('rebar.layout.rotate')));
     actions.setEditing(p.id, mesh.id, true, preview, true);
-    assert.ok(text(control()).includes(t('rebar.layout.exitEdit')));
+    assert.ok(text(control()).includes(t('rebar.layout.done')));
     assert.ok(text(control()).includes(t('rebar.layout.add')));
     assert.ok(!text(control()).includes('Layout edits do not affect quantities yet'));
     assert.ok(text(control()).includes(t('rebar.layout.settingsNotice')));

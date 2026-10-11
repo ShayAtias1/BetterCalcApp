@@ -7,7 +7,7 @@ import type { ConcreteElement, ConcreteKind } from '../types/structural';
 import { calculateConcrete, type ConcreteCalc } from '../lib/concrete';
 import { CONCRETE_KINDS } from '../lib/structuralMutations';
 import { concreteOf } from '../lib/structuralPlan';
-import { markLabel, markPatch } from '../lib/structuralMarks';
+import { markCode, markLabel, markPatch } from '../lib/structuralMarks';
 import { cmToMeters, metersToCm } from '../lib/structuralUnits';
 import { zoneGeometry } from '../lib/zoneGeometry';
 import { round } from '../lib/geometry';
@@ -15,13 +15,25 @@ import { CONCRETE_COLOR } from './ConcreteZones';
 import ExistingAreaPicker from './ExistingAreaPicker';
 import NumberField from './NumberField';
 import Icon from './Icon';
+import { InspectorCloseButton, InspectorEmpty, type PanelPart } from './PanelPart';
+
+/** A zone's spec line: grade · thickness (slab, cm) or height (m) · count (columns). */
+function concreteSpec(el: ConcreteElement, t: ReturnType<typeof useT>): string {
+  const depth = el.depthM
+    ? el.kind === 'slab'
+      ? `${formatNumber(metersToCm(el.depthM) ?? 0)} ${t('units.cm')}`
+      : `${t('concrete.height')} ${formatNumber(el.depthM)}`
+    : '';
+  const count = el.kind === 'column' && (el.quantity ?? 1) > 1 ? `${el.quantity}×` : '';
+  return [el.grade?.trim(), depth, count].filter(Boolean).join(' · ');
+}
 
 function volumeText(calc: ConcreteCalc, t: ReturnType<typeof useT>, field: 'volumeM3' | 'orderM3'): string {
   const v = calc[field];
   return v === null ? t('concrete.notCalculable') : `${formatNumber(round(v, 2))} ${t('units.m3')}`;
 }
 
-export default function ConcretePanel({ readOnly = false }: { readOnly?: boolean }) {
+export default function ConcretePanel({ readOnly = false, part }: { readOnly?: boolean; part?: PanelPart }) {
   const t = useT();
   const project = useAppStore((s) => s.project);
   const currentPage = useAppStore((s) => s.currentPage);
@@ -42,20 +54,21 @@ export default function ConcretePanel({ readOnly = false }: { readOnly?: boolean
   const elements = concreteOf(project);
   const selected = elements.find((e) => e.id === selectedId);
 
-  if (selected) {
+  if (part === 'detail' && !selected) return <InspectorEmpty text={t('workspace.inspector.empty.concrete')} />;
+  if (selected && part !== 'list') {
     return (
       <div className="room-panel">
-        <div className="detail-nav">
+        {!part && <div className="detail-nav">
           <button className="btn-ghost small" onClick={() => setSelectedId(null)}>
             <Icon name="back" />
             {t('concrete.back')}
           </button>
-        </div>
+        </div>}
         <div className="detail-header">
           <span className="color-dot" style={{ background: CONCRETE_COLOR }} />
           <span className="detail-header-text">
             <span className="detail-title" dir="auto">{markLabel(selected, t)}</span>
-            <span className="detail-subtitle">{t(`concrete.kinds.${selected.kind}`)}</span>
+            <span className="detail-subtitle">{t(`concrete.kinds.${selected.kind}`)} · {t('concrete.page', { page: selected.pageNumber })}</span>
           </span>
           {!readOnly && <><button className="icon-btn" title={t('concrete.duplicate')} aria-label={t('concrete.duplicate')} onClick={() => duplicateElement(selected.id)}>
             <Icon name="copy" />
@@ -69,7 +82,9 @@ export default function ConcretePanel({ readOnly = false }: { readOnly?: boolean
           >
             <Icon name="trash" />
           </button>
-        </>}</div>
+        </>}
+          {part && <InspectorCloseButton onClick={() => setSelectedId(null)} />}
+        </div>
         <ReviewFields readOnly={readOnly}><ConcreteDetail
           key={selected.id}
           element={selected}
@@ -91,6 +106,7 @@ export default function ConcretePanel({ readOnly = false }: { readOnly?: boolean
   return (
     <div className="room-panel">
       <div hidden={readOnly}>
+      <span className="panel-kicker">{t('concrete.kindPicker')}</span>
       <div className="concrete-kinds" role="group" aria-label={t('concrete.kindPicker')}>
         {CONCRETE_KINDS.map((kind) => (
           <button
@@ -147,13 +163,15 @@ export default function ConcretePanel({ readOnly = false }: { readOnly?: boolean
           {elements.map((el) => {
             const calc = calculateConcrete(el, project.pages[el.pageNumber]?.calibration ?? null);
             return (
-              <li key={el.id} onClick={() => select(el)}>
-                <span className="color-dot" style={{ background: CONCRETE_COLOR }} />
-                <span className="room-list-name" dir="auto">
-                  {markLabel(el, t)} · {t(`concrete.kinds.${el.kind}`)}
+              <li key={el.id} className={`structural-row ${el.id === selectedId ? 'active' : ''}`} onClick={() => select(el)} title={markLabel(el, t)}>
+                {/* Approved design (board 05): mark · name with its spec line · volume at the end. */}
+                <span className="structural-mark" dir="auto">{markCode(el)}</span>
+                <span className="structural-name">
+                  <span dir="auto">{t(`concrete.kinds.${el.kind}`)}</span>
+                  {concreteSpec(el, t) && <small dir="auto">{concreteSpec(el, t)}</small>}
                 </span>
                 {el.pageNumber !== currentPage && <span className="room-list-page">{t('concrete.page', { page: el.pageNumber })}</span>}
-                <span className="room-list-apt">{calc.volumeM3 === null ? '-' : volumeText(calc, t, 'volumeM3')}</span>
+                <span className="structural-value" title={volumeText(calc, t, 'volumeM3')}>{calc.volumeM3 === null ? '-' : formatNumber(round(calc.volumeM3, 1))}</span>
               </li>
             );
           })}
@@ -202,39 +220,17 @@ function ConcreteDetail({
 
   return (
     <div className="room-detail">
-      {/* Same zone for every kind, so a wrong pick is fixed here instead of by redrawing. */}
-      <div className="concrete-kinds" role="group" aria-label={t('concrete.kindPicker')}>
-        {CONCRETE_KINDS.map((kind) => (
-          <button
-            key={kind}
-            className={`btn-ghost small ${element.kind === kind ? 'active' : ''}`}
-            aria-pressed={element.kind === kind}
-            onClick={() => onChangeKind(kind)}
-          >
-            {t(`concrete.kinds.${kind}`)}
-          </button>
-        ))}
-      </div>
       {message && <div className="warning-box">{message}</div>}
 
-      <div className="metrics-row concrete-results">
-        <div>
-          <span className="metric-label">{t('concrete.footprint')}</span>
-          <span className={`metric-value ${calc.footprintM2 === null ? 'cal-missing' : ''}`}>
-            {calc.footprintM2 === null ? t('concrete.notCalculable') : `${formatNumber(round(calc.footprintM2, 2))} ${t('units.m2')}`}
-          </span>
-        </div>
-        <div>
-          <span className="metric-label">{t('concrete.volume')}</span>
-          <span className={`metric-value ${calc.volumeM3 === null ? 'cal-missing' : ''}`}>{volumeText(calc, t, 'volumeM3')}</span>
-        </div>
-        <div>
-          <span className="metric-label">{t('concrete.order')}</span>
-          <span className={`metric-value ${calc.orderM3 === null ? 'cal-missing' : ''}`}>{volumeText(calc, t, 'orderM3')}</span>
-        </div>
-      </div>
-
+      {/* Approved design (board 05): compact rows — the element kind first (the same zone for every
+          kind, so a wrong pick is fixed here instead of by redrawing), the results card after them. */}
       <div className="form-grid">
+        <div className="form-row">
+          <label>{t('concrete.kindPicker')}</label>
+          <select value={element.kind} onChange={(e) => onChangeKind(e.target.value as ConcreteKind)}>
+            {CONCRETE_KINDS.map((kind) => <option key={kind} value={kind}>{t(`concrete.kinds.${kind}`)}</option>)}
+          </select>
+        </div>
         <div className="form-row">
           <label>{t('concrete.mark')}</label>
           {/* Empty = automatic: the placeholder shows the name it will have in this language. */}
@@ -296,6 +292,23 @@ function ConcreteDetail({
           <p className="muted">{t('concrete.manualSizeHint')}</p>
         </>
       )}
+
+      <div className="metrics-row concrete-results">
+        <div>
+          <span className="metric-label">{t('concrete.footprint')}</span>
+          <span className={`metric-value ${calc.footprintM2 === null ? 'cal-missing' : ''}`}>
+            {calc.footprintM2 === null ? t('concrete.notCalculable') : `${formatNumber(round(calc.footprintM2, 2))} ${t('units.m2')}`}
+          </span>
+        </div>
+        <div>
+          <span className="metric-label">{t('concrete.volume')}</span>
+          <span className={`metric-value ${calc.volumeM3 === null ? 'cal-missing' : ''}`}>{volumeText(calc, t, 'volumeM3')}</span>
+        </div>
+        <div>
+          <span className="metric-label">{t('concrete.order')}</span>
+          <span className={`metric-value ${calc.orderM3 === null ? 'cal-missing' : ''}`}>{volumeText(calc, t, 'orderM3')}</span>
+        </div>
+      </div>
     </div>
   );
 }

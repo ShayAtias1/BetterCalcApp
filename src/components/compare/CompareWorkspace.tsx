@@ -13,7 +13,11 @@ import MarkupToolbar from './MarkupToolbar';
 import CompareCalibrationDialog from './CompareCalibrationDialog';
 import CompareContextBar from './CompareContextBar';
 import ChangesPanel from './ChangesPanel';
-import Icon from '../Icon';
+import CompareToolDock, { type CompareSidebarTab } from './CompareToolDock';
+import { PanelResizer, PanelRestoreButtons } from '../WorkspacePanels';
+import { usePanelGridStyle, usePanelLayout } from '../panelLayout';
+import ViewerWidthWatcher from '../ViewerWidthWatcher';
+import type { PanelPart } from '../PanelPart';
 import { useCompareStore } from '../../store/compareStore';
 import { exportCompositesAsPdf, type ChangeTable, type CompositeImage } from '../../lib/exportComparePdf';
 import { changeTableFor, planCompareExport } from '../../lib/compareExportPlan';
@@ -22,7 +26,7 @@ import { notifyExportFailed } from '../../lib/exportFailure';
 import { useLanguage, useT } from '../../i18n';
 import { exportContext } from '../../lib/exportLanguage';
 
-type SidebarTab = 'layers' | 'measure' | 'markup';
+type SidebarTab = CompareSidebarTab;
 
 /** Polls `check` until it passes or the timeout elapses; returns whether it passed. */
 async function waitFor(check: () => boolean, timeoutMs = 8000): Promise<boolean> {
@@ -44,8 +48,6 @@ export default function CompareWorkspace() {
   const [panel, setPanel] = useState<'plan' | 'items' | 'quantities'>('plan');
   const t = useT();
   const language = useLanguage();
-  const toolMode = useCompareStore((s) => s.toolMode);
-  const setToolMode = useCompareStore((s) => s.setToolMode);
   const comparison = useCompareStore((s) => s.comparison);
   const setActiveRevisionId = useCompareStore((s) => s.setActiveRevisionId);
   const currentPageKey = useCompareStore((s) => s.currentPageKey);
@@ -143,84 +145,71 @@ export default function CompareWorkspace() {
     }
   };
 
+  const expanded = layout === 'expanded' && !reviewOnly;
+  const panelOpen = usePanelLayout((s) => s.open);
+  const panelGridStyle = usePanelGridStyle();
+  const tabs: SidebarTab[] = ['layers', 'measure', 'markup'];
+  /** One half of the desktop split: the page's items at the inline start, tools and settings at the inline end. */
+  const desktopPanel = (part: PanelPart) => {
+    if (tab === 'measure') return <MeasureToolbar part={part} />;
+    if (tab === 'markup') return <MarkupToolbar part={part} />;
+    return part === 'list' ? <LayerPanel /> : <AlignmentTools />;
+  };
+
   return (
-    <div className="workspace">
-      {layout === 'expanded' && !reviewOnly ? <CompareTopBar onExport={runExport} exporting={exporting} /> : <CompareCompactHeader />}
+    <div className="workspace compare-workspace" style={expanded ? panelGridStyle : undefined}>
+      {expanded ? <CompareTopBar onExport={runExport} exporting={exporting} /> : <CompareCompactHeader />}
       {layout !== 'expanded' && <div className="compact-workspace-actions">
         <span className="muted">{t('adaptive.browse')}</span>
         <button className="btn-ghost" onClick={() => setPanel(panel === 'items' ? 'plan' : 'items')}>{t('adaptive.view')}</button>
         <button className="btn-ghost" onClick={() => setPanel(panel === 'quantities' ? 'plan' : 'quantities')}>{t('compare.changes.title')}</button>
       </div>}
+      {/* The same frame as the takeoff workspace: layers and lists at the inline start, tools and
+          settings at the inline end, the plan with its dock between them and the changes panel under
+          the plan. Opening or hiding a panel resizes the plan; the canvas transform is untouched. */}
       <div className="workspace-body">
-        {/* The same icon-only rail as the takeoff workspace: canvas interaction only, the tool
-            name carried by the tooltip. */}
-        {!review && <div className="toolbar">
-          <button
-            className={`tool-btn ${toolMode === 'select' ? 'active' : ''}`}
-            onClick={() => setToolMode('select')}
-            aria-label={t('compare.tools.select')}
-            aria-pressed={toolMode === 'select'}
-            title={t('compare.tools.selectHint')}
-          >
-            <Icon name="select" size={20} />
-          </button>
-          <button
-            className={`tool-btn ${toolMode === 'pan' ? 'active' : ''}`}
-            onClick={() => setToolMode('pan')}
-            aria-label={t('compare.tools.pan')}
-            aria-pressed={toolMode === 'pan'}
-            title={t('compare.tools.panHint')}
-          >
-            <Icon name="pan" size={20} />
-          </button>
-
-          <span className="toolbar-sep" />
-
-          {/* Aligning the revised layer is a canvas interaction, so its drag mode belongs on the
-              rail next to the other two; the numeric controls stay in the sidebar. */}
-          <button
-            className={`tool-btn ${toolMode === 'align' ? 'active' : ''}`}
-            onClick={() => setToolMode(toolMode === 'align' ? 'select' : 'align')}
-            aria-label={t('compare.tools.align')}
-            aria-pressed={toolMode === 'align'}
-            title={t('compare.tools.alignHint')}
-          >
-            <Icon name="move" size={20} />
-          </button>
-        </div>}
         <div className="viewer-area">
           <CompareCanvas ref={canvasRef} />
+          {!review && <CompareToolDock onPanelTab={(next) => {
+            setTab(next);
+            usePanelLayout.getState().setOpen('inspector', true);
+          }} />}
           {!review && <CompareCalibrationDialog />}
+          {expanded && <PanelRestoreButtons />}
+          {expanded && <ViewerWidthWatcher />}
         </div>
-        <AdaptiveInspector open={panel === 'items'} onClose={() => setPanel('plan')} title={t('adaptive.view')}>
-          {/* Comparison context (revision, page mapping, scale, alignment) above the tabs, so it is
-              present in every tab rather than buried in the layer panel. */}
-          {!review && <CompareContextBar />}
-          {!review && <div className="sidebar-tabs">
-            <button className={!review && tab === 'layers' ? 'active' : ''} onClick={() => setTab('layers')}>
-              {t('compare.tabs.layers')}
-            </button>
-            <button className={!review && tab === 'measure' ? 'active' : ''} onClick={() => setTab('measure')}>
-              {t('compare.tabs.measure')}
-            </button>
-            <button className={!review && tab === 'markup' ? 'active' : ''} onClick={() => setTab('markup')}>
-              {t('compare.tabs.markup')}
-            </button>
-          </div>}
+        {expanded ? <>
+          {panelOpen.list && <aside className="sidebar object-panel" aria-label={t(`compare.tabs.${tab}`)}>
+            <div className="sidebar-tabs-row">
+              <div className="sidebar-tabs" role="tablist">
+                {tabs.map((next) => (
+                  <button key={next} role="tab" aria-selected={tab === next} className={tab === next ? 'active' : ''} onClick={() => setTab(next)}>
+                    {t(`compare.tabs.${next}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Revision page, scale and alignment of the page on screen, present in every tab — the
+                counterpart of the takeoff page-status strip. */}
+            <CompareContextBar />
+            <div className="sidebar-content">{desktopPanel('list')}</div>
+            <PanelResizer side="list" />
+          </aside>}
+          {panelOpen.inspector && <aside className="sidebar inspector-panel" aria-label={t('workspace.inspector.tools')}>
+            <div className="panel-head">
+              <strong>{tab === 'layers' ? t('compare.alignment.title') : t('workspace.inspector.tools')}</strong>
+            </div>
+            <div className="sidebar-content">{desktopPanel('detail')}</div>
+            <PanelResizer side="inspector" />
+          </aside>}
+        </> : <AdaptiveInspector open={panel === 'items'} onClose={() => setPanel('plan')} title={t('adaptive.view')}>
           <div className="sidebar-content">
-            {review && <><p className="muted">{t('adaptive.reviewOnly')}</p><ViewModeSwitch /></>}
-            {!review && tab === 'layers' && (
-              <>
-                <LayerPanel />
-                <AlignmentTools />
-              </>
-            )}
-            {!review && tab === 'measure' && <MeasureToolbar />}
-            {!review && tab === 'markup' && <MarkupToolbar />}
+            <p className="muted">{t('adaptive.reviewOnly')}</p>
+            <ViewModeSwitch />
           </div>
-        </AdaptiveInspector>
+        </AdaptiveInspector>}
       </div>
-      {/* Demolition / new construction review, across the full workspace width under the canvas. */}
+      {/* Demolition / new construction review under the plan, in the same bottom panel as the quantities. */}
       <ChangesPanel mobileOpen={panel === 'quantities'} onMobileClose={() => setPanel('plan')} />
       {layout === 'narrow' && <nav className="mobile-destinations">
         {(['plan', 'items', 'quantities'] as const).map((next) => <button key={next} aria-current={panel === next ? 'page' : undefined} onClick={() => setPanel(next)}>{t(`adaptive.${next}`)}</button>)}

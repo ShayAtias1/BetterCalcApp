@@ -82,6 +82,13 @@ export const en: Dictionary = {
     place: "Place opening endpoints on plan",
   },
   openingTools: {
+    onSheet: "Openings on this sheet",
+    count_approved: "{count} approved",
+    count_draft: "{count} draft",
+    count_rejected: "{count} rejected",
+    selected: "Selected opening",
+    dimensions: "Dimensions",
+    quantityEffect: "Effect on quantities",
     approveAndAdd: "Approve and add opening",
     confirmWalkable: "Opening allows walkable access",
 
@@ -164,6 +171,7 @@ export const en: Dictionary = {
     "maxRooms": "Select at most two rooms."
 },
   bulkTakeoff: {
+    openShort: 'Assign work',
     title: "Bulk Takeoff",
     open: "Assign work items in bulk",
     scope: "Current Plan: {name}",
@@ -263,7 +271,7 @@ export const en: Dictionary = {
     plan: 'Plan', items: 'Items', quantities: 'Quantities', domain: 'Domain',
     sheet: 'Sheet', sheets: 'Sheets', view: 'View', more: 'More',
     browse: 'Browse', reviewOnly: 'Review quantities · add measurements and field notes on Plan',
-    mesh: 'Mesh', bars: 'Bars', stirrups: 'Stirrups', allRebar: 'All reinforcement',
+    mesh: 'Mesh', bars: 'Bars', stirrups: 'Stirrups', allRebar: 'All',
     revision: 'Revision',
   },
 
@@ -417,6 +425,45 @@ export const en: Dictionary = {
       concrete: 'Concrete',
       rebar: 'Rebar',
     },
+    /** Side-panel object tab, per domain. */
+    objects: {
+      room: 'Rooms',
+      concrete: 'Concrete zones',
+      rebar: 'Rebar items',
+      openings: 'Openings',
+    },
+    /** Short labels on the canvas tool dock. */
+    dock: {
+      measure: 'Measure',
+      markup: 'Markup',
+      opening: 'Opening',
+    },
+    /** The inspector at the inline end: details of what is selected. */
+    inspector: {
+      label: 'Edit',
+      close: 'Close editing',
+      tools: 'Tools and settings',
+      empty: {
+        room: 'Select a room in the list or on the plan to edit it.',
+        openings: 'Select an opening in the list or on the plan to edit it.',
+        concrete: 'Select a concrete zone in the list or on the plan to edit it.',
+        rebar: 'Select a rebar item in the list or on the plan to edit it.',
+        measure: 'Choose a measure tool in the dock. Its options appear above it, and measurements are edited in the list.',
+        markup: 'Select a markup in the list or on the plan to edit it. Markup tool options appear above the dock.',
+      },
+    },
+    /** Desktop side panels: resize, collapse and restore. */
+    panels: {
+      collapseList: 'Collapse the list panel',
+      restoreList: 'Show the list panel',
+      collapseInspector: 'Collapse the edit panel',
+      restoreInspector: 'Show the edit panel',
+      resizeList: 'Resize the list panel (drag or arrow keys)',
+      resizeInspector: 'Resize the edit panel (drag or arrow keys)',
+    },
+    moreOptions: 'More options in the panel…',
+    domains: 'Quantity domain',
+    tools: 'Drawing tools',
   },
 
   pageStatus: {
@@ -471,6 +518,7 @@ export const en: Dictionary = {
       pickPairs: 'Pick 2 pairs of points',
       pickRevised: 'Click the same point on the revised plan',
       pickOriginal: 'Click a reference point on the original plan - a building corner, a column, etc.',
+      resetShort: 'Reset',
       reset: 'Reset alignment on this sheet',
       resetHint: 'Returns the revision to its original position on this sheet',
     },
@@ -506,6 +554,7 @@ export const en: Dictionary = {
       apartmentNumber: 'Apartment number',
       revisionContext: 'The revision being compared - every new markup, measurement, calibration and alignment is saved to it',
       original: 'Original',
+      revisionShort: 'Revision',
       revision: 'Revision compared',
       noRevision: 'No revision',
       viewHint: 'What is drawn over the plan (and exported to PDF)',
@@ -545,6 +594,8 @@ export const en: Dictionary = {
       scope: 'Sheet {page} · {revision}',
     },
     layers: {
+      tint: 'Layer colour',
+      opacityShort: 'Opacity',
       hide: 'Hide layer',
       show: 'Show layer',
       opacity: 'Layer opacity',
@@ -564,6 +615,7 @@ export const en: Dictionary = {
     changes: {
       open: 'Open the Changes panel',
       title: 'Changes',
+      openShort: 'Open',
       collapsedMeta: '{count} change {count|mark|marks} · original',
       source: 'Original',
       marks: '{count} {count|mark|marks}',
@@ -655,6 +707,7 @@ export const en: Dictionary = {
   },
 
   quantitiesPanel: {
+    planHidden: 'The plan is hidden while the table is maximized · Sheet {page}',
     domains: 'Quantity domains',
     cols: {
       page: 'Sheet',
@@ -740,6 +793,10 @@ export const en: Dictionary = {
     tools: 'Markup tools',
     sizeSelectedHint: 'Changes the size of the selected note',
     sizeDefaultHint: 'Default size for new text notes and dimensions',
+    textSizeLabel: 'Text size',
+    smaller: 'Smaller text',
+    larger: 'Larger text',
+    editTextHint: 'To edit the text, double-click the note on the plan with the Select tool.',
     textSize: 'Text size {percent}%',
     resetSize: 'Back to the default size',
     unrotate: 'Make the note horizontal again',
@@ -817,6 +874,8 @@ export const en: Dictionary = {
     notCalibrated: 'This sheet is not calibrated. Calibrate it before measurements can be calculated.',
     resetView: 'Reset View',
     resetViewHint: 'Reset the view to the original zoom',
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
   },
 
   aiReviewWindow: { extend: 'Extend view', reduce: 'Reduce view', close: 'Close window' },
@@ -834,6 +893,8 @@ export const en: Dictionary = {
     blocked: 'Complete the opening position and type and correct invalid details before approval.',
   },
   aiReviewWorkspace: {
+    geometry: 'Geometry',
+    selectedOf: '{index} of {count} pending',
     previousShort: 'Previous',
     nextShort: 'Next',
     title: 'AI Space review',
@@ -860,6 +921,23 @@ export const en: Dictionary = {
     reviewedWarnings: 'Reviewed warning details',
     pendingState: 'Pending',
     noWarnings: 'No active AI uncertainty warnings.',
+  },
+
+  /** The AI menu in the header and the desktop review workspace it opens. */
+  aiMenu: {
+    button: 'AI',
+    pendingLabel: '{count} AI suggestions pending',
+    reviewSaved: 'Review saved results',
+    reviewNote: 'Nothing is sent and nothing is charged · continues where you stopped',
+    open: 'Open',
+    pending: '{count} pending',
+    noResults: 'No saved results on this sheet',
+    runNew: 'Run new detection',
+    runNote: 'Paid · sent to OpenAI · development build · every action asks for confirmation before sending',
+    savedResults: 'Saved results',
+    finish: 'Finish review',
+    reviewing: '{title} · Sheet {page}',
+    switchTo: '{title} ({count} pending)',
   },
 
   aiTools: {
@@ -1056,6 +1134,7 @@ export const en: Dictionary = {
     item: 'Item',
     net: 'Net quantity',
     order: 'To order (incl. waste)',
+    openingsIncompleteStatus: 'Opening data incomplete',
     uncalibratedRooms: '{count} {count|room|rooms} on uncalibrated sheets {count|is|are} not included in the summary.',
     addPlan: {
       notPdf: 'Please choose a PDF, PNG, JPG or JPEG file',
@@ -1123,6 +1202,7 @@ export const en: Dictionary = {
     delete: 'Delete area',
     deleteConfirm: 'Delete "{name}"?',
     bulkDelete: {
+      deleteShort: 'Delete',
       selectAll: 'Select all',
       delete: 'Delete selected',
       selected: '{count} spaces selected',
@@ -1136,15 +1216,16 @@ export const en: Dictionary = {
     drawRect: 'Draw room as rectangle',
     autoDetectHint: 'Detect rooms automatically - suggests areas for you to accept',
     autoDetect: 'Auto-Detect',
-    newRoomTemplate: 'New room template',
+    newRoomTemplate: 'Work template for new rooms',
     newRoomTemplateHint: "Rooms you draw take the template's room type and work types",
     noTemplate: 'No template',
-    workingIn: 'Working in apartment',
+    workingIn: 'Active apartment',
     workingInHint: 'New rooms are assigned to this apartment',
     newApartment: '+ New apartment…',
     markedAreas: 'Marked areas ({count})',
     listTitle: 'Rooms',
     bulkAssignment: {
+      assignShort: 'Assign',
       open: 'Assign to apartment',
       selected: '{count} rooms/areas selected',
       selectAll: 'Select all rooms/areas',
@@ -1160,6 +1241,13 @@ export const en: Dictionary = {
     reviewFlag: 'Detected automatically - worth checking',
     page: 'Sheet {page}',
     detail: {
+      kicker: 'Selected room · Sheet {page}',
+      addWorkType: '+ Add work type (cladding, plaster…)',
+      applyTemplateShort: 'Apply work types',
+      tilingShort: {
+        regular: 'Regular',
+        as: 'AS',
+      },
       typeKept: 'Template updated. Existing work types were not changed.',
       notCalibrated: "The room's quantities cannot be calculated until the scale is calibrated on this sheet.",
       area: 'Area',
@@ -1247,7 +1335,7 @@ export const en: Dictionary = {
     missingThickness: 'Enter the thickness to calculate the volume.',
     missingHeight: 'Enter the height to calculate the volume.',
     copy: {
-      open: 'Use existing area',
+      open: 'Existing area',
       close: 'Close',
       source: 'Existing room or apartment',
       choose: 'Choose a room or apartment',
@@ -1303,7 +1391,7 @@ export const en: Dictionary = {
       excelSheet: 'Stirrups',
       lengthSource: 'Length source',
 
-      addItem: 'Add stirrup / tie',
+      addItem: 'Stirrup / tie',
       duplicateItem: 'Duplicate stirrup',
       duplicatePlacement: 'Duplicate placement',
       pieces: '{count} stirrups',
@@ -1423,6 +1511,7 @@ export const en: Dictionary = {
     purchaseWeightHeader: 'Purchase ({unit})',
     purchaseWeight: 'Purchase weight',
     layout: {
+      done: 'Done editing',
       add: 'Add sheet',
       remove: 'Remove sheet',
       manual: 'Manual layout',

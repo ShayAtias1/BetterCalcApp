@@ -11,16 +11,18 @@ import NumberField from './NumberField';
 import Icon from './Icon';
 import { OPEN_OPENINGS_REVIEW } from './AiReviewWindow';
 import OpeningRoomSelector from './OpeningRoomSelector';
+import { useOpeningPreset } from './openingPresetStore';
 import type { OpeningRoomSide } from '../types/openings';
+import { InspectorEmpty, type PanelPart } from './PanelPart';
 import './Openings.css';
-type TextKey = Exclude<keyof typeof import('../i18n/he').he.openingTools, 'additionalRooms'>;
+type TextKey = Exclude<keyof typeof import('../i18n/he').he.openingTools, 'additionalRooms' | `count_${string}`>;
 
-export default function OpeningsPanel({ readOnly = false, editorOnly = false, hideAiEditor = false }: { readOnly?: boolean; editorOnly?: boolean; hideAiEditor?: boolean }) {
+export default function OpeningsPanel({ readOnly = false, editorOnly = false, hideAiEditor = false, part }: { readOnly?: boolean; editorOnly?: boolean; hideAiEditor?: boolean; part?: PanelPart }) {
   const t = useT();
   const text = (key: TextKey) => t(`openingTools.${key}`);
   const state = useAppStore();
   const aiScope = useOpeningsAiUi();
-  const [preset, setPreset] = useState<OpeningPreset>('hinged');
+  const { preset, setPreset } = useOpeningPreset();
   const [error, setError] = useState('');
   const selectedIds = state.selectedOpeningIds;
   const setSelectedIds = (ids: string[]) => state.setPlanSelection([], ids);
@@ -95,8 +97,12 @@ export default function OpeningsPanel({ readOnly = false, editorOnly = false, hi
     const status = openingQuantityFeedback(plan, item, quantityReport);
     return t(`openingQuantities.${status.affects ? status.reasons.includes('capped') ? 'capped' : 'affectsQuantities' : status.legacy ? 'legacyPrecedence' : 'noDeduction'}`);
   };
+  // Desktop split: the list half keeps creation and the list, the detail half keeps the editor.
+  const showList = !editorOnly && part !== 'detail';
+  const showEditor = part !== 'list';
+  if (part === 'detail' && !o) return <InspectorEmpty text={t('workspace.inspector.empty.openings')} />;
   return <section className="openings-panel" aria-label={text('title')}>
-    {!editorOnly && !readOnly && <div className="opening-creation-methods">
+    {showList && !readOnly && <div className="opening-creation-methods">
       <div className="opening-actions">
           <select aria-label={text('type')} value={preset} onChange={e => setPreset(e.target.value as OpeningPreset)}>
             {openingPresets.map(p => <option key={p} value={p}>{text(p)}</option>)}
@@ -105,75 +111,86 @@ export default function OpeningsPanel({ readOnly = false, editorOnly = false, hi
       </div>
       <button className="btn-secondary" onClick={() => {try {state.beginQuantityOpening(preset);setError('');} catch {setError(text('invalid'));}}}>{text('takeoffMethod')}</button>
     </div>}
-    {state.openingPlacement && <div role="status" className="opening-placement-note opening-cancel-bar">
+ {part !== 'detail' && state.openingPlacement && <div role="status" className="opening-placement-note opening-cancel-bar">
       <span>{text(state.openingPlacement.start ? 'second' : 'first')}</span>
       <button className="btn-secondary" onClick={state.cancelOpeningPlacement}>{text('cancel')} · Esc</button>
     </div>}
-    {!editorOnly && <>
+    {showList && <>
     {!openings.length && <p className="opening-help">{text('empty')}</p>}
-    {openings.length > 0 && <h3 className="opening-list-heading section-label">{text('listHeading')}</h3>}
-    {!readOnly && selection.length > 0 && <div className="room-apartment-assignment">
-      <div className="room-assignment-actions">
-        <label className="room-assignment-select-all"><input type="checkbox" checked={selection.length === openings.length}
-          ref={input => { if (input) input.indeterminate = selection.length > 0 && selection.length < openings.length; }}
-          onChange={event => setSelectedIds(event.target.checked ? openings.map(o => o.id) : [])} />{t('openingListSelection.selectAll')}</label>
-        <button className="btn-secondary small danger" onClick={async () => {
-          if (!await confirmDialog(t('openingListSelection.confirm', { count: selection.length }), { destructive: true })) return;
-          const latest = useAppStore.getState();
-          if (latest.project !== plan || latest.currentPage !== state.currentPage) return;
-          latest.removePlanOpenings(selection); setSelectedIds([]);
-        }}>{t('openingListSelection.delete')}</button>
-      </div>
-      <span className="muted" role="status">{t('openingListSelection.selected', { count: selection.length })}</span>
+    {/* Approved design (boards 04 / 21): a sheet summary, the compact dark selection bar, and
+        40px rows — checkbox, mark (the opening's label), type and location, status pill; the row
+        actions replace the pill on hover. */}
+    {openings.length > 0 && <div className="opening-list-heading">
+      <h3 className="section-label">{text('onSheet')}</h3>
+      <span className="opening-sheet-counts">
+        {(['approved', 'draft', 'rejected'] as const).map(status => {
+          const count = openings.filter(item => item.approval.status === status).length;
+          return count ? <span key={status} className={`opening-sheet-count ${status}`}>{t(`openingTools.count_${status}`, { count })}</span> : null;
+        })}
+      </span>
     </div>}
-    <div className="opening-list" aria-label={text('allPage')}>
-      {openings.map(item => <div key={item.id} className={`opening-list-row ${o?.id === item.id ? 'selected' : ''}`}>
+    {!readOnly && selection.length > 0 && <div className="selection-bar selection-bar-dark" role="toolbar" aria-label={t('openingListSelection.selected', { count: selection.length })}>
+      <label className="room-assignment-select-all"><input type="checkbox" checked={selection.length === openings.length}
+        ref={input => { if (input) input.indeterminate = selection.length > 0 && selection.length < openings.length; }}
+        onChange={event => setSelectedIds(event.target.checked ? openings.map(o => o.id) : [])} />{t('openingListSelection.selectAll')}</label>
+      <span className="selection-bar-count" role="status">{t('openingListSelection.selected', { count: selection.length })}</span>
+      <button type="button" className="selection-bar-delete" onClick={async () => {
+        if (!await confirmDialog(t('openingListSelection.confirm', { count: selection.length }), { destructive: true })) return;
+        const latest = useAppStore.getState();
+        if (latest.project !== plan || latest.currentPage !== state.currentPage) return;
+        latest.removePlanOpenings(selection); setSelectedIds([]);
+      }}>{t('openingListSelection.delete')}</button>
+    </div>}
+    <div className={`opening-list ${selection.length ? 'has-selection' : ''}`} aria-label={text('allPage')}>
+      {openings.map(item => {
+        const name = item.label || text(typeKey(item));
+        const checked = selectedIds.includes(item.id);
+        return <div key={item.id} className={`opening-list-row ${o?.id === item.id ? 'selected' : ''} ${checked ? 'checked' : ''}`}>
+        {!readOnly && <input type="checkbox" className="room-assignment-checkbox" aria-label={t('openingListSelection.select', { name })}
+          checked={checked} onChange={() => toggleSelection(item.id)} />}
         <button type="button" className="btn-ghost opening-list-item" onClick={() => editOpening(item)}>
-          <span className="opening-list-label"><span>{item.label || text(typeKey(item))}</span><small>{openingLocation(item)}{item.aiDetection?` · AI · ${text(item.approval.status)}`:''}</small></span>
+          {item.label && <span className="opening-list-mark" dir="ltr">{item.label}</span>}
+          <span className="opening-list-label"><span>{text(typeKey(item))}</span><small>{openingLocation(item)}{item.aiDetection?' · AI':''}</small></span>
+          <span className={`opening-status-pill ${item.approval.status}`}>{text(item.approval.status)}</span>
         </button>
         {!readOnly && <div className="opening-list-row-actions">
-          <button type="button" className="icon-btn" title={t('openingListSelection.edit')} aria-label={`${t('openingListSelection.edit')} · ${item.label || text(typeKey(item))}`} onClick={() => editOpening(item)}><Icon name="edit" /></button>
-          <button type="button" className="icon-btn" title={text('duplicate')} aria-label={`${text('duplicate')} · ${item.label || text(typeKey(item))}`} onClick={event=>{
+          <button type="button" className="icon-btn" title={text('duplicate')} aria-label={`${text('duplicate')} · ${name}`} onClick={event=>{
             event.stopPropagation();
             try {state.duplicatePlanOpening(item.id);setError('');} catch {setError(text('invalid'));}
           }}><Icon name="copy" /></button>
-          <button type="button" className="icon-btn danger" title={text('delete')} aria-label={`${text('delete')} · ${item.label || text(typeKey(item))}`} onClick={async event=>{
+          <button type="button" className="icon-btn danger" title={text('delete')} aria-label={`${text('delete')} · ${name}`} onClick={async event=>{
             event.stopPropagation();
             if(await confirmDialog(text('deleteConfirm'),{destructive:true})){
               const latest=useAppStore.getState();
               if(latest.project?.id===plan.id) latest.removePlanOpening(item.id);
             }
           }}><Icon name="trash" /></button>
-          <input type="checkbox" className="room-assignment-checkbox" aria-label={t('openingListSelection.select', { name: item.label || text(typeKey(item)) })}
-            checked={selectedIds.includes(item.id)} onChange={() => toggleSelection(item.id)} />
         </div>}
-      </div>)}
+      </div>;
+      })}
     </div>
     </>}
-    {!editorOnly && o && <div className="opening-editor-header">
-      <button type="button" className="icon-btn" aria-label={text('backToOpenings')} title={text('backToOpenings')} onClick={()=>{
-        state.cancelOpeningPlacement();
-        state.selectPlanOpening(null);
-        setError('');
-      }}>×</button>
-    </div>}
-    {o && <fieldset key={o.id} disabled={readOnly} className="opening-editor">
+    {/* Approved design: a compact inspector — header, identity, dimensions, rooms, the effect on
+        quantities, then the decision pinned at the bottom. Every control and rule is unchanged. */}
+    {showEditor && o && <fieldset key={o.id} disabled={readOnly} className="opening-editor opening-editor-compact">
+      {!editorOnly && <div className="detail-header opening-detail-header">
+        <span className="detail-kicker">{o.geometry ? text('selected') : text('takeoffMethod')}</span>
+        <span className={`opening-status-pill ${o.approval.status}`}>{text(o.approval.status)}</span>
+        <span className="opening-detail-actions">
+          {!readOnly && <><button type="button" className="icon-btn" title={text('duplicate')} aria-label={text('duplicate')} onClick={()=>state.duplicatePlanOpening(o.id)}><Icon name="copy" /></button>
+          <button type="button" className="icon-btn danger" title={text('delete')} aria-label={text('delete')} onClick={async()=>{if(await confirmDialog(text('deleteConfirm'),{destructive:true})) state.removePlanOpening(o.id);}}><Icon name="trash" /></button></>}
+          <button type="button" className="icon-btn" aria-label={text('backToOpenings')} title={text('backToOpenings')} onClick={()=>{
+            state.cancelOpeningPlacement();
+            state.selectPlanOpening(null);
+            setError('');
+          }}><Icon name="close" /></button>
+        </span>
+      </div>}
       {o.aiDetection && <div className="opening-placement-note"><strong>{o.approval.status==='draft'?t('openingAi.draft'):text(o.approval.status)}</strong>
         {!o.geometry && <><button type="button" className="btn-secondary" onClick={()=>state.beginOpeningEndpointEdit(o.id)}>{t('openingAi.place')}</button></>}
       </div>}
-      {feedback && <div className="opening-quantity-feedback" aria-label={t('openingQuantities.eligibility')}>
-        <strong role="status">{quantityStatus(o)}</strong>
-        <p>{t('openingQuantities.counted')}: {feedback.counted ?? '—'}</p>
-        {feedback.missing.length > 0 && <p>{t('openingQuantities.missing')}: {feedback.missing.map(key => t(`openingQuantities.${key}`)).join(' / ')}</p>}
-        {feedback.reasons.length > 0 && <ul>{feedback.reasons.map(reason => <li key={reason}>{t(`openingQuantities.${reason}`)}</li>)}</ul>}
-        {feedback.work.length === 0 && o.roomIds.length > 0 && <p>{t('openingQuantities.noWorkItems')}</p>}
-        {feedback.work.length > 0 && <ul>{feedback.work.map(item => <li key={`${item.roomId}-${item.itemId}`}>
-          <strong>{plan.rooms.find(room => room.id === item.roomId)?.name} · {t(`workTypes.${item.type}`)}</strong>: {' '}
-          {item.openingAudit.reason ? t(`openingQuantities.${item.openingAudit.reason}`) : item.capped ? t('openingQuantities.capped') :
-            `${t('openingQuantities.deducted')}: ${Number((item.unit === 'lm' ? item.openingAudit.lengthM : item.openingAudit.areaM2).toFixed(2))} ${t(`units.${item.unit}`)}`}
-        </li>)}</ul>}
-      </div>}
-      <div className="form-grid">
+      <div className="opening-fields">
+        <label className="form-row">{text('label')}<input value={o.label ?? ''} onChange={e => patch({ label: e.target.value })} /></label>
         <label className="form-row">{text('type')}<select value={typeKey(o)} onChange={e => patch(e.target.value === 'custom' ? {kind:'custom',mechanism:'unknown',walkableAccess:'unknown'} : openingClassification(e.target.value as OpeningPreset))}>
           {openingPresets.map(p => <option key={p} value={p}>{text(p)}</option>)}
           {typeKey(o) === 'unclassifiedDoor' && <option value="unclassifiedDoor">{text('unclassifiedDoor')}</option>}
@@ -185,33 +202,28 @@ export default function OpeningsPanel({ readOnly = false, editorOnly = false, hi
         <label className="form-row">{text('access')}<select value={o.walkableAccess} onChange={e => patch({ walkableAccess: e.target.value as PlanOpening['walkableAccess'] })}>
           {(['supported','unsupported','unknown'] as const).map(v => <option key={v} value={v}>{text(v === 'unknown' ? 'unknownAccess' : v)}</option>)}
         </select></label>
-        <label className="form-row">{text('label')}<input value={o.label ?? ''} onChange={e => patch({ label: e.target.value })} /></label>
+      </div>
+      <section className="opening-section">
+        <h4>{text('dimensions')}</h4>
+        <div className="opening-dims">
         {(['widthM','heightM','sillHeightM'] as const).map((key, index) => <label className="form-row" key={key}>{text((['width','height','sill'] as const)[index])}
-          <NumberField value={o[key] ?? undefined} onChange={value => {
+          <NumberField precision={2} value={o[key] ?? undefined} onChange={value => {
             if (value !== undefined && (key === 'sillHeightM' ? value < 0 : value <= 0)) { setError(text('invalid')); return; }
             patch({ [key]: value ?? null, ...(key === 'widthM' ? { widthSource: 'manual' as const } : {}) });
           }} />
         </label>)}
-      </div>
-      {o.geometry && <>
+        </div>
+        {o.geometry && <>
       <button className="btn-secondary small" disabled={measuredOpeningWidth(plan,o.pageNumber,o.geometry) === null} onClick={() => patch({ widthM: measuredOpeningWidth(plan,o.pageNumber,o.geometry), widthSource: 'calibration' })}>{text('measured')}</button>
       {measuredOpeningWidth(plan,o.pageNumber,o.geometry) === null && <p className="opening-help">{text('noCalibration')}</p>}</>}
-      <label className="form-row">{t('openingQuantities.quantity')}<NumberField step="1" value={o.quantity ?? undefined} onChange={value=>{
+        <div className="opening-fields">
+        <label className="form-row">{t('openingQuantities.quantity')}<NumberField step="1" value={o.quantity ?? undefined} onChange={value=>{
         if(value!==undefined&&(!Number.isInteger(value)||value<=0)){setError(text('invalid'));return;}
         patch({quantity:value??null});
       }}/></label>
-      <label className="form-row">{text('notes')}<textarea rows={2} value={o.notes ?? ''} onChange={e => patch({ notes: e.target.value })} /></label>
-      {o.geometry && <><button className="btn-secondary small opening-reposition" onClick={() => state.beginOpeningEndpointEdit(o.id)}>{text('reposition')}</button>
-      <details className="opening-advanced"><summary>{text('advanced')}</summary>
-        {o.geometry && <div className="form-grid opening-coordinate-grid" dir="ltr">{(['endpointA','endpointB'] as const).flatMap((endpoint,i) => (['x','y'] as const).map(axis => <label className="form-row" key={endpoint+axis}>{i === 0 ? 'A' : 'B'} {axis}
-          <input type="number" step="any" value={o.geometry![endpoint][axis]} onChange={e => {
-            if (!e.target.value.trim()) return;
-            const value=Number(e.target.value); if (!Number.isFinite(value)) return;
-            patch({ geometry: { ...o.geometry!, [endpoint]: { ...o.geometry![endpoint], [axis]: value } } });
-          }} />
-        </label>))}</div>}
-      </details>
-</>}
+        </div>
+      </section>
+      <section className="opening-section">
       <div className="opening-associations"><strong>{text('rooms')}</strong>
         <div className="opening-side-grid">
           {sides.map((side, index) => <OpeningRoomSelector key={`${o.id}-${index}`} label={text(index === 0 ? 'sideA' : 'sideB')}
@@ -221,6 +233,26 @@ export default function OpeningsPanel({ readOnly = false, editorOnly = false, hi
         {o.roomIds.length > 2 && <p className="opening-help">{t('openingTools.additionalRooms', { names: o.roomIds.slice(2).map(id => rooms.find(room => room.id === id)?.name || id).join(', ') })}</p>}
       </div>
       <label className="opening-review-check"><input type="checkbox" disabled={o.roomIds.length===0} checked={o.quantityReview?.associationsConfirmed??false} onChange={e=>patch({quantityReview:{associationsConfirmed:e.target.checked,distinctLegacyRoomIds:o.quantityReview?.distinctLegacyRoomIds??[]}})}/>{t('openingQuantities.confirmRooms')}</label>
+      {suggested.length > 0 && JSON.stringify([...suggested].sort()) !== JSON.stringify([...o.roomIds].sort()) && <div className="opening-placement-note">
+        {text('suggestion')}: {suggested.map(id=>rooms.find(r=>r.id===id)?.name).join(' / ')}
+        <button className="btn-secondary small" onClick={() => void associateSides([suggested[0] ? { roomId: suggested[0] } : null, suggested[1] ? { roomId: suggested[1] } : null])}>{text('acceptSuggestion')}</button>
+      </div>}
+      </section>
+      {feedback && <section className="opening-section opening-quantity-feedback" aria-label={t('openingQuantities.eligibility')}>
+        <h4>{text('quantityEffect')}</h4>
+        <strong role="status">{quantityStatus(o)}</strong>
+        <p>{t('openingQuantities.counted')}: {feedback.counted ?? '—'}</p>
+        {feedback.missing.length > 0 && <p>{t('openingQuantities.missing')}: {feedback.missing.map(key => t(`openingQuantities.${key}`)).join(' / ')}</p>}
+        {feedback.reasons.length > 0 && <ul>{feedback.reasons.map(reason => <li key={reason}>{t(`openingQuantities.${reason}`)}</li>)}</ul>}
+        {feedback.work.length === 0 && o.roomIds.length > 0 && <p>{t('openingQuantities.noWorkItems')}</p>}
+        {feedback.work.length > 0 && <ul>{feedback.work.map(item => <li key={`${item.roomId}-${item.itemId}`}>
+          <strong>{plan.rooms.find(room => room.id === item.roomId)?.name} · {t(`workTypes.${item.type}`)}</strong>: {' '}
+          {item.openingAudit.reason ? t(`openingQuantities.${item.openingAudit.reason}`) : item.capped ? t('openingQuantities.capped') :
+            `${t('openingQuantities.deducted')}: ${Number((item.unit === 'lm' ? item.openingAudit.lengthM : item.openingAudit.areaM2).toFixed(2))} ${t(`units.${item.unit}`)}`}
+        </li>)}</ul>}
+      </section>}
+      <details className="opening-advanced"><summary>{text('advanced')}</summary>
+        <label className="form-row">{text('notes')}<textarea rows={2} value={o.notes ?? ''} onChange={e => patch({ notes: e.target.value })} /></label>
       {rooms.filter(room=>o.roomIds.includes(room.id)&&(room.openings?.length??0)>0).map(room=><div key={room.id} className="opening-associations">
         <strong>{room.name} - {t('openingQuantities.legacyLinks')}</strong>
         {(room.openings??[]).map(row=>{
@@ -230,12 +262,17 @@ export default function OpeningsPanel({ readOnly = false, editorOnly = false, hi
         })}
         <label><input type="checkbox" checked={o.quantityReview?.distinctLegacyRoomIds.includes(room.id)??false} onChange={e=>patch({quantityReview:{associationsConfirmed:o.quantityReview?.associationsConfirmed??false,distinctLegacyRoomIds:e.target.checked?[...(o.quantityReview?.distinctLegacyRoomIds??[]),room.id]:(o.quantityReview?.distinctLegacyRoomIds??[]).filter(id=>id!==room.id)}})}/>{t('openingQuantities.distinctLegacy')}</label>
       </div>)}
-      {suggested.length > 0 && JSON.stringify([...suggested].sort()) !== JSON.stringify([...o.roomIds].sort()) && <div className="opening-placement-note">
-        {text('suggestion')}: {suggested.map(id=>rooms.find(r=>r.id===id)?.name).join(' / ')}
-        <button className="btn-secondary small" onClick={() => void associateSides([suggested[0] ? { roomId: suggested[0] } : null, suggested[1] ? { roomId: suggested[1] } : null])}>{text('acceptSuggestion')}</button>
-      </div>}
-      {!editorOnly && <div className="opening-actions">
-        {o.approval.status !== 'approved' && <button className="btn-primary small" disabled={!validation?.canApprove} onClick={()=>{
+        {o.geometry && <div className="form-grid opening-coordinate-grid" dir="ltr">{(['endpointA','endpointB'] as const).flatMap((endpoint,i) => (['x','y'] as const).map(axis => <label className="form-row" key={endpoint+axis}>{i === 0 ? 'A' : 'B'} {axis}
+          <input type="number" step="any" value={o.geometry![endpoint][axis]} onChange={e => {
+            if (!e.target.value.trim()) return;
+            const value=Number(e.target.value); if (!Number.isFinite(value)) return;
+            patch({ geometry: { ...o.geometry!, [endpoint]: { ...o.geometry![endpoint], [axis]: value } } });
+          }} />
+        </label>))}</div>}
+      </details>
+      {error && <p role="alert" className="opening-error">{error}</p>}
+      {!editorOnly && <div className="opening-actions opening-editor-footer">
+        {o.approval.status !== 'approved' && <button className="btn-primary" disabled={!validation?.canApprove} onClick={()=>{
           try {
             state.approvePlanOpening(o.id);
             const latest=useAppStore.getState();
@@ -246,11 +283,10 @@ export default function OpeningsPanel({ readOnly = false, editorOnly = false, hi
             }
           } catch {setError(text('invalid'));}
         }}>{text('approve')}</button>}
-        {o.approval.status !== 'draft' && <button className="btn-secondary small" onClick={()=>state.draftPlanOpening(o.id)}>{text('returnDraft')}</button>}
-        <button className="btn-secondary small" onClick={()=>state.duplicatePlanOpening(o.id)}>{text('duplicate')}</button>
-        <button className="btn-ghost small danger" onClick={async()=>{if(await confirmDialog(text('deleteConfirm'),{destructive:true})) state.removePlanOpening(o.id);}}>{text('delete')}</button>
+        {o.approval.status !== 'draft' && <button className="btn-secondary" onClick={()=>state.draftPlanOpening(o.id)}>{text('returnDraft')}</button>}
+        {o.geometry && <button className="btn-secondary opening-reposition" onClick={() => state.beginOpeningEndpointEdit(o.id)}>{text('reposition')}</button>}
       </div>}
     </fieldset>}
-    {error && <p role="alert" className="opening-error">{error}</p>}
+    {error && !(showEditor && o) && <p role="alert" className="opening-error">{error}</p>}
   </section>;
 }

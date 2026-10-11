@@ -55,7 +55,7 @@ export default function QuantityExportActions({ variant, onPicked }: { variant: 
         <Icon name="file" />
         {busy === 'pdf' ? t('common.exporting') : t('quantityExport.pdfButton')}
       </button>
-      <button className="btn-primary small" onClick={openExcel} disabled={!canExcel}>
+      <button className="btn-secondary small" onClick={openExcel} disabled={!canExcel}>
         <Icon name="sheet" />
         {busy === 'excel' ? t('common.exporting') : t('quantityExport.excelButton')}
       </button>

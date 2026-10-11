@@ -36,6 +36,8 @@ export type IconName =
   | 'edit'
   | 'trash'
   | 'plus'
+  | 'minus'
+  | 'fit'
   | 'check'
   | 'alert'
   | 'close'
@@ -61,7 +63,8 @@ export type IconName =
   | 'blink'
   | 'target'
   | 'move'
-  | 'link';
+  | 'link'
+  | 'door';
 
 /** Path data only — every icon shares the same stroke setup below. */
 const PATHS: Record<IconName, string> = {
@@ -71,6 +74,7 @@ const PATHS: Record<IconName, string> = {
   ruler: 'M3.5 14.5l11-11 5 5-11 11zM7 11l2 2M10 8l2 2M13 5l2 2',
   polygon: 'M12 3.5l8 6-3 9.5H7l-3-9.5z',
   rectangle: 'M4 6h16v12H4z',
+  door: 'M3 20h18M7 20V6M7 6a14 14 0 0114 14',
   undo: 'M9 14l-4-4 4-4M5 10h9a5 5 0 010 10h-4',
   redo: 'M15 14l4-4-4-4M19 10h-9a5 5 0 000 10h4',
   // Reading-direction chevrons, drawn for RTL (previous points right, next points left); `.icon-directional`
@@ -99,6 +103,8 @@ const PATHS: Record<IconName, string> = {
   copy: 'M8.5 8.5h11v11h-11zM5.5 15.5h-1v-11h11v1',
   trash: 'M4.5 6.5h15M9.5 6.5V4h5v2.5M6.5 6.5l1 13h9l1-13M10 10v6M14 10v6',
   plus: 'M12 5v14M5 12h14',
+  minus: 'M5 12h14',
+  fit: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
   check: 'M4.5 12.5l5 5 10-11',
   alert: 'M12 3.5L1.8 20.5h20.4zM12 10v4.5M12 17.2v.2',
   close: 'M5.5 5.5l13 13M18.5 5.5l-13 13',

@@ -1,5 +1,5 @@
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../store/appStore';
 import QuantityTable from './QuantityTable';
 import PhoneReview from './PhoneReview';
@@ -8,7 +8,8 @@ import QuantityExportActions from './QuantityExportActions';
 import { ConcreteQuantityTable, RebarQuantityTable } from './StructuralQuantityTables';
 import { concreteOf, rebarOf } from '../lib/structuralPlan';
 import Icon from './Icon';
-import { useT } from '../i18n';
+import { buildReportCategoryTotals, buildRoomSummaries } from '../lib/quantities';
+import { formatNumber, useT } from '../i18n';
 
 /** Never smaller than a header plus a couple of rows, never taller than leaving a strip of plan. */
 const MIN_HEIGHT = 160;
@@ -38,10 +39,16 @@ export default function QuantitiesPanel({ mobileOpen = false, onMobileClose, onM
   const maximized = useAppStore((s) => s.quantitiesMaximized);
   const toggleMaximized = useAppStore((s) => s.toggleQuantitiesMaximized);
   const project = useAppStore((s) => s.project);
+  const currentPage = useAppStore((s) => s.currentPage);
 
   // Which domain the panel shows. Finishes, Concrete and Rebar stay separate tables, never one merged report.
   const [menu, setMenu] = useState<MenuId | null>(null);
   const [domain, setDomain] = useState<'finishes' | 'concrete' | 'rebar'>('finishes');
+  // The table follows the workspace domain chosen in the header; its own tabs still switch it freely.
+  const drawTarget = useAppStore((s) => s.drawTarget);
+  useEffect(() => {
+    setDomain(drawTarget === 'concrete' ? 'concrete' : drawTarget === 'rebar' ? 'rebar' : 'finishes');
+  }, [drawTarget]);
   useEffect(() => { if (!desktop && !mobileOpen) setMenu(null); }, [desktop, mobileOpen]);
   const [resizing, setResizing] = useState(false);
   // Calculation defaults: a secondary toggle in the header, deliberately not competing with export.
@@ -88,6 +95,15 @@ export default function QuantitiesPanel({ mobileOpen = false, onMobileClose, onM
     e.preventDefault();
   };
 
+  // The closed strip still reports the finishes totals that are in use (net quantities), so the plan
+  // keeps the space without hiding the numbers. Same calculation as the table's totals.
+  const closedTotals = useMemo(() => {
+    if (!project || (desktop && open)) return [];
+    return buildReportCategoryTotals(project, buildRoomSummaries(project))
+      .filter((total) => (total.lengthM ?? total.quantityM2) > 0)
+      .map((total) => ({ category: total.category, value: total.lengthM ?? total.quantityM2, unit: total.lengthM !== null ? 'units.m' as const : 'units.m2' as const }));
+  }, [project, desktop, open]);
+
   if (!project) return null;
 
   const roomCount = project.rooms.length;
@@ -97,11 +113,17 @@ export default function QuantitiesPanel({ mobileOpen = false, onMobileClose, onM
   if (desktop ? !open : !mobileOpen) {
     return (
       <div className="qty-panel-collapsed">
-        <button className="btn-ghost small qty-open-btn" onClick={() => desktop ? setOpen(true) : onMobileOpen?.()} title={t('quantitiesPanel.open')}>
-          <Icon name="table" />
-          {t('quantitiesPanel.title')}
+        <strong className="qty-panel-title">{t('quantitiesPanel.title')}</strong>
+        <span className="muted qty-closed-count">{t('quantitiesPanel.rooms', { count: roomCount })}</span>
+        {desktop && closedTotals.length > 0 && <span className="qty-closed-totals">
+          {closedTotals.map((total) => <span key={total.category}>
+            {t(`reportCategories.${total.category}`)} <bdi className="tnum">{formatNumber(total.value)}</bdi> {t(total.unit)}
+          </span>)}
+        </span>}
+        <button className="btn-secondary small qty-open-btn" onClick={() => desktop ? setOpen(true) : onMobileOpen?.()}>
+          <Icon name="chevron-up" size={13} />
+          {t('quantitiesPanel.open')}
         </button>
-        <span className="muted">{t('quantitiesPanel.rooms', { count: roomCount })}</span>
       </div>
     );
   }
@@ -109,7 +131,8 @@ export default function QuantitiesPanel({ mobileOpen = false, onMobileClose, onM
   return (
     <section
       className={`qty-panel ${desktop ? '' : 'adaptive-quantity-sheet'} ${resizing ? 'resizing' : ''} ${maximized ? 'maximized' : ''}`}
-      style={desktop ? { height: effectiveHeight } : undefined}
+      // Maximised on desktop, the grid stretches the panel over both side panels (approved design, board 23).
+      style={desktop && !maximized ? { height: effectiveHeight } : undefined}
       aria-label={t('quantitiesPanel.region')}
     >
       {desktop && <button
@@ -122,48 +145,52 @@ export default function QuantitiesPanel({ mobileOpen = false, onMobileClose, onM
         aria-label={t('quantitiesPanel.resize')}
         title={t('quantitiesPanel.resizeHint')}
       />}
+      {desktop && maximized && <button type="button" className="qty-plan-strip" onClick={toggleMaximized} title={t('quantitiesPanel.restore')}>
+        <Icon name="map" size={13} />
+        {t('quantitiesPanel.planHidden', { page: currentPage })}
+      </button>}
       <header className="qty-panel-head">
-        <Icon name="table" size={18} />
         <h2 className="qty-panel-title">{t('quantitiesPanel.title')}</h2>
         <span className="qty-panel-meta">{t('quantitiesPanel.roomsInProject', { count: roomCount })}</span>
-        <div className="qty-panel-actions">
-          {!reviewOnly && domain === 'finishes' && (
+        {/* Finishes, Concrete and Rebar stay separate tables — a segmented choice, not a merged report. */}
+        <div className="qty-domains segmented-tabs small" role="tablist" aria-label={t('quantitiesPanel.domains')}>
+          {(['finishes', 'concrete', 'rebar'] as const).map((d) => (
+            <button key={d} role="tab" aria-selected={domain === d} className={domain === d ? 'active' : ''} onClick={() => setDomain(d)}>
+              {t(domainLabel[d])}
+              {counts[d] > 0 && <span className="qty-domain-count">{counts[d]}</span>}
+            </button>
+          ))}
+        </div>
+        {!reviewOnly && domain === 'finishes' && (
           <button
-            className={`btn-ghost small ${showDefaults ? 'active' : ''}`}
+            className={`btn-secondary small ${showDefaults ? 'active' : ''}`}
             onClick={() => setShowDefaults((v) => !v)}
             title={t('quantitiesPanel.defaultsHint')}
           >
             <Icon name="settings" />
             <span className="btn-label">{t('quantitiesPanel.defaults')}</span>
           </button>
-          )}
-          <span className="top-bar-sep" />
+        )}
+        <div className="qty-panel-actions">
           {reviewOnly ? <TopBarMenu id="export" openId={menu} setOpenId={setMenu} icon="file" label={t('common.export')} variant="ghost">
             <QuantityExportActions variant="menu" onPicked={() => setMenu(null)} />
           </TopBarMenu> : <QuantityExportActions variant="buttons" />}
           {desktop && <button
-            className="icon-btn"
+            className="icon-btn bordered"
             onClick={toggleMaximized}
             title={maximized ? t('quantitiesPanel.restore') : t('quantitiesPanel.maximize')}
+            aria-label={maximized ? t('quantitiesPanel.restore') : t('quantitiesPanel.maximize')}
           >
             <Icon name={maximized ? 'collapse' : 'expand'} />
           </button>}
-          <button className="icon-btn" onClick={() => desktop ? setOpen(false) : onMobileClose?.()} title={t('quantitiesPanel.close')}>
-            <Icon name="close" />
+          <button className="icon-btn bordered" onClick={() => desktop ? setOpen(false) : onMobileClose?.()} title={t('quantitiesPanel.close')} aria-label={t('quantitiesPanel.close')}>
+            <Icon name="chevron-down" />
           </button>
         </div>
       </header>
-      <div className="qty-domains" role="tablist" aria-label={t('quantitiesPanel.domains')}>
-        {(['finishes', 'concrete', 'rebar'] as const).map((d) => (
-          <button key={d} role="tab" aria-selected={domain === d} className={`btn-ghost small ${domain === d ? 'active' : ''}`} onClick={() => setDomain(d)}>
-            {t(domainLabel[d])}
-            {counts[d] > 0 && <span className="qty-domain-count">{counts[d]}</span>}
-          </button>
-        ))}
-      </div>
       <div className="qty-panel-body">
         {reviewOnly && <PhoneReview quantities domain={domain === 'finishes' ? 'room' : domain} onShowPlan={() => onMobileClose?.()} />}
-        {!reviewOnly && domain === 'finishes' && <QuantityTable showDefaults={!reviewOnly && showDefaults} />}
+        {!reviewOnly && domain === 'finishes' && <QuantityTable showDefaults={!reviewOnly && showDefaults} onCloseDefaults={() => setShowDefaults(false)} compact={desktop && !maximized} />}
         {!reviewOnly && domain === 'concrete' &&
           (counts.concrete === 0 ? <p className="muted qty-domain-empty">{t('quantitiesPanel.emptyConcrete')}</p> : <ConcreteQuantityTable plan={project} />)}
         {!reviewOnly && domain === 'rebar' &&

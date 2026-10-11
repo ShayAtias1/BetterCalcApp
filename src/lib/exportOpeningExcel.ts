@@ -16,7 +16,7 @@ export function addOpeningQuantitySheets(workbook:ExcelJS.Workbook,plans:Plan[],
    const row=sheet.addRow(values);
    // Keep dimensions and counts genuinely numeric in Excel, including blank unknown values.
    if(index===0){row.getCell(2).value=reports[i]?.doors??reports.reduce((n,r)=>n+r.doors,0);row.getCell(3).value=reports[i]?.windows??reports.reduce((n,r)=>n+r.windows,0);}
-   else if(index===1){const source=reports.flatMap(r=>r.schedule)[i];[source.widthM,source.heightM,source.baseM,source.quantity,source.countedQuantity].forEach((n,j)=>row.getCell(j+3).value=n);}
+   else if(index===1){const source=reports.flatMap(r=>r.listed)[i];[source.widthM,source.heightM,source.baseM,source.quantity,source.countedQuantity].forEach((n,j)=>row.getCell(j+3).value=n);}
    else if(table.title===x.t('openingQuantities.deductions')){
     const source=reports.flatMap(r=>r.work)[i];
     if(typeof values[3]==='string'&&values[3]!==x.t('exports.common.notCalibrated'))[source.gross,source.deducted,source.net].forEach((n,j)=>row.getCell(j+4).value=Math.round(n*100)/100);

@@ -75,6 +75,13 @@ export const he = {
     place: "סימון קצות הפתח בתוכנית",
   },
   openingTools: {
+    onSheet: "פתחים בגיליון",
+    count_approved: "{count} מאושרים",
+    count_draft: "{count} טיוטה",
+    count_rejected: "{count} נדחו",
+    selected: "פתח נבחר",
+    dimensions: "מידות",
+    quantityEffect: "השפעה על כמויות",
     approveAndAdd: "אישור והוספת פתח",
     confirmWalkable: "הפתח מאפשר מעבר ברגל",
 
@@ -157,6 +164,7 @@ export const he = {
     "maxRooms": "ניתן לבחור עד שני חדרים."
 },
   bulkTakeoff: {
+    openShort: 'שיוך עבודות',
     title: "שיוך עבודות לחדרים",
     open: "שיוך עבודות למספר חדרים",
     scope: "התוכנית הנוכחית: {name}",
@@ -415,6 +423,45 @@ export const he = {
       concrete: 'בטון',
       rebar: 'זיון',
     },
+    /** Side-panel object tab, per domain. */
+    objects: {
+      room: 'חדרים',
+      concrete: 'אזורי בטון',
+      rebar: 'פריטי זיון',
+      openings: 'פתחים',
+    },
+    /** Short labels on the canvas tool dock. */
+    dock: {
+      measure: 'מדידה',
+      markup: 'סימון',
+      opening: 'פתח',
+    },
+    /** The inspector at the inline end: details of what is selected. */
+    inspector: {
+      label: 'עריכה',
+      close: 'סגירת העריכה',
+      tools: 'כלים והגדרות',
+      empty: {
+        room: 'בחרו חדר ברשימה או בתוכנית כדי לערוך אותו.',
+        openings: 'בחרו פתח ברשימה או בתוכנית כדי לערוך אותו.',
+        concrete: 'בחרו אזור בטון ברשימה או בתוכנית כדי לערוך אותו.',
+        rebar: 'בחרו פריט זיון ברשימה או בתוכנית כדי לערוך אותו.',
+        measure: 'בחרו כלי מדידה בסרגל הכלים. אפשרויות הכלי מופיעות מעליו, והמדידות נערכות ברשימה.',
+        markup: 'בחרו סימון ברשימה או בתוכנית כדי לערוך אותו. אפשרויות כלי הסימון מופיעות מעל סרגל הכלים.',
+      },
+    },
+    /** Desktop side panels: resize, collapse and restore. */
+    panels: {
+      collapseList: 'כיווץ חלונית הרשימה',
+      restoreList: 'הצגת חלונית הרשימה',
+      collapseInspector: 'כיווץ חלונית העריכה',
+      restoreInspector: 'הצגת חלונית העריכה',
+      resizeList: 'שינוי רוחב חלונית הרשימה (גרירה או חיצים)',
+      resizeInspector: 'שינוי רוחב חלונית העריכה (גרירה או חיצים)',
+    },
+    moreOptions: 'אפשרויות נוספות בחלונית…',
+    domains: 'תחום כמויות',
+    tools: 'כלי שרטוט',
   },
 
   pageStatus: {
@@ -469,6 +516,7 @@ export const he = {
       pickPairs: 'סמן 2 זוגות נקודות',
       pickRevised: 'לחץ על אותה נקודה בתוכנית המעודכנת',
       pickOriginal: 'לחץ על נקודת ייחוס בתוכנית המקור - פינת בניין, עמוד וכו׳',
+      resetShort: 'איפוס',
       reset: 'איפוס היישור בגיליון זה',
       resetHint: 'מחזיר את הגרסה למיקומה המקורי בגיליון זה',
     },
@@ -504,6 +552,7 @@ export const he = {
       apartmentNumber: 'מספר דירה',
       revisionContext: 'הגרסה המושווית - כל סימון, מדידה, כיול ויישור חדשים נשמרים אליה',
       original: 'מקור',
+      revisionShort: 'גרסה',
       revision: 'הגרסה המושווית',
       noRevision: 'אין גרסה',
       viewHint: 'מה מצויר על גבי התוכנית (ומיוצא ל-PDF)',
@@ -543,6 +592,8 @@ export const he = {
       scope: 'גיליון {page} · {revision}',
     },
     layers: {
+      tint: 'צבע השכבה',
+      opacityShort: 'שקיפות',
       hide: 'הסתר שכבה',
       show: 'הצג שכבה',
       opacity: 'שקיפות השכבה',
@@ -562,6 +613,7 @@ export const he = {
     changes: {
       open: 'פתח את חלונית השינויים',
       title: 'שינויים',
+      openShort: 'פתיחה',
       collapsedMeta: '{count} סימוני שינוי · מקור',
       source: 'מקור',
       marks: '{count} סימונים',
@@ -654,6 +706,7 @@ export const he = {
   },
 
   quantitiesPanel: {
+    planHidden: 'התוכנית מוסתרת בזמן שהטבלה מוגדלת · גיליון {page}',
     domains: 'תחומי כמויות',
     cols: {
       page: 'גיליון',
@@ -741,6 +794,10 @@ export const he = {
     tools: 'כלי סימון',
     sizeSelectedHint: 'משנה את גודל ההערה שנבחרה',
     sizeDefaultHint: 'גודל ברירת מחדל להערות טקסט ולקווי מידה חדשים',
+    textSizeLabel: 'גודל טקסט',
+    smaller: 'הקטנת הטקסט',
+    larger: 'הגדלת הטקסט',
+    editTextHint: 'לעריכת הטקסט: לחיצה כפולה על ההערה בתוכנית בכלי הבחירה.',
     textSize: 'גודל טקסט {percent}%',
     resetSize: 'חזרה לגודל ברירת המחדל',
     unrotate: 'החזר את ההערה לאופקי',
@@ -820,6 +877,8 @@ export const he = {
     notCalibrated: 'הגיליון אינו מכויל. יש לכייל את הגיליון לפני שניתן לחשב מידות.',
     resetView: 'איפוס תצוגה',
     resetViewHint: 'איפוס תצוגה לזום המקורי',
+    zoomIn: 'הגדלה',
+    zoomOut: 'הקטנה',
   },
 
   aiReviewWindow: { extend: 'הארכת תצוגה', reduce: 'צמצם תצוגה', close: 'סגירת החלונית' },
@@ -837,6 +896,8 @@ export const he = {
     blocked: 'יש להשלים את מיקום הפתח וסוגו ולתקן פרטים לא תקינים לפני אישור.',
   },
   aiReviewWorkspace: {
+    geometry: 'גאומטריה',
+    selectedOf: '{index} מתוך {count} ממתינים',
     previousShort: 'הקודם',
     nextShort: 'הבא',
     title: 'בדיקת חללי AI',
@@ -865,6 +926,23 @@ export const he = {
     noWarnings: 'אין אזהרות אי־ודאות AI פעילות.',
   },
 
+  /** The AI menu in the header and the desktop review workspace it opens. */
+  aiMenu: {
+    button: 'AI',
+    pendingLabel: '{count} הצעות AI ממתינות',
+    reviewSaved: 'סקירת תוצאות שמורות',
+    reviewNote: 'ללא שליחה וללא עלות · ממשיך מאיפה שעצרתם',
+    open: 'פתיחה',
+    pending: '{count} ממתינים',
+    noResults: 'אין תוצאות שמורות בגיליון זה',
+    runNew: 'הפעלת זיהוי חדש',
+    runNote: 'בתשלום · נשלח ל־OpenAI · גרסת פיתוח · כל פעולה פותחת חלון אישור לפני השליחה',
+    savedResults: 'תוצאות שמורות',
+    finish: 'סיום סקירה',
+    reviewing: '{title} · גיליון {page}',
+    switchTo: '{title} ({count} ממתינים)',
+  },
+
   aiTools: {
     title: 'כלי AI',
     allSpaces: 'זיהוי כל החללים',
@@ -886,7 +964,7 @@ export const he = {
     retry: 'ניסיון נוסף לזיהוי חללים באמצעות AI',
     preparing: 'הכנת תמונות העמוד ברזולוציה מלאה…',
     processing: 'ה־AI מעבד את העמוד. אפשר להמשיך להשתמש ב־BetterCalc.',
-    page: 'עמוד {page}',
+    page: 'גיליון {page}',
     reviewFirst: 'יש לבדוק, לאשר או לדחות את ההצעות הנוכחיות לפני זיהוי נוסף של העמוד המלא. One-Click יכול להוסיף חלל שהוחמץ.',
     completed: 'הזיהוי הושלם. יש לבדוק את ההצעות למעלה ולאשר את הגאומטריה.',
   },
@@ -1059,6 +1137,7 @@ export const he = {
     item: 'פריט',
     net: 'כמות נטו',
     order: 'להזמנה (כולל פחת)',
+    openingsIncompleteStatus: 'נתוני פתחים חלקיים',
     uncalibratedRooms: '{count} חדרים נמצאים בגיליונות שלא כוילו ואינם נכללים בסיכום.',
     addPlan: {
       notPdf: 'נא לבחור קובץ PDF, PNG, JPG או JPEG',
@@ -1127,10 +1206,11 @@ export const he = {
     delete: 'מחק אזור',
     deleteConfirm: 'למחוק את "{name}"?',
     bulkDelete: {
+      deleteShort: 'מחיקה',
       selectAll: 'בחר הכל',
       delete: 'מחק נבחרים',
       selected: '{count} חללים נבחרו',
-      selectRoom: 'בחירת "{name}" בעמוד {page} למחיקה',
+      selectRoom: 'בחירת "{name}" בגיליון {page} למחיקה',
       confirm: 'למחוק את {count} החללים שנבחרו? ניתן לשחזר באמצעות ביטול הפעולה.',
     },
     newApartmentPrompt: 'מספר הדירה החדשה:',
@@ -1140,15 +1220,16 @@ export const he = {
     drawRect: 'סימון חדר כמלבן',
     autoDetectHint: 'זיהוי אוטומטי של חדרים - מציע אזורים לאישור',
     autoDetect: 'זיהוי אוטומטי',
-    newRoomTemplate: 'תבנית לחדר חדש',
+    newRoomTemplate: 'תבנית עבודות לחדר חדש',
     newRoomTemplateHint: 'חדרים שתסמן יקבלו את סוג החדר ואת סוגי העבודה של התבנית',
     noTemplate: 'ללא תבנית',
-    workingIn: 'עובד בדירה',
+    workingIn: 'דירה פעילה',
     workingInHint: 'חדרים חדשים ישויכו לדירה הזו',
     newApartment: '+ דירה חדשה…',
     markedAreas: 'אזורים שסומנו ({count})',
     listTitle: 'חדרים',
     bulkAssignment: {
+      assignShort: 'שייך',
       open: 'שיוך אזור / חדר לדירה',
       selected: '{count} חדרים/אזורים נבחרו',
       selectAll: 'בחר את כל החדרים/האזורים',
@@ -1164,6 +1245,13 @@ export const he = {
     reviewFlag: 'זוהה אוטומטית - מומלץ לבדוק',
     page: 'גיליון {page}',
     detail: {
+      kicker: 'חדר נבחר · גיליון {page}',
+      addWorkType: '+ הוספת סוג עבודה (חיפוי, טיח, איטום…)',
+      applyTemplateShort: 'החלת עבודות',
+      tilingShort: {
+        regular: 'רגיל',
+        as: 'AS',
+      },
       typeKept: 'התבנית עודכנה. סוגי העבודה הקיימים לא שונו.',
       notCalibrated: 'לא ניתן לחשב את כמויות החדר עד לכיול קנה המידה בגיליון זה.',
       area: 'שטח',
@@ -1427,6 +1515,7 @@ export const he = {
     purchaseWeightHeader: 'לרכישה ({unit})',
     purchaseWeight: 'משקל לרכישה',
     layout: {
+      done: 'סיום עריכה',
       add: 'הוסף רשת',
       remove: 'מחק רשת',
       manual: 'פריסה ידנית',

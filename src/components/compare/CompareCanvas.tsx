@@ -23,6 +23,7 @@ import { changeNumbering } from '../../lib/changeMeasurements';
 import { resolveCompareScale } from '../../lib/compareScale';
 import { isEditableTarget, shouldDeleteSelection } from '../../lib/editableTarget';
 import Icon from '../Icon';
+import ZoomControls from '../ZoomControls';
 import { dimensionLabels, dimensionNormal, reshapeDimension } from '../../lib/dimensionChain';
 import { orderMarkups } from '../../lib/drawMarkup';
 import DimensionShape from '../DimensionShape';
@@ -1357,22 +1358,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
         </div>
       )}
 
-      {pageSize.width > 0 && (
-        <button
-          data-plan-control="fit"
-          className="btn-secondary small reset-view-btn"
-          onMouseDown={(e) => e.stopPropagation()}
-          onMouseUp={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            fitToContainer(pageSize.width, pageSize.height);
-          }}
-          title={t('viewer.resetViewHint')}
-        >
-          <Icon name="expand" />
-          {t('viewer.resetView')}
-        </button>
-      )}
+      {pageSize.width > 0 && <ZoomControls transform={transform} pageWidth={pageSize.width} pageHeight={pageSize.height} />}
     </div>
   );
 });

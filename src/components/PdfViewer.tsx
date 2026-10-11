@@ -48,6 +48,7 @@ import DimensionShape from './DimensionShape';
 import TextNoteShape from './TextNoteShape';
 import TextNoteDialog from './TextNoteDialog';
 import { useCanvasTransform } from '../hooks/useCanvasTransform';
+import ZoomControls from './ZoomControls';
 import { useLanguage, useT } from '../i18n';
 import { labelDirection } from '../lib/textDirection';
 import { computeGrid } from '../lib/grid';
@@ -1685,21 +1686,7 @@ export default function PdfViewer() {
         </div>
       )}
 
-      {pageSize.width > 0 && (
-        <button
-          data-plan-control="fit"
-          className="btn-secondary small reset-view-btn"
-          onMouseDown={(e) => e.stopPropagation()}
-          onMouseUp={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            fitToContainer(pageSize.width, pageSize.height);
-          }}
-          title={t('viewer.resetViewHint')}
-        >
-          ⤢ {t('viewer.resetView')}
-        </button>
-      )}
+      {pageSize.width > 0 && <ZoomControls transform={transform} pageWidth={pageSize.width} pageHeight={pageSize.height} />}
     </div>
   );
 }

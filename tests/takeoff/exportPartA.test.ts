@@ -117,17 +117,20 @@ test('rebar BOQ: Mesh per level (Top and Bottom are separate rows of one mark), 
     ['Mesh', 'Mesh 01', 'Top', 'Ø10 @ 15 cm - Both directions', '4 sheets'], // each level its own count, never an unexplained 8
   ]);
   assert.equal(t.rows[2].cells[4], 'Long side Ø12 @ 20 | Short side Ø10 @ 15');
-  assert.deepEqual(t.rows[3].cells.slice(1, 7), ['Bars', 'Bars 01', '-', 'Ø16', '10 bars', '-']);
+  assert.deepEqual(t.rows[3].cells.slice(1, 7), ['Bars', 'Bars 01', '-', 'Ø16 · Length per bar: 6 m · Total length: 60 m', '10 bars', '-']);
   const total = t.rows.at(-1)!;
   assert.equal(total.cells[5], ''); // sheets and bars are different units: no combined quantity
   assert.equal(total.cells[9], 'Exact');
   assert.ok(!JSON.stringify(layout(p)).includes('Bar lines'));
   assert.ok(!JSON.stringify(layout(p, 'he')).includes('שורות זיון'));
   // the weight total is the sum of the rows
-  const sum = (col: number) => t.rows.slice(0, -1).reduce((a, r) => a + Number(r.cells[col].replace(/,/g, '')), 0);
-  assert.ok(Math.abs(sum(7) - Number(total.cells[7].replace(/,/g, ''))) < 0.05);
+  // Mesh weights in a table shared with bars carry their label ("Required: 367.56"); read the number after it.
+  const num = (cell: string) => Number(cell.replace(/^[^:]*:\s*/, '').replace(/,/g, ''));
+  const sum = (col: number) => t.rows.slice(0, -1).reduce((a, r) => a + num(r.cells[col]), 0);
+  assert.ok(t.rows.slice(0, -1).every((r) => Number.isFinite(num(r.cells[7]))));
+  assert.ok(Math.abs(sum(7) - num(total.cells[7])) < 0.05);
   assert.equal(t.headers.includes('Level'), true);
-  assert.deepEqual(tables(layout(p, 'he'))[0].rows[3].cells.slice(1, 6), ['מוטות', 'מוטות 01', '-', 'Ø16', '10 מוטות']);
+  assert.deepEqual(tables(layout(p, 'he'))[0].rows[3].cells.slice(1, 6), ['מוטות', 'מוטות 01', '-', "Ø16 · אורך מוט: 6 מ' · אורך כולל: 60 מ'", '10 מוטות']);
 });
 
 test('mesh sheet configuration: defaults and custom size / overlap are printed and change the count', () => {
@@ -153,7 +156,7 @@ test('irregular zones have no sheet quantity (the weight stays an estimate); mis
   assert.deepEqual([irregular.cells[5], irregular.cells[6], irregular.cells[9]], ['-', '-', 'Estimate']);
   assert.ok(irregular.cells[7].startsWith('~ '));
   assert.deepEqual([incomplete.cells[7], incomplete.cells[8], incomplete.cells[9]], ['-', '-', 'Data missing']);
-  assert.deepEqual([uncalibrated.cells[5], uncalibrated.cells[7], uncalibrated.cells[9]], ['-', '-', 'Page not calibrated']);
+  assert.deepEqual([uncalibrated.cells[5], uncalibrated.cells[7], uncalibrated.cells[9]], ['-', '-', 'Sheet not calibrated']);
 });
 
 test('old meshes (flat layers) export with the same weights as the engine', () => {

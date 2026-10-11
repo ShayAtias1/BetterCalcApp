@@ -5,6 +5,8 @@ import LanguageSwitch from './LanguageSwitch';
 import GridMenuSection from './GridMenuSection';
 import TopBarMenu, { type MenuId } from './TopBarMenu';
 import Icon, { type IconName } from './Icon';
+import AiMenu from './AiMenu';
+import { HeaderCalibration } from './PageStatusBar';
 import { BrandHomeLink } from './BrandLogo';
 import { exportAllPlanPagesToPdf, exportPlanPageToPdf } from '../lib/exportRegionPdf';
 import { planForReport } from '../lib/reportTitle';
@@ -21,7 +23,12 @@ const OVERLAY_LABEL = {
   markups: 'workspace.tabs.markup',
 } as const;
 
-export default function TopBar() {
+export type WorkDomain = 'room' | 'concrete' | 'rebar';
+
+const DOMAIN_LABEL = { room: 'workspace.tabs.rooms', concrete: 'workspace.tabs.concrete', rebar: 'workspace.tabs.rebar' } as const;
+
+/** The takeoff header. The quantity domain (finishes / concrete / rebar) is chosen here, in the centre of the bar. */
+export default function TopBar({ domain, onDomainChange }: { domain?: WorkDomain; onDomainChange?: (next: WorkDomain) => void }) {
   const t = useT();
   // Exports are written in the language the app is showing (Phase 6 may add a separate choice).
   const language = useLanguage();
@@ -149,30 +156,34 @@ export default function TopBar() {
   };
 
   return (
-    <div className="top-bar" data-save-state={saveState}>
-      {/* Group 1 — identity: where we are. Logo (home), back to the project overview, then the plan (editable name). */}
+    <div className="top-bar takeoff-top-bar" data-save-state={saveState}>
+      {/* Start — where we are: home, the project, the plan (switch / rename), and the sheet. */}
       <div className="top-bar-group identity">
-        <BrandHomeLink title={t('topBar.goHome')} />
+        <BrandHomeLink title={t('topBar.goHome')} mark />
         {currentProject && (
-          <button className="btn-ghost small back-to-overview" onClick={backToOverview} title={t('topBar.backToOverview')}>
-            <Icon name="chevron-previous" size={13} />
-            {t('topBar.projectOverview')}
-          </button>
+          <>
+            <button className="top-bar-crumb" onClick={backToOverview} title={t('topBar.backToOverview')}>
+              <span dir="auto">{currentProject.name || t('topBar.projectOverview')}</span>
+            </button>
+            <span className="top-bar-crumb-sep" aria-hidden="true">/</span>
+          </>
         )}
-        <input
-          className="project-name-input"
-          dir="auto"
-          value={project.name}
-          onChange={(e) => updateProjectMeta({ name: e.target.value })}
-          title={t('topBar.planName')}
-        />
-      </div>
-
-      {/* Group 2 — the document: where we are in it, and moving through its history. */}
-      <div className="top-bar-group grow">
-        {/* Plan switcher heads the document group — the identity group clips overflow, so its
-            dropdown would be cut off there. */}
-        <TopBarMenu id="plans" openId={openMenu} setOpenId={setOpenMenu} icon="layers" label={t('topBar.plans')} variant="ghost" title={t('topBar.plansHint')}>
+        {/* The plan menu carries the plan name; renaming lives at the top of it. */}
+        <TopBarMenu id="plans" openId={openMenu} setOpenId={setOpenMenu} label={project.name || t('topBar.plans')} variant="ghost" caret="chevron" title={t('topBar.plansHint')}>
+          <label className="form-row top-bar-menu-field">
+            <span className="section-label">{t('topBar.planName')}</span>
+            <input
+              className="project-name-input"
+              dir="auto"
+              value={project.name}
+              onChange={(e) => updateProjectMeta({ name: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') setOpenMenu(null);
+              }}
+            />
+          </label>
+          <div className="menu-divider" />
+          <p className="menu-hint menu-section-title">{t('topBar.plans')}</p>
           {projectPlans.map((p) => (
             <button key={p.id} className={`menu-item ${p.id === project.id ? 'active' : ''}`} onClick={() => switchPlan(p.id)}>
               <span className="menu-check">{p.id === project.id && <Icon name="check" size={13} />}</span>
@@ -200,11 +211,9 @@ export default function TopBar() {
           </button>
         </TopBarMenu>
 
-        <span className="top-bar-sep" />
-
         {/* Previous comes first in reading order, so it sits on the right under RTL and the left under LTR. */}
         <div className="page-nav">
-          <button disabled={currentPage <= 1} onClick={() => setCurrentPage(currentPage - 1)} title={t('topBar.previousPage')}>
+          <button disabled={currentPage <= 1} onClick={() => setCurrentPage(currentPage - 1)} title={t('topBar.previousPage')} aria-label={t('topBar.previousPage')}>
             <Icon name="chevron-previous" />
           </button>
           <span>
@@ -222,29 +231,38 @@ export default function TopBar() {
               onBlur={commitPageJump}
               title={t('topBar.pageJumpHint', { count: numPages })}
             />
-            / {numPages}
+            <span className="tnum">/ {numPages}</span>
           </span>
-          {/* Calibration state is not repeated here — the page-status strip above the sidebar tabs
-              is the single place that reports it and offers the action. */}
-          <button disabled={currentPage >= numPages} onClick={() => setCurrentPage(currentPage + 1)} title={t('topBar.nextPage')}>
+          <button disabled={currentPage >= numPages} onClick={() => setCurrentPage(currentPage + 1)} title={t('topBar.nextPage')} aria-label={t('topBar.nextPage')}>
             <Icon name="chevron-next" />
           </button>
         </div>
+        {/* The sheet's scale state and the way to fix it, beside the sheet it belongs to. */}
+        <HeaderCalibration />
+      </div>
 
-        <span className="top-bar-sep" />
+      {/* Centre — the quantity domain. */}
+      {domain && onDomainChange ? (
+        <div className="top-bar-domains segmented-tabs" role="tablist" aria-label={t('workspace.domains')}>
+          {(['room', 'concrete', 'rebar'] as const).map((d) => (
+            <button key={d} role="tab" aria-selected={domain === d} className={domain === d ? 'active' : ''} onClick={() => onDomainChange(d)}>
+              {t(DOMAIN_LABEL[d])}
+            </button>
+          ))}
+        </div>
+      ) : <span />}
 
+      {/* End — history, status, what is shown, what leaves the app, language. */}
+      <div className="top-bar-group output">
         <div className="undo-redo-group">
-          <button className="icon-btn" onClick={undo} disabled={!canUndo} title={t('topBar.undo')}>
+          <button className="icon-btn" onClick={undo} disabled={!canUndo} title={t('topBar.undo')} aria-label={t('topBar.undo')}>
             <Icon name="undo" />
           </button>
-          <button className="icon-btn" onClick={redo} disabled={!canRedo} title={t('topBar.redo')}>
+          <button className="icon-btn" onClick={redo} disabled={!canRedo} title={t('topBar.redo')} aria-label={t('topBar.redo')}>
             <Icon name="redo" />
           </button>
         </div>
-      </div>
 
-      {/* Group 3 — output: what is on the plan, what leaves the app, and the way out. */}
-      <div className="top-bar-group output">
         <span className={`save-state save-state-${saveState}`} title={saveLabels[saveState].title}>
           <Icon name={saveLabels[saveState].icon} size={13} />
           {saveLabels[saveState].text}
@@ -256,7 +274,8 @@ export default function TopBar() {
           setOpenId={setOpenMenu}
           icon={allVisible ? 'eye' : 'eye-off'}
           label={t('topBar.view')}
-          variant="ghost"
+          variant="secondary"
+          caret="none"
           title={t('topBar.viewHint')}
           desktopMaxWidth={200}
           highlighted={!allVisible}
@@ -271,6 +290,10 @@ export default function TopBar() {
           <GridMenuSection />
         </TopBarMenu>
 
+        {domain === 'room' && <AiMenu openId={openMenu} setOpenId={setOpenMenu} />}
+
+        <LanguageSwitch />
+
         {/* Export is the strongest action in the bar — the one filled control. */}
         <TopBarMenu
           id="export"
@@ -280,6 +303,7 @@ export default function TopBar() {
           label={exporting ? t('common.exporting') : t('common.export')}
           title={t('topBar.exportHint')}
           variant="primary"
+          caret="none"
           highlighted={!!exportRegion}
         >
           {/* The quantity report is the product's main output, so it heads the menu. */}
@@ -326,8 +350,6 @@ export default function TopBar() {
               : t('topBar.noRegionNote')}
           </p>
         </TopBarMenu>
-
-        <LanguageSwitch />
       </div>
     </div>
   );

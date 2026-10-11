@@ -19,9 +19,15 @@ export function buildOpeningQuantityReport(plan:Plan, roomScope?:Set<string>, pa
    work.push({roomId:room.id,itemId:item.id,type:item.type,unit:def.unit,gross:calc.grossLengthM??calc.grossM2,deducted:calc.deductedLengthM??calc.deductedM2,net:calc.lengthM??calc.netM2,audit:calc.openingAudit??[]});
   }
  }
- const incomplete=schedule.some(r=>r.reasons.some(reason=>!['legacyPrecedence'].includes(reason)))||work.some(w=>w.audit.some(a=>a.incomplete));
+ // A rejected record is a resolved review decision (e.g. a dismissed AI detection), not missing
+ // data: it never deducts, so it neither marks the report partial nor appears as an exclusion.
+ const rejected=new Set((plan.openings??[]).filter(o=>o.approval.status==='rejected').map(o=>o.id));
+ const isRejected=(row:OpeningScheduleRow)=>row.source==='canonical'&&rejected.has(row.id);
+ const incomplete=schedule.some(r=>!isRejected(r)&&r.reasons.some(reason=>!['legacyPrecedence'].includes(reason)))||work.some(w=>w.audit.some(a=>a.incomplete&&!rejected.has(a.openingId)));
  const count=(kind:OpeningScheduleRow['kind'])=>schedule.filter(r=>r.countKind===kind).reduce((sum,r)=>sum+(r.countedQuantity??0),0);
- return {schedule,work,incomplete,doors:count('door'),windows:count('window')};
+ // Rows shown in reports: rejected records stay only while they carry authoritative legacy counts.
+ const listed=schedule.filter(r=>!isRejected(r)||r.countedQuantity!==null);
+ return {schedule,listed,work,rejected,incomplete,doors:count('door'),windows:count('window')};
 }
 export interface OpeningReportTable { title:string; headers:string[]; widths:number[]; rows:string[][] }
 /** Shared text/data layout for the UI, plan/project PDF and Excel. Numbers come from the
@@ -30,20 +36,23 @@ export function openingReportTables(plans:Plan[],x:ExportContext,roomScope?:Set<
  const {t}=x,txt=(k:keyof typeof import('../i18n/he').he.openingQuantities)=>t(`openingQuantities.${k}`);
  const fmt=(n:number|null)=>n===null?'-':x.number(n);
  const reports=plans.map(plan=>({plan,report:buildOpeningQuantityReport(plan,roomScope,pageScope)}));
- if(!reports.some(r=>r.report.schedule.length))return [];
+ if(!reports.some(r=>r.report.listed.length))return [];
+ // Readable names only: room and opening ids are internal (imported openings use JSON keys).
+ const roomName=(plan:Plan,id:string)=>plan.rooms.find(r=>r.id===id)?.name||t('exports.common.unnamedRoom');
  const typeLabel=(row:OpeningScheduleRow)=>row.kind==='door'&&['hinged','sliding'].includes(row.mechanism)?t(`openingTools.${row.mechanism as 'hinged'|'sliding'}`):row.kind==='open-passage'?t('openingTools.passage'):row.kind==='door'?t('openingQuantities.door'):t(`openingTools.${row.kind==='custom'?'custom':row.kind==='window'?'window':'unknown'}`);
+ const openingDescription=(row:OpeningScheduleRow|undefined)=>!row?'-':[typeLabel(row),row.label,row.widthM!==null&&row.heightM!==null?`${fmt(row.widthM)}×${fmt(row.heightM)}`:''].filter(Boolean).join(' · ');
  const tables:OpeningReportTable[]=[{
  title:txt('counts'),headers:[t('exports.common.plan'),txt('doors'),txt('windows'),txt('status')],widths:[24,12,12,40],
  rows:[...reports.map(({plan,report:r})=>[plan.name,fmt(r.doors),fmt(r.windows),txt(r.incomplete?'partial':'complete')]),...(plans.length>1?[[txt('total'),fmt(reports.reduce((n,r)=>n+r.report.doors,0)),fmt(reports.reduce((n,r)=>n+r.report.windows,0)),txt(reports.some(r=>r.report.incomplete)?'partial':'complete')]]:[])],
  },{
  title:txt('schedule'),headers:[t('exports.common.plan'),txt('type'),txt('width'),txt('height'),txt('base'),txt('quantity'),txt('counted'),txt('rooms'),txt('status')],widths:[18,20,10,10,10,10,10,24,45],
- rows:reports.flatMap(({plan,report:r})=>r.schedule.map(row=>[`${plan.name} / ${row.pageNumber}`,`${typeLabel(row)}${row.label?' · '+row.label:''}`,fmt(row.widthM),fmt(row.heightM),fmt(row.baseM),fmt(row.quantity),fmt(row.countedQuantity),row.roomIds.map(id=>plan.rooms.find(r=>r.id===id)?.name??id).join(' / ')||txt('unassociated'),(row.reasons.map(reason=>t(`openingQuantities.${reason}`)).join('; ')||txt('complete'))+(row.countedQuantity!==null&&row.countKind!==row.kind?' / '+txt('counted')+': '+typeLabel({...row,kind:row.countKind,mechanism:'unknown'}):'')])),
+ rows:reports.flatMap(({plan,report:r})=>r.listed.map(row=>[`${plan.name} / ${row.pageNumber}`,`${typeLabel(row)}${row.label?' · '+row.label:''}`,fmt(row.widthM),fmt(row.heightM),fmt(row.baseM),fmt(row.quantity),fmt(row.countedQuantity),row.roomIds.filter(id=>plan.rooms.some(r=>r.id===id)).map(id=>roomName(plan,id)).join(' / ')||txt('unassociated'),(row.reasons.map(reason=>t(`openingQuantities.${reason}`)).join('; ')||txt('complete'))+(row.countedQuantity!==null&&row.countKind!==row.kind?' / '+txt('counted')+': '+typeLabel({...row,kind:row.countKind,mechanism:'unknown'}):'')])),
  }];
  // Old legacy-only exports already explain their deductions. This detailed additional ledger
  // is needed when canonical objects exist; it includes both historical and canonical amounts.
  if(plans.some(p=>p.openings?.length)){
-  tables.push({title:txt('deductions'),headers:[t('exports.common.plan'),txt('rooms'),t('exports.common.item'),txt('gross'),txt('deducted'),txt('net'),txt('unit')],widths:[20,20,24,12,12,12,10],rows:reports.flatMap(({plan,report:r})=>r.work.map(w=>{const calibrated=(plan.pages[plan.rooms.find(room=>room.id===w.roomId)!.pageNumber]?.calibration?.metersPerPixel??0)>0;return [plan.name,plan.rooms.find(room=>room.id===w.roomId)?.name??w.roomId,t(`workTypes.${w.type}`),calibrated?fmt(w.gross):t('exports.common.notCalibrated'),calibrated?fmt(w.deducted):'-',calibrated?fmt(w.net):'-',t(`units.${w.unit}`)];}))});
-  tables.push({title:txt('exclusions'),headers:[t('exports.common.plan'),txt('rooms'),txt('type'),t('exports.common.item'),txt('status')],widths:[20,22,24,20,55],rows:reports.flatMap(({plan,report:r})=>r.work.flatMap(w=>w.audit.filter(a=>a.reason).map(a=>[plan.name,plan.rooms.find(room=>room.id===w.roomId)?.name??w.roomId,plan.openings?.find(o=>o.id===a.openingId)?.label||a.openingId||'-',t(`workTypes.${w.type}`),t(`openingQuantities.${a.reason!}`)])))});
+  tables.push({title:txt('deductions'),headers:[t('exports.common.plan'),txt('rooms'),t('exports.common.item'),txt('gross'),txt('deducted'),txt('net'),txt('unit')],widths:[20,20,24,12,12,12,10],rows:reports.flatMap(({plan,report:r})=>r.work.map(w=>{const calibrated=(plan.pages[plan.rooms.find(room=>room.id===w.roomId)!.pageNumber]?.calibration?.metersPerPixel??0)>0;return [plan.name,roomName(plan,w.roomId),t(`workTypes.${w.type}`),calibrated?fmt(w.gross):t('exports.common.notCalibrated'),calibrated?fmt(w.deducted):'-',calibrated?fmt(w.net):'-',t(`units.${w.unit}`)];}))});
+  tables.push({title:txt('exclusions'),headers:[t('exports.common.plan'),txt('rooms'),txt('type'),t('exports.common.item'),txt('status')],widths:[20,22,24,20,55],rows:reports.flatMap(({plan,report:r})=>r.work.flatMap(w=>w.audit.filter(a=>a.reason&&!r.rejected.has(a.openingId)).map(a=>[plan.name,roomName(plan,w.roomId),openingDescription(r.schedule.find(row=>row.source==='canonical'&&row.id===a.openingId)),t(`workTypes.${w.type}`),t(`openingQuantities.${a.reason!}`)])))});
  }
  return tables.filter(table=>table.rows.length>0);
 }
@@ -108,7 +117,7 @@ export function openingPdfSchedule(plans: Plan[], x: ExportContext, options: Ope
 /** Actual nonzero room-side deductions, aggregated once per work item, before waste. */
 export function openingPdfDeductions(plans: Plan[], x: ExportContext): OpeningReportTable | null {
  const rows=plans.flatMap(plan=>buildOpeningQuantityReport(plan).work.filter(w=>w.deducted>0 && (plan.pages[plan.rooms.find(r=>r.id===w.roomId)!.pageNumber]?.calibration?.metersPerPixel??0)>0).map(w=>[
-   plan.name,plan.rooms.find(r=>r.id===w.roomId)?.name??w.roomId,x.t(`workTypes.${w.type}`),x.number(w.gross),x.number(w.deducted),x.number(w.net),x.t(`units.${w.unit}`)
+   plan.name,plan.rooms.find(r=>r.id===w.roomId)?.name||x.t('exports.common.unnamedRoom'),x.t(`workTypes.${w.type}`),x.number(w.gross),x.number(w.deducted),x.number(w.net),x.t(`units.${w.unit}`)
  ]));
  if(!rows.length)return null;
  return {title:x.t('openingQuantities.deductions'),headers:[x.t('exports.common.plan'),x.t('openingQuantities.rooms'),x.t('exports.common.item'),x.t('openingQuantities.gross'),x.t('openingQuantities.deducted'),x.t('openingQuantities.net'),x.t('openingQuantities.unit')],widths:[20,20,24,12,12,12,10],rows};

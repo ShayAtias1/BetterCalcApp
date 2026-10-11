@@ -5,7 +5,7 @@ import { saveAs } from 'file-saver';
 import type { Plan, Project } from '../types';
 import type { Language } from '../i18n';
 import { exportContext, type ExportContext } from './exportLanguage';
-import { buildProjectQuantities, planStatusLabel, roomCategoryQuantity, type CategoryAmount } from './projectQuantities';
+import { buildProjectQuantities, planStatusText, roomCategoryQuantity, type CategoryAmount } from './projectQuantities';
 import { buildProjectStructural, finishesSummaryMode } from './structuralQuantities';
 import { buildProjectStructuralPdfLayout, writeBlocks, type StirrupShapeCard } from './structuralPdfLayout';
 import { type ExportContent } from './exportContent';
@@ -232,7 +232,7 @@ export async function exportProjectToPdf(project: Project, plans: Plan[], conten
       ],
       [22, 8, 10, 10, 14],
       q.plans.map((r) => ({
-        cells: [r.plan.name, `${r.roomCount}`, `${r.calibratedPageCount}`, `${r.uncalibratedRoomCount}`, planStatusLabel(r.status, t)],
+        cells: [r.plan.name, `${r.roomCount}`, `${r.calibratedPageCount}`, `${r.uncalibratedRoomCount}`, planStatusText(r, t)],
       }))
     );
 

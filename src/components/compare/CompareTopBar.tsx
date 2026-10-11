@@ -1,3 +1,4 @@
+import { CompareHeaderCalibration } from './CompareContextBar';
 import { useEffect, useState } from 'react';
 import { selectCompareSaveState, useCompareStore } from '../../store/compareStore';
 import { useAppStore } from '../../store/appStore';
@@ -89,34 +90,47 @@ export default function CompareTopBar({
   };
 
   return (
-    <div className="top-bar" data-save-state={saveState}>
+    <div className="top-bar takeoff-top-bar compare-top-bar" data-save-state={saveState}>
       {/* Group 1 — identity: the same mark and name field as the takeoff bar, plus the one piece
           of comparison context that must never require opening the sidebar. */}
       <div className="top-bar-group identity">
-        <BrandHomeLink title={t('topBar.goHome')} />
-        <button className="btn-ghost small back-to-overview" onClick={close} title={currentProject ? t('topBar.backToOverview') : t('compare.topBar.exitHint')}>
-          <Icon name={currentProject ? 'chevron-previous' : 'exit'} size={13} />
-          <span className="btn-label">{currentProject ? t('topBar.projectOverviewShort') : t('compare.topBar.exit')}</span>
+        <BrandHomeLink title={t('topBar.goHome')} mark />
+        <button className="top-bar-crumb" onClick={close} title={currentProject ? t('topBar.backToOverview') : t('compare.topBar.exitHint')}>
+          <span dir="auto">{currentProject ? currentProject.name || t('topBar.projectOverviewShort') : t('compare.topBar.exit')}</span>
         </button>
-        <input
-          className="project-name-input"
-          dir="auto"
-          value={comparison.name}
-          onChange={(e) => updateComparisonMeta({ name: e.target.value })}
-          title={t('compare.topBar.comparisonName')}
-        />
-        <input
-          className="project-name-input apt-input"
-          value={comparison.apartmentNumber}
-          onChange={(e) => updateComparisonMeta({ apartmentNumber: e.target.value })}
-          placeholder={t('compare.topBar.apartment')}
-          title={t('compare.topBar.apartmentNumber')}
-        />
+        <span className="top-bar-crumb-sep" aria-hidden="true">/</span>
+        {/* The comparison menu carries its name, as the plan menu does in the takeoff bar; the name
+            and the apartment are edited at the top of it. */}
+        <TopBarMenu id="plans" openId={openMenu} setOpenId={setOpenMenu} label={comparison.name || t('compare.topBar.comparisonName')} variant="ghost" caret="chevron" title={t('compare.topBar.comparisonName')}>
+          <label className="form-row top-bar-menu-field">
+            <span className="section-label">{t('compare.topBar.comparisonName')}</span>
+            <input
+              className="project-name-input"
+              dir="auto"
+              value={comparison.name}
+              onChange={(e) => updateComparisonMeta({ name: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') setOpenMenu(null);
+              }}
+            />
+          </label>
+          <label className="form-row top-bar-menu-field">
+            <span className="section-label">{t('compare.topBar.apartmentNumber')}</span>
+            <input
+              className="project-name-input"
+              value={comparison.apartmentNumber}
+              onChange={(e) => updateComparisonMeta({ apartmentNumber: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') setOpenMenu(null);
+              }}
+            />
+          </label>
+        </TopBarMenu>
+        {comparison.apartmentNumber && <span className="top-bar-apt-chip" dir="auto">{t('compare.topBar.apartment')} {comparison.apartmentNumber}</span>}
         {/* Context, not a heading: what is compared against what, and where new revision-specific
             work lands. */}
         <span className="compare-context-chip" title={t('compare.topBar.revisionContext')}>
-          <span className="muted">{t('compare.topBar.original')}</span>
-          <Icon name="link" size={13} />
+          <span className="muted">{t('compare.topBar.revisionShort')}:</span>
           {comparison.revisions.length > 0 ? (
             <select
               className="compare-revision-select"
@@ -134,11 +148,6 @@ export default function CompareTopBar({
             <span className="cal-missing">{t('compare.topBar.noRevision')}</span>
           )}
         </span>
-      </div>
-
-      {/* Group 2 — the document: where we are in it, how we look at it, and its history. */}
-      <div className="top-bar-group grow">
-        <span className="top-bar-sep" />
         {/* Previous comes first in reading order, so it sits on the right under RTL and the left under LTR. */}
         <div className="page-nav">
           <button disabled={currentPageKey <= 1} onClick={() => setCurrentPageKey(currentPageKey - 1)} title={t('topBar.previousPage')}>
@@ -165,14 +174,14 @@ export default function CompareTopBar({
             <Icon name="chevron-next" />
           </button>
         </div>
+        <CompareHeaderCalibration />
+      </div>
 
-        <span className="top-bar-sep" />
+      {/* Centre — how the two plans are compared, the defining interaction of this workspace. */}
+      <ViewModeSwitch variant="tabs" />
 
-        {/* How the two plans are compared — the defining interaction of this workspace. */}
-        <ViewModeSwitch />
-
-        <span className="top-bar-sep" />
-
+      {/* End — history, status, what is shown, language, and what leaves the app. */}
+      <div className="top-bar-group output">
         <div className="undo-redo-group">
           <button className="icon-btn" onClick={undo} disabled={!canUndo} title={t('topBar.undo')}>
             <Icon name="undo" />
@@ -181,10 +190,6 @@ export default function CompareTopBar({
             <Icon name="redo" />
           </button>
         </div>
-      </div>
-
-      {/* Group 3 — output: what is drawn on the plan, what leaves the app, and the way out. */}
-      <div className="top-bar-group output">
         <span className={`save-state save-state-${saveState}`} title={saveLabels[saveState].title}>
           <Icon name={saveLabels[saveState].icon} size={13} />
           {saveLabels[saveState].text}
@@ -196,7 +201,8 @@ export default function CompareTopBar({
           setOpenId={setOpenMenu}
           icon={annotationsVisible && measurementsVisible ? 'eye' : 'eye-off'}
           label={t('topBar.view')}
-          variant="ghost"
+          variant="secondary"
+          caret="none"
           title={t('compare.topBar.viewHint')}
           highlighted={!annotationsVisible || !measurementsVisible}
           desktopMaxWidth={200}
@@ -212,6 +218,8 @@ export default function CompareTopBar({
           <p className="menu-hint">{t('compare.topBar.viewNote')}</p>
         </TopBarMenu>
 
+        <LanguageSwitch />
+
         {/* Export is the strongest action in the bar — the one filled control. */}
         <TopBarMenu
           id="export"
@@ -221,6 +229,7 @@ export default function CompareTopBar({
           label={exporting ? t('common.exporting') : t('common.export')}
           title={t('compare.topBar.exportHint')}
           variant="primary"
+          caret="none"
           highlighted={!!exportRegion}
         >
           {/* Which pages, then which revisions — the two choices that define an export. */}
@@ -281,8 +290,8 @@ export default function CompareTopBar({
               : t('compare.topBar.noRegionNote')}
           </p>
         </TopBarMenu>
-
-        <LanguageSwitch />
+        {/* Leaving the comparison saves it first, as the breadcrumb does. */}
+        <button className="btn-ghost small compare-exit-btn" onClick={close} title={t('compare.topBar.exitHint')}>{t('compare.topBar.exit')}</button>
       </div>
     </div>
   );

@@ -3,7 +3,7 @@ import ResponsivePopover from './ResponsivePopover';
 import Icon, { type IconName } from './Icon';
 
 /** Ids of the top-bar dropdowns; both apps' bars pick the ones they use. */
-export type MenuId = 'view' | 'export' | 'settings' | 'plans' | 'tools';
+export type MenuId = 'view' | 'export' | 'settings' | 'plans' | 'tools' | 'ai';
 
 /**
  * A top-bar button with a popover menu under it. Only the menu whose id matches `openId` is shown,
@@ -20,6 +20,7 @@ export default function TopBarMenu({
   title,
   highlighted,
   desktopMaxWidth,
+  caret = 'text',
   children,
 }: {
   id: MenuId;
@@ -36,6 +37,8 @@ export default function TopBarMenu({
   title?: string;
   highlighted?: boolean;
   desktopMaxWidth?: number;
+  /** The open-menu mark: the small text caret (default), a chevron icon, or none. */
+  caret?: 'text' | 'chevron' | 'none';
   children: ReactNode;
 }) {
   const anchorRef = useRef<HTMLButtonElement>(null);
@@ -57,7 +60,8 @@ export default function TopBarMenu({
       >
         {icon && <Icon name={icon} />}
         <span className="btn-label">{label}</span>
-        <span className="menu-caret">▾</span>
+        {caret === 'text' && <span className="menu-caret">▾</span>}
+        {caret === 'chevron' && <Icon name="chevron-down" size={13} />}
       </button>
       {open && <ResponsivePopover id={menuId} label={label} anchorRef={anchorRef} onClose={() => setOpenId(null)} desktopMaxWidth={desktopMaxWidth}>{children}</ResponsivePopover>}
     </div>

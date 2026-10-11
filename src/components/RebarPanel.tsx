@@ -12,7 +12,7 @@ import { levelChoice, meshLevels, specNotation, withDirection, withMode, without
 import type { MeshLevelChoice } from '../lib/structuralMutations';
 import { cmToMeters, metersToCm } from '../lib/structuralUnits';
 import { rebarOf } from '../lib/structuralPlan';
-import { markLabel, markPatch } from '../lib/structuralMarks';
+import { markCode, markLabel, markPatch } from '../lib/structuralMarks';
 import { zoneGeometry } from '../lib/zoneGeometry';
 import { round } from '../lib/geometry';
 import { REBAR_COLOR } from './RebarZones';
@@ -20,6 +20,7 @@ import ExistingAreaPicker from './ExistingAreaPicker';
 import { MeshLayoutControl } from './MeshLayoutPreview';
 import NumberField from './NumberField';
 import Icon from './Icon';
+import { InspectorCloseButton, InspectorEmpty, type PanelPart } from './PanelPart';
 import StirrupShapeBuilder from './StirrupShapeBuilder';
 import StirrupPlacements from './StirrupPlacements';
 import { resolveStirrupItem } from '../lib/stirrup';
@@ -53,7 +54,15 @@ function itemSummary(item: RebarItem, t: T, resolved?: ReturnType<typeof resolve
   return parts.join(' · ');
 }
 
-export default function RebarPanel({ readOnly = false }: { readOnly?: boolean }) {
+/** The name of an item's kind, as its list row and inspector header show it. */
+function itemKindKey(item: RebarItem) {
+  return item.kind === 'mesh' ? 'rebar.meshZone' as const
+    : item.kind === 'stirrup' ? 'rebar.stirrupName' as const
+      : item.barsZone ? 'rebar.bars' as const
+        : item.drawnBars !== undefined ? 'rebar.spatial.individual' as const : 'rebar.manualBars' as const;
+}
+
+export default function RebarPanel({ readOnly = false, part }: { readOnly?: boolean; part?: PanelPart }) {
   const [filter, setFilter] = useState<'all' | 'mesh' | 'bars' | 'stirrup'>('all');
   const t = useT();
   const project = useAppStore((s) => s.project);
@@ -75,20 +84,21 @@ export default function RebarPanel({ readOnly = false }: { readOnly?: boolean })
   const items = rebarOf(project);
   const selected = items.find((i) => i.id === selectedId);
 
-  if (selected) {
+  if (part === 'detail' && !selected) return <InspectorEmpty text={t('workspace.inspector.empty.rebar')} />;
+  if (selected && part !== 'list') {
     return (
       <div className="room-panel">
-        <div className="detail-nav">
+        {!part && <div className="detail-nav">
           <button className="btn-ghost small" onClick={() => setSelectedId(null)}>
             <Icon name="back" />
             {t('rebar.back')}
           </button>
-        </div>
+        </div>}
         <div className="detail-header">
           <span className="color-dot" style={{ background: REBAR_COLOR }} />
           <span className="detail-header-text">
             <span className="detail-title" dir="auto">{markLabel(selected, t)}</span>
-            <span className="detail-subtitle">{t(selected.kind === 'mesh' ? 'rebar.meshZone' : selected.kind === 'stirrup' ? 'rebar.stirrupName' : selected.kind === 'bars' && selected.barsZone ? 'rebar.bars' : selected.kind === 'bars' && selected.drawnBars !== undefined ? 'rebar.spatial.individual' : 'rebar.manualBars')}</span>
+            <span className="detail-subtitle">{t(itemKindKey(selected))} · {t('concrete.page', { page: selected.pageNumber })}</span>
           </span>
           {!readOnly && <><button className="icon-btn" title={t(selected.kind === 'mesh' ? 'rebar.duplicate' : selected.kind === 'stirrup' ? 'rebar.stirrup.duplicateItem' : 'rebar.spatial.duplicateItem')} aria-label={t(selected.kind === 'mesh' ? 'rebar.duplicate' : selected.kind === 'stirrup' ? 'rebar.stirrup.duplicateItem' : 'rebar.spatial.duplicateItem')} onClick={() => selected.kind === 'mesh' ? duplicateMesh(selected.id) : selected.kind === 'stirrup' ? duplicateStirrup(selected.id) : duplicateBars(selected.id)}>
             <Icon name="copy" />
@@ -102,7 +112,9 @@ export default function RebarPanel({ readOnly = false }: { readOnly?: boolean })
           >
             <Icon name="trash" />
           </button>
-        </>}</div>
+        </>}
+          {part && <InspectorCloseButton onClick={() => setSelectedId(null)} />}
+        </div>
         <ReviewFields readOnly={readOnly}>{selected.kind === 'mesh' ? (
           <MeshDetail key={selected.id} mesh={selected} calibration={project.pages[selected.pageNumber]?.calibration ?? null} />
         ) : selected.kind === 'stirrup' ? <StirrupDetail key={selected.id} item={selected} /> : (
@@ -147,6 +159,11 @@ export default function RebarPanel({ readOnly = false }: { readOnly?: boolean })
       </div>
 
       </div>
+      {part === 'list' && <div className="panel-filter" role="group" aria-label={t('workspace.tabs.rebar')}>
+        {(['all', 'mesh', 'bars', 'stirrup'] as const).map((value) => <button key={value} aria-pressed={filter === value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>
+          {t(value === 'all' ? 'adaptive.allRebar' : value === 'mesh' ? 'adaptive.mesh' : value === 'bars' ? 'adaptive.bars' : 'adaptive.stirrups')}
+        </button>)}
+      </div>}
       {readOnly && <label className="adaptive-domain-picker">{t('workspace.tabs.rebar')}<select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
         <option value="all">{t('adaptive.allRebar')}</option><option value="mesh">{t('adaptive.mesh')}</option><option value="bars">{t('adaptive.bars')}</option><option value="stirrup">{t('adaptive.stirrups')}</option>
       </select></label>}
@@ -162,14 +179,16 @@ export default function RebarPanel({ readOnly = false }: { readOnly?: boolean })
           {items.filter((item) => filter === 'all' || item.kind === filter).map((item) => {
             const calc = calculateRebar(item, project.pages[item.pageNumber]?.calibration ?? null, project.pages);
             return (
-              <li key={item.id} onClick={() => select(item)}>
-                <span className="color-dot" style={{ background: REBAR_COLOR }} />
-                <span className="room-list-name" dir="auto">
-                  {markLabel(item, t)} · <span dir="ltr">{itemSummary(item, t, item.kind === 'bars' ? resolveStraightBars(item, project.pages[item.pageNumber]?.calibration ?? null, project.pages) : undefined)}</span>
+              <li key={item.id} className={`structural-row ${item.id === selectedId ? 'active' : ''}`} onClick={() => select(item)} title={markLabel(item, t)}>
+                {/* Approved design (boards 06 / 19): mark · name with its specification · weight. */}
+                <span className="structural-mark" dir="auto">{markCode(item)}</span>
+                <span className="structural-name">
+                  <span dir="auto">{t(itemKindKey(item))}</span>
+                  <small dir="ltr">{itemSummary(item, t, item.kind === 'bars' ? resolveStraightBars(item, project.pages[item.pageNumber]?.calibration ?? null, project.pages) : undefined)}</small>
                 </span>
                 {item.kind === 'stirrup' && <StirrupShapeThumbnail item={item} />}
                 {item.pageNumber !== currentPage && <span className="room-list-page">{t('concrete.page', { page: item.pageNumber })}</span>}
-                <span className="room-list-apt">{calc.weightKg === null ? '-' : `${calc.estimated ? '≈ ' : ''}${kg(calc.weightKg, t)}`}</span>
+                <span className="structural-value" title={calc.weightKg === null ? undefined : kg(calc.weightKg, t)}>{calc.weightKg === null ? '-' : `${calc.estimated ? '≈ ' : ''}${formatNumber(round(calc.weightKg, 1))}`}</span>
               </li>
             );
           })}
@@ -460,20 +479,17 @@ function MeshDetail({ mesh, calibration }: { mesh: RebarMesh; calibration: Calib
   return (
     <div className="room-detail">
       {message && <div className="warning-box">{message}</div>}
+      <div className="form-pair">
+        <label>{t('concrete.mark')}
+          <input dir="auto" value={mesh.mark} placeholder={markLabel(mesh, t)} onChange={(e) => updateItem(mesh.id, markPatch(siblings, mesh, e.target.value))} />
+        </label>
+        <label>{t('concrete.waste')}
+          <NumberField value={mesh.wastePercent} step="1" onChange={(v) => updateItem(mesh.id, { wastePercent: v ?? 0 })} />
+        </label>
+      </div>
       <MeshSheets mesh={mesh} result={sheets} />
       <Results calc={calc} showLength={false} purchaseWeight={sheets.procurementWeightKg} />
       {plan && <MeshLayoutControl planId={plan.id} mesh={mesh} calibration={calibration} />}
-
-      <div className="form-grid">
-        <div className="form-row">
-          <label>{t('concrete.mark')}</label>
-          <input dir="auto" value={mesh.mark} placeholder={markLabel(mesh, t)} onChange={(e) => updateItem(mesh.id, markPatch(siblings, mesh, e.target.value))} />
-        </div>
-        <div className="form-row">
-          <label>{t('concrete.waste')}</label>
-          <NumberField value={mesh.wastePercent} step="1" onChange={(v) => updateItem(mesh.id, { wastePercent: v ?? 0 })} />
-        </div>
-      </div>
 
       {/* Which reinforcement levels this zone has — Top and Bottom are the layers of steel. */}
       <span className="section-label">{t('rebar.levels')}</span>
@@ -554,6 +570,18 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
   return (
     <div className="room-detail">
       {calc.status !== 'ok' && <div className="warning-box">{statusMessage(calc, t)}</div>}
+      {/* Approved design (board 19): mark · diameter · waste in one row, the totals card under it. */}
+      <div className="form-trio">
+        <label>{t('concrete.mark')}
+          <input dir="auto" value={bars.mark} placeholder={markLabel(bars, t)} onChange={(e) => updateItem(bars.id, markPatch(siblings, bars, e.target.value))} />
+        </label>
+        <label>{t('rebar.diameter')}
+          <DiameterSelect value={bars.diameterMm} onChange={(mm) => updateItem(bars.id, { diameterMm: mm })} />
+        </label>
+        <label>{t('concrete.waste')}
+          <NumberField value={bars.wastePercent} step="1" onChange={(v) => updateItem(bars.id, { wastePercent: v ?? 0 })} />
+        </label>
+      </div>
       <Results calc={calc} showLength />
       <div className="concrete-kinds" role="group" aria-label={t('rebar.spatial.mode')}>
         <button className={`btn-ghost small ${bars.drawnBars === undefined ? 'active' : ''}`} aria-pressed={bars.drawnBars === undefined} disabled={bars.drawnBars !== undefined} onClick={() => startZone(bars.id)}>{t('rebar.spatial.area')}</button>
@@ -570,7 +598,7 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
         </div>
         {!selectedBar && bars.drawnBars.length > 0 && <p className="muted">{t('rebar.spatial.groupHint')}</p>}
         <p className="muted">{t('rebar.spatial.count', { count: calc.count ?? '-' })}</p>
-        {selectedBar && <section className="rebar-direction">
+        {selectedBar && <section className="rebar-direction rebar-selected-bar">
           <div className="rebar-direction-head">
             <span>{t('rebar.spatial.selectedBar')}</span>
             <button className="icon-btn" title={t('rebar.spatial.duplicateBar')} aria-label={t('rebar.spatial.duplicateBar')}
@@ -604,29 +632,15 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
         </label>
         {zone.lengthMode !== 'manual' && <p className="muted">{t('rebar.spatial.automaticLength')}: {calc.effectiveLengthM === null ? '-' : metres(calc.effectiveLengthM, t)}</p>}
       </>}
-      <div className="form-grid">
-        <div className="form-row">
-          <label>{t('concrete.mark')}</label>
-          <input dir="auto" value={bars.mark} placeholder={markLabel(bars, t)} onChange={(e) => updateItem(bars.id, markPatch(siblings, bars, e.target.value))} />
-        </div>
-        <div className="form-row">
-          <label>{t('rebar.diameter')}</label>
-          <DiameterSelect value={bars.diameterMm} onChange={(mm) => updateItem(bars.id, { diameterMm: mm })} />
-        </div>
-        {bars.drawnBars === undefined && <div className="form-row">
-          <label>{t('rebar.barCount')}</label>
+      {bars.drawnBars === undefined && <div className="form-pair">
+        <label>{t('rebar.barCount')}
           <NumberField value={bars.count || undefined} step="1" onChange={(v) => updateItem(bars.id, { count: v ?? 0 })} />
-        </div>}
-        {bars.drawnBars === undefined && (!zone || zone.lengthMode === 'manual') && <div className="form-row">
-          <label>{t('rebar.barLength')} ({t('units.m')})</label>
+        </label>
+        {(!zone || zone.lengthMode === 'manual') && <label>{t('rebar.barLength')} ({t('units.m')})
           <NumberField value={(zone ? zone.manualLengthM : bars.lengthM) || undefined} onChange={(v) => updateItem(bars.id,
             zone ? { barsZone: { ...zone, manualLengthM: v ?? 0 } } : { lengthM: v ?? 0 })} />
-        </div>}
-        <div className="form-row">
-          <label>{t('concrete.waste')}</label>
-          <NumberField value={bars.wastePercent} step="1" onChange={(v) => updateItem(bars.id, { wastePercent: v ?? 0 })} />
-        </div>
-      </div>
+        </label>}
+      </div>}
       <p className="muted">{t('concrete.page', { page: bars.pageNumber })}</p>
     </div>
   );
@@ -639,16 +653,19 @@ function StirrupDetail({ item }: { item: RebarStirrup }) {
   if (!plan) return null;
   const resolved = resolveStirrupItem(item, plan.pages);
   return <div className="room-detail">
-    <div className="form-grid">
-      <div className="form-row"><label>{t('concrete.mark')}</label>
-        <input dir="auto" value={item.mark} placeholder={markLabel(item, t)} onChange={(e) => update(item.id, markPatch(rebarOf(plan), item, e.target.value))} /></div>
-      <div className="form-row"><label>{t('rebar.diameter')}</label><DiameterSelect value={item.diameterMm} onChange={(mm) => update(item.id, { diameterMm: mm })} /></div>
-      <div className="form-row"><label>{t('concrete.waste')}</label><NumberField value={item.wastePercent} step="1" onChange={(v) => update(item.id, { wastePercent: v ?? 0 })} /></div>
+    <div className="form-trio">
+      <label>{t('concrete.mark')}
+        <input dir="auto" value={item.mark} placeholder={markLabel(item, t)} onChange={(e) => update(item.id, markPatch(rebarOf(plan), item, e.target.value))} /></label>
+      <label>{t('rebar.diameter')}<DiameterSelect value={item.diameterMm} onChange={(mm) => update(item.id, { diameterMm: mm })} /></label>
+      <label>{t('concrete.waste')}<NumberField value={item.wastePercent} step="1" onChange={(v) => update(item.id, { wastePercent: v ?? 0 })} /></label>
     </div>
     <StirrupShapeBuilder item={item} />
     <StirrupPlacements item={item} />
-    <p>{t('rebar.stirrup.quantity')}: {resolved.totalCount ?? '-'}</p>
-    <Results calc={resolved} showLength />
     {item.placements.length === 0 ? <p className="muted">{t('rebar.stirrup.noPlacements')}</p> : resolved.status !== 'ok' && <p className="cal-missing">{statusMessage(resolved, t)}</p>}
+    {/* Approved design (board 20): the totals stay pinned at the foot of the inspector. */}
+    <div className="rebar-totals-bar">
+      <p className="rebar-totals-count">{t('rebar.stirrup.quantity')}: <strong>{resolved.totalCount ?? '-'}</strong></p>
+      <Results calc={resolved} showLength />
+    </div>
   </div>;
 }

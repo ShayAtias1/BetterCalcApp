@@ -10,12 +10,25 @@ const MODES: { mode: CompareViewMode; icon: IconName }[] = [
   { mode: 'blink', icon: 'blink' },
 ];
 
-/** How the two plans are compared. The same segmented control as the sidebar tool groups. */
-export default function ViewModeSwitch() {
+/**
+ * How the two plans are compared. In the desktop header it is the centred segmented switch of the
+ * approved design (text only); elsewhere the icon segmented control.
+ */
+export default function ViewModeSwitch({ variant = 'tools' }: { variant?: 'tools' | 'tabs' }) {
   const viewMode = useCompareStore((s) => s.viewMode);
   const setViewMode = useCompareStore((s) => s.setViewMode);
   const t = useT();
 
+  if (variant === 'tabs') return (
+    <div className="segmented-tabs top-bar-domains" role="tablist" aria-label={t('compare.viewModes.label')}>
+      {MODES.map((m) => (
+        <button key={m.mode} role="tab" aria-selected={viewMode === m.mode} className={viewMode === m.mode ? 'active' : ''}
+          onClick={() => setViewMode(m.mode)} title={t(`compare.viewModes.${m.mode}Hint`)}>
+          {t(`compare.viewModes.${m.mode}`)}
+        </button>
+      ))}
+    </div>
+  );
   return (
     <div className="segmented compact" role="group" aria-label={t('compare.viewModes.label')}>
       {MODES.map((m) => (

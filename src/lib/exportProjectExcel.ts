@@ -6,7 +6,7 @@ import type { Plan, Project, ReportCategory } from '../types';
 import type { Language } from '../i18n';
 import { columnWidths, exportContext, type ExportContext } from './exportLanguage';
 import { calculateWorkItem, effectiveWastePercent, roomMetrics } from './quantities';
-import { buildProjectQuantities, planStatusLabel, roomCategoryQuantity, type ProjectQuantities } from './projectQuantities';
+import { buildProjectQuantities, planStatusText, roomCategoryQuantity, type ProjectQuantities } from './projectQuantities';
 import { workTypeDefinition } from './workTypes';
 import { round } from './geometry';
 import { sheetRef } from './excelSheetRef';
@@ -90,7 +90,7 @@ function addPlansSheet(workbook: ExcelJS.Workbook, q: ProjectQuantities, categor
       r.roomCount,
       r.calibratedPageCount,
       r.uncalibratedRoomCount,
-      planStatusLabel(r.status, t),
+      planStatusText(r, t),
       ...cols.map((c) => r.byCategory[c.category]?.[c.field] ?? 0),
     ]);
     styleBody(row, i % 2 === 0 ? C_ZEBRA_A : C_ZEBRA_B, fixed.length + 1);

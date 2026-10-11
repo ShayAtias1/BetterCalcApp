@@ -1,6 +1,7 @@
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { PLAN_NAVIGATION_CANCEL } from '../lib/interactionTargets';
-import { useId, useMemo, useRef, useEffect, type PointerEvent } from 'react';
+import { useId, useMemo, useRef, useEffect, useState, type PointerEvent } from 'react';
+import { createPortal } from 'react-dom';
 import type { Calibration, Plan, Point } from '../types';
 import type { RebarLevel, RebarMesh } from '../types/structural';
 import { useT } from '../i18n';
@@ -50,6 +51,9 @@ export function MeshLayoutControl({ planId, mesh, calibration }: { planId: strin
   useEffect(() => {
     if (editing === false && view.editing && preview?.status === 'ready' && visible && allowEditing) actions.setEditing(planId, mesh.id, true, preview, visible);
   }, [editing, view.editing, preview, visible, allowEditing, planId, mesh.id, actions]);
+  // The contextual toolbar is rendered over the plan, in the takeoff viewer.
+  const [barHost, setBarHost] = useState<HTMLElement | null>(null);
+  useEffect(() => { setBarHost(document.querySelector<HTMLElement>('.takeoff-workspace .viewer-area')); }, []);
   const message = preview && preview.status !== 'ready' ? t(MESSAGE_KEY[preview.status]) : null;
   return (
     <div className="rebar-layout-control">
@@ -66,24 +70,28 @@ export function MeshLayoutControl({ planId, mesh, calibration }: { planId: strin
           ))}
         </div>
       )}
-      {allowEditing && view.enabled && visible && preview?.status === 'ready' && level && (
-        <>
-          <button className="btn-ghost small" aria-pressed={editing} onClick={() => {
-            if (!editing) useAppStore.getState().setToolMode('select');
-            actions.setEditing(planId, mesh.id, !editing, preview, visible);
-          }}>{t(editing ? 'rebar.layout.exitEdit' : 'rebar.layout.edit')}</button>
-          {editing && <>
-            <button className="btn-ghost small" disabled={(levelProcurement?.sheets ?? 0) >= MAX_MESH_PREVIEW_SHEETS} onClick={() => editLayout(mesh.id, level, { type: 'add' })}>{t('rebar.layout.add')}</button>
-            {selected && <>
-              <p>{t('rebar.layout.selectedSheet', { number: selectedIndex + 1, count: levelProcurement?.sheets ?? 0 })}</p>
-              <div className="concrete-kinds" role="group" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              <button className="btn-ghost small" onClick={() => editLayout(mesh.id, level, { type: 'rotate', id: selected.id })}>{t('rebar.layout.rotate')}</button>
-              <button className="btn-ghost small" onClick={() => { editLayout(mesh.id, level, { type: 'remove', id: selected.id }); actions.setLevel(planId, mesh.id, level); }}>{t('rebar.layout.remove')}</button>
-              </div>
-            </>}
-            <button className="btn-ghost small" disabled={!mesh.manualLayouts?.[level]} onClick={() => { actions.resetLevel(planId, mesh.id, level); editLayout(mesh.id, level, { type: 'reset' }); }}>{t('rebar.layout.reset')}</button>
+      {/* Approved design (board 06): the inspector only starts editing; while editing, the layout's
+          actions sit in a dark contextual toolbar at the top of the plan. */}
+      {allowEditing && view.enabled && visible && preview?.status === 'ready' && level && !editing && (
+        <button className="btn-secondary small" onClick={() => {
+          useAppStore.getState().setToolMode('select');
+          actions.setEditing(planId, mesh.id, true, preview, visible);
+        }}>{t('rebar.layout.edit')}</button>
+      )}
+      {allowEditing && editing && preview?.status === 'ready' && level && (bar => barHost ? createPortal(bar, barHost) : bar)(
+        <div className={`mesh-layout-bar ${barHost ? '' : 'inline'}`} role="toolbar" aria-label={t('rebar.layout.edit')}>
+          <span className="mesh-layout-bar-title" role="status">
+            {t('rebar.layout.edit')}{selected ? ` · ${t('rebar.layout.selectedSheet', { number: selectedIndex + 1, count: levelProcurement?.sheets ?? 0 })}` : ''}
+          </span>
+          <button disabled={(levelProcurement?.sheets ?? 0) >= MAX_MESH_PREVIEW_SHEETS} onClick={() => editLayout(mesh.id, level, { type: 'add' })}>{t('rebar.layout.add')}</button>
+          {/* Sheet actions appear once a sheet is selected on the plan. */}
+          {selected && <>
+            <button onClick={() => { editLayout(mesh.id, level, { type: 'remove', id: selected.id }); actions.setLevel(planId, mesh.id, level); }}>{t('rebar.layout.remove')}</button>
+            <button onClick={() => editLayout(mesh.id, level, { type: 'rotate', id: selected.id })}>{t('rebar.layout.rotate')}</button>
           </>}
-        </>
+          <button disabled={!mesh.manualLayouts?.[level]} onClick={() => { actions.resetLevel(planId, mesh.id, level); editLayout(mesh.id, level, { type: 'reset' }); }}>{t('rebar.layout.reset')}</button>
+          <button className="mesh-layout-bar-done" onClick={() => actions.setEditing(planId, mesh.id, false, preview, visible)}>{t('rebar.layout.done')}</button>
+        </div>,
       )}
       {manual && <>
         <p role="status">{t('rebar.layout.manual')} · {t('rebar.layout.sheetCount', { count: levelProcurement!.sheets! })}</p>

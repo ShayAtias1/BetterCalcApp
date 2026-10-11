@@ -6,6 +6,7 @@ import { measurementLabel } from '../../lib/measurementValues';
 import { changeMeasurements, isChangeMeasurement } from '../../lib/changeMeasurements';
 import Icon, { type IconName } from '../Icon';
 import { useT } from '../../i18n';
+import type { PanelPart } from '../PanelPart';
 
 const MEASURE_TOOLS: MeasureTool[] = ['distance', 'area', 'perimeter'];
 const MEASURE_ICONS: Record<MeasureTool, IconName> = { distance: 'ruler', area: 'square', perimeter: 'circle' };
@@ -20,7 +21,7 @@ const AREA_CALC_MODES: { mode: AreaCalcMode; icon: IconName }[] = [
   { mode: 'wall', icon: 'dimension' },
 ];
 
-export default function MeasureToolbar() {
+export default function MeasureToolbar({ part }: { part?: PanelPart } = {}) {
   const t = useT();
   const comparison = useCompareStore((s) => s.comparison);
   const currentPageKey = useCompareStore((s) => s.currentPageKey);
@@ -72,6 +73,8 @@ export default function MeasureToolbar() {
 
   return (
     <div className="measure-toolbar">
+      {/* Desktop split: tools and settings in the inspector, the page's measurements in the side panel. */}
+      {part !== 'list' && <>
       {/* Calibration itself is reported once, in the context strip above the tabs; what belongs
           here is only whether measuring is allowed at all right now. */}
       {!canMeasure && (
@@ -109,10 +112,10 @@ export default function MeasureToolbar() {
           </p>
         )}
 
-        <button className="btn-ghost small full-width changes-panel-open" onClick={() => setChangesOpen(true)}>
+        {!part && <button className="btn-ghost small full-width changes-panel-open" onClick={() => setChangesOpen(true)}>
           <Icon name="table" />
           {pageChangeCount > 0 ? t('compare.measure.changesPanelCount', { count: pageChangeCount }) : t('compare.measure.changesPanel')}
-        </button>
+        </button>}
       </div>
 
       {/* Secondary: plain, unclassified measurements. */}
@@ -203,6 +206,12 @@ export default function MeasureToolbar() {
         </p>
       )}
 
+      </>}
+      {part !== 'detail' && <>
+      {part === 'list' && <button className="btn-ghost small full-width changes-panel-open" onClick={() => setChangesOpen(true)}>
+        <Icon name="table" />
+        {pageChangeCount > 0 ? t('compare.measure.changesPanelCount', { count: pageChangeCount }) : t('compare.measure.changesPanel')}
+      </button>}
       {measurements.length === 0 ? (
         <div className="empty-state">
           <Icon name="ruler" size={24} />
@@ -248,6 +257,7 @@ export default function MeasureToolbar() {
           })}
         </ul>
       )}
+      </>}
     </div>
   );
 }

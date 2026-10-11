@@ -64,7 +64,7 @@ export default function StartScreen() {
   const items: SavedItem[] = projects.map((p) => ({ id: p.project.id, name: p.project.name, meta: projectMeta(p, t) }));
 
   return (
-    <div className="home-panel">
+    <div className="home-panel projects-page">
       <div className="home-panel-head">
         <div className="home-panel-text">
           <h2>{t('startScreen.title')}</h2>

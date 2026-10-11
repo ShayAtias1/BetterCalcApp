@@ -16,11 +16,12 @@ export default function BrandLogo({ responsive = false }: { responsive?: boolean
 }
 
 /** The logo as the "home" button of every workspace header. */
-export function BrandHomeLink({ title, responsive = false }: { title: string; responsive?: boolean }) {
+export function BrandHomeLink({ title, responsive = false, mark = false }: { title: string; responsive?: boolean; mark?: boolean }) {
   const t = useT();
   return (
-    <button type="button" className={`app-brand app-brand-link ${responsive ? 'responsive-brand' : ''}`} onClick={() => void goHome()} title={title} aria-label={t('topBar.goHome')}>
-      <BrandLogo responsive={responsive} />
+    <button type="button" className={`app-brand app-brand-link ${responsive ? 'responsive-brand' : ''} ${mark ? 'app-brand-mark' : ''}`} onClick={() => void goHome()} title={title} aria-label={t('topBar.goHome')}>
+      {/* The desktop workspace headers carry the symbol only, leaving their width to the plan's context. */}
+      {mark ? <img className="app-brand-symbol" src={symbol} width={36} height={18} alt="BetterCalc" /> : <BrandLogo responsive={responsive} />}
     </button>
   );
 }

@@ -68,6 +68,16 @@ export function planStatusLabel(status: PlanQuantityStatus, tr: TranslateFn = t)
   return tr(`planStatus.${status}`);
 }
 
+/**
+ * A plan's status text for the overview and the project exports. "Partial" has two causes: rooms on
+ * uncalibrated sheets, or opening data still incomplete. A plan whose rooms are all calibrated says
+ * which one applies instead of reading as uncalibrated. The status itself is unchanged.
+ */
+export function planStatusText(report: { status: PlanQuantityStatus; uncalibratedRoomCount: number }, tr: TranslateFn = t): string {
+  if (report.status === 'partial' && report.uncalibratedRoomCount === 0) return tr('projectOverview.openingsIncompleteStatus');
+  return planStatusLabel(report.status, tr);
+}
+
 export interface PlanQuantityReport {
   plan: Plan;
   summaries: RoomQuantitySummary[];

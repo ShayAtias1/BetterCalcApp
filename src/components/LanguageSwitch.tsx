@@ -1,6 +1,8 @@
 import { LANGUAGES, useLanguageStore, useT, type Language } from '../i18n';
 
 const ORDER: Language[] = ['he', 'en'];
+/** The compact labels of the approved header; the full name is the button's accessible name. */
+const SHORT: Record<Language, string> = { he: 'עב', en: 'EN' };
 
 /**
  * The language selector: a two-option segmented control that sits last in every top bar's output
@@ -21,9 +23,11 @@ export default function LanguageSwitch({ labeled = false }: { labeled?: boolean 
           lang={code}
           className={code === language ? 'active' : ''}
           aria-pressed={code === language}
+          aria-label={LANGUAGES[code].nativeName}
+          title={LANGUAGES[code].nativeName}
           onClick={() => setLanguage(code)}
         >
-          {LANGUAGES[code].nativeName}
+          {SHORT[code]}
         </button>
       ))}
     </div>

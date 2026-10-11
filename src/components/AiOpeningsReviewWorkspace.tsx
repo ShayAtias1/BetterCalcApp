@@ -9,7 +9,8 @@ import type { PlanOpening } from '../types';
 import OpeningsPanel from './OpeningsPanel';
 
 /** Uses the same independent review window as room AI, with the drawing available for editing. */
-export default function AiOpeningsReviewWorkspace() {
+/** Without a part: the tablet/phone review window. With a part: one half of the desktop review workspace. */
+export default function AiOpeningsReviewWorkspace({ part }: { part?: 'queue' | 'detail' } = {}) {
   const t = useT();
   const plan = useAppStore(s => s.project), page = useAppStore(s => s.currentPage);
   const selectedId = useAppStore(s => s.selectedOpeningId);
@@ -46,8 +47,7 @@ export default function AiOpeningsReviewWorkspace() {
       select(next?.id ?? null);
     } catch { setError(t('openingTools.invalid')); }
   };
-  return <AiReviewWindow title={t('openingAiReview.title')} progress={t('openingAiReview.progress', { resolved, total: openings.length })} meaning={t('openingAiReview.progressMeaning')}
-    scope={`${plan.id}:${page}`} bodyId="ai-openings-review-body" openEvent={OPEN_OPENINGS_REVIEW} selectedId={selectedId}>
+  const queue = <>
       <nav className="ai-review-queue" aria-label={t('openingAiReview.title')}>
         <div className="ai-review-queue-head">
           <strong>{t('aiReviewWorkspace.pending', { count: pending.length })}</strong>
@@ -60,6 +60,8 @@ export default function AiOpeningsReviewWorkspace() {
           <span className="ai-review-queue-state">{o.approval.status === 'draft' ? !validatePlanOpening(plan, o).canApprove ? t('aiReviewWorkspace.blocked') : t('aiReviewWorkspace.pendingState') : t(`openingTools.${o.approval.status}`)}</span>
         </button></li>)}</ul>
       </nav>
+  </>;
+  const detail = <>
       <div className="ai-review-detail" key={selected?.id ?? 'none'}>
         {selected ? <>
           <header><strong dir="auto">{label(selected)}</strong></header>
@@ -78,8 +80,16 @@ export default function AiOpeningsReviewWorkspace() {
           </div>
         </> : <p className="muted">{t(pending.length ? 'openingAiReview.choose' : 'aiReviewWorkspace.complete')}</p>}
       </div>
+  </>;
+  const footer = <>
       <footer className="ai-review-workspace-footer"><span className="muted">{t('openingAiReview.progressMeaning')}</span>
         <button className="btn-secondary small" disabled={!pending.length} onClick={() => { actions().rejectPlanOpenings(pending.map(o => o.id)); select(null); }}>{t('aiReviewWorkspace.rejectAll')}</button>
       </footer>
+  </>;
+  if (part === 'queue') return <div className="ai-review-split ai-review-split-queue">{queue}{footer}</div>;
+  if (part === 'detail') return <div className="ai-review-split ai-review-split-detail">{detail}</div>;
+  return <AiReviewWindow title={t('openingAiReview.title')} progress={t('openingAiReview.progress', { resolved, total: openings.length })} meaning={t('openingAiReview.progressMeaning')}
+    scope={`${plan.id}:${page}`} bodyId="ai-openings-review-body" openEvent={OPEN_OPENINGS_REVIEW} selectedId={selectedId}>
+    {queue}{detail}{footer}
   </AiReviewWindow>;
 }

@@ -101,13 +101,23 @@ export default function ChangesPanel({ mobileOpen = false, onMobileClose }: { mo
   if (desktop && !open) {
     return (
       <div className="qty-panel-collapsed">
-        <button className="btn-ghost small qty-open-btn" onClick={() => setOpen(true)} title={t('compare.changes.open')}>
-          <Icon name="table" />
-          {t('compare.changes.title')}
-        </button>
-        <span className="muted">
+        <strong className="qty-panel-title">{t('compare.changes.title')}</strong>
+        <span className="muted qty-closed-count">
           {t('compare.changes.collapsedMeta', { count: all.length })} <Icon name="link" size={12} /> {activeRevision?.label ?? '-'}
         </span>
+        {/* The same closed totals as the quantities strip: what the review adds up to, at a glance. */}
+        {all.length > 0 && <span className="qty-closed-totals">
+          {CHANGE_KINDS.map((kind) => {
+            const totals = changeTotals(all, kind);
+            return <span key={kind}>
+              {t(`areaKinds.${kind}`)} <bdi className="tnum">{round(totals.areaM2, 2)}</bdi> {t('units.m2')}
+            </span>;
+          })}
+        </span>}
+        <button className="btn-secondary small qty-open-btn" onClick={() => setOpen(true)} title={t('compare.changes.open')}>
+          <Icon name="chevron-up" size={13} />
+          {t('compare.changes.openShort')}
+        </button>
       </div>
     );
   }
@@ -125,7 +135,6 @@ export default function ChangesPanel({ mobileOpen = false, onMobileClose }: { mo
         title={t('quantitiesPanel.resizeHint')}
       />}
       <header className="qty-panel-head">
-        <Icon name="table" size={18} />
         <h2 className="qty-panel-title">{t('compare.changes.title')}</h2>
         {/* The context, at meta weight: what is being reviewed against what. */}
         <span className="qty-panel-meta">
@@ -133,18 +142,18 @@ export default function ChangesPanel({ mobileOpen = false, onMobileClose }: { mo
         </span>
         <div className="qty-panel-actions">
           {/* All pages of this revision, or just the page on screen. */}
-          <div className="segmented changes-scope">
-            <button className={`tool-btn ${scope === 'all' ? 'active' : ''}`} onClick={() => setScope('all')} aria-pressed={scope === 'all'}>
-              <span className="tool-label">{t('compare.changes.allPages')}</span>
+          <div className="segmented-tabs small changes-scope">
+            <button className={scope === 'all' ? 'active' : ''} onClick={() => setScope('all')} aria-pressed={scope === 'all'}>
+              {t('compare.changes.allPages')}
             </button>
-            <button className={`tool-btn ${scope === 'page' ? 'active' : ''}`} onClick={() => setScope('page')} aria-pressed={scope === 'page'}>
-              <span className="tool-label">{t('common.page', { page: currentPageKey })}</span>
+            <button className={scope === 'page' ? 'active' : ''} onClick={() => setScope('page')} aria-pressed={scope === 'page'}>
+              {t('common.page', { page: currentPageKey })}
             </button>
           </div>
-          <button hidden={!desktop} className="icon-btn" onClick={toggleMaximized} title={maximized ? t('quantitiesPanel.restore') : t('quantitiesPanel.maximize')}>
+          <button hidden={!desktop} className="icon-btn bordered changes-maximize" onClick={toggleMaximized} title={maximized ? t('quantitiesPanel.restore') : t('quantitiesPanel.maximize')}>
             <Icon name={maximized ? 'collapse' : 'expand'} />
           </button>
-          <button className="icon-btn" onClick={() => desktop ? setOpen(false) : onMobileClose?.()} title={t('compare.changes.close')}>
+          <button className="icon-btn bordered" onClick={() => desktop ? setOpen(false) : onMobileClose?.()} title={t('compare.changes.close')}>
             <Icon name="close" />
           </button>
         </div>
