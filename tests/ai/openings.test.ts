@@ -59,10 +59,10 @@ test('a span that collapses at native floating point precision is rejected',()=>
   const data={openings:[{...saved.openings[0],geometryTile:'TILE_B',endpointA:{x:0,y:.2},endpointB:{x:Number.MIN_VALUE,y:.2},bbox:{x1:0,y1:.1,x2:.1,y2:.3}}],deferred:[],coverageNotes:[]};
   assert.throws(()=>parseOpeningResult(data,syntheticManifest(),'collapsed'),/Zero-length native/);
 });
-test('classification preserves separate kind, mechanism and access uncertainty',()=>{
+test('classification preserves identified mechanisms and defaults access by type',()=>{
   const expected={
-    'hinged-door':['door','hinged','unknown'],'sliding-door':['door','sliding','unknown'],
-    doorway:['door','open','unknown'],'open-passage':['open-passage','open','unknown'],
+    'hinged-door':['door','hinged','supported'],'sliding-door':['door','sliding','supported'],
+    doorway:['door','unknown','supported'],'open-passage':['open-passage','open','supported'],
     window:['window','unknown','unsupported'],'unknown-opening':['unknown','unknown','unknown'],
   };
   for(const [type,values] of Object.entries(expected))assert.deepEqual(Object.values(openingClassification(type as OpeningDetectionType)),values);

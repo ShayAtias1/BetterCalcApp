@@ -2,6 +2,8 @@ import { roomOpeningDisplay } from '../lib/openingQuantityReport';
 import { exportContext } from '../lib/exportLanguage';
 import { useLanguage } from '../i18n';
 import OpeningQuantitySummary from './OpeningQuantitySummary';
+import WorkBreakdownTable from './WorkBreakdownTable';
+import { planUsesWorkBreakdown } from '../lib/workAllocation';
 import { useMemo } from 'react';
 import { useT } from '../i18n';
 import { useAppStore } from '../store/appStore';
@@ -12,7 +14,7 @@ import {
   openingCountsText,
   usedReportCategories,
 } from '../lib/quantities';
-import { categoryPrimaryUnit, roomCategoryQuantity } from '../lib/projectQuantities';
+import { primaryReading, readingUnavailable, reportColumnInfo, roomCategoryQuantity } from '../lib/projectQuantities';
 import { round } from '../lib/geometry';
 import { projectWasteDefault, WORK_TYPE_DEFINITIONS } from '../lib/workTypes';
 import {
@@ -50,6 +52,8 @@ export default function QuantityTable({ showDefaults = false, onCloseDefaults, c
   const totals = useMemo(() => (project ? buildReportCategoryTotals(project, summaries) : []), [project, summaries]);
   // A column group per work type some room actually uses — none is shown just because it exists.
   const categories = useMemo(() => usedReportCategories(summaries), [summaries]);
+  // How each column is named and read: built-in categories as always, custom ones in their own unit.
+  const infos = useMemo(() => new Map(categories.map((c) => [c, reportColumnInfo(c, summaries, t)])), [categories, summaries, t]);
   const roomsById = useMemo(() => new Map((project?.rooms ?? []).map((r) => [r.id, r])), [project]);
 
   if (!project) return null;
@@ -71,7 +75,7 @@ export default function QuantityTable({ showDefaults = false, onCloseDefaults, c
         </div>
       ) : (
         <>
-          {categories.length === 0 && (
+          {categories.length === 0 && !planUsesWorkBreakdown(project) && (
             <p className="qty-table-hint muted">{t('quantityTable.noWorkItems')}</p>
           )}
           <div className="qty-table-scroll">
@@ -83,7 +87,7 @@ export default function QuantityTable({ showDefaults = false, onCloseDefaults, c
                     <th className="sticky-col col-room">{t('quantityTable.room')}</th>
                     {categories.map((c) => (
                       <th key={c} className="num group-edge">
-                        {t(`reportCategories.${c}`)} <span className="qty-group-unit">({categoryPrimaryUnit(c)})</span>
+                        {infos.get(c)!.label} <span className="qty-group-unit">({infos.get(c)!.unitLabel})</span>
                       </th>
                     ))}
                     <th className="group-edge">{t('quantityTable.openings')}</th>
@@ -100,7 +104,7 @@ export default function QuantityTable({ showDefaults = false, onCloseDefaults, c
                     <th className="spacer sticky-col col-room" />
                     {categories.map((c) => (
                       <th key={c} colSpan={2} className="group-edge">
-                        {t(`reportCategories.${c}`)} <span className="qty-group-unit">({categoryPrimaryUnit(c)})</span>
+                        {infos.get(c)!.label} <span className="qty-group-unit">({infos.get(c)!.unitLabel})</span>
                       </th>
                     ))}
                     <th colSpan={2} className="group-edge">
@@ -136,6 +140,8 @@ export default function QuantityTable({ showDefaults = false, onCloseDefaults, c
                       <td className="sticky-col col-room">{s.roomName}</td>
                       {categories.map((c) => {
                         const q = roomCategoryQuantity(s, c);
+                        const info = infos.get(c)!;
+                        const reading = primaryReading(q, info);
                         // The room has no item of this type: a quiet dash, not a number.
                         if (q.wastePercent == null) {
                           if (compact) return <td key={c} className="num group-edge qty-none">{DASH}</td>;
@@ -144,8 +150,8 @@ export default function QuantityTable({ showDefaults = false, onCloseDefaults, c
                             <td key={`${c}-order`} className="num qty-none">{DASH}</td>,
                           ];
                         }
-                        // An unscaled page: say why the cell is blank instead of showing 0.
-                        if (!s.pageCalibrated) {
+                        // An unscaled page: say why the cell is blank instead of showing 0 (typed quantities always have a number).
+                        if (readingUnavailable(s, q)) {
                           if (compact) return <td key={c} className="num group-edge"><span className="cal-missing">{t('quantities.notCalibrated')}</span></td>;
                           return [
                             <td key={`${c}-net`} className="num group-edge">
@@ -157,15 +163,17 @@ export default function QuantityTable({ showDefaults = false, onCloseDefaults, c
                           ];
                         }
                         const panels = c === 'panels';
+                        // Strips (skirting and custom perimeter work) are read in metres with their m² under them.
+                        const strip = info.unit === 'lm' && info.hasArea;
                         const netSub: string[] = [];
                         const orderSub: string[] = [t('quantityTable.waste', { percent: q.wastePercent })];
                         // The deduction reads as one short word under the net; hovering spells out
                         // gross − deduction = net.
                         let netTitle: string | undefined;
-                        if (panels) {
+                        if (strip) {
                           netSub.push(`${q.quantityM2 ?? 0} ${t('units.m2')}`);
                           orderSub.push(`${q.orderM2 ?? 0} ${t('units.m2')}`);
-                          const doors = s.panelsDeductedLengthM ?? 0;
+                          const doors = panels ? s.panelsDeductedLengthM ?? 0 : 0;
                           if (doors > 0 && q.lengthM != null) {
                             netSub.push(t('quantityTable.deduction', { amount: doors }));
                             netTitle = t('quantityTable.doorsTitle', { gross: round(q.lengthM + doors, 2), doors, net: q.lengthM, unit: t('units.lm') });
@@ -185,19 +193,19 @@ export default function QuantityTable({ showDefaults = false, onCloseDefaults, c
                         if (compact) {
                           return (
                             <td key={c} className="num group-edge qty-pair" title={[netTitle, ...netSub, ...orderSub].filter(Boolean).join('\n')}>
-                              <span className="qty-pair-net">{panels ? q.lengthM : q.quantityM2}</span>
+                              <span className="qty-pair-net">{reading.net}</span>
                               <span className="qty-pair-sep" aria-hidden="true">·</span>
-                              <span className="qty-pair-order">{panels ? q.orderLengthM : q.orderM2}</span>
+                              <span className="qty-pair-order">{reading.order}</span>
                             </td>
                           );
                         }
                         return [
                           <td key={`${c}-net`} className="num group-edge" title={netTitle}>
-                            <span className="qty-main">{panels ? q.lengthM : q.quantityM2}</span>
+                            <span className="qty-main">{reading.net}</span>
                             {netSub.length > 0 && <span className="qty-sub">{netSub.join(' · ')}</span>}
                           </td>,
                           <td key={`${c}-order`} className="num order">
-                            <span className="qty-main">{panels ? q.orderLengthM : q.orderM2}</span>
+                            <span className="qty-main">{reading.order}</span>
                             <span className="qty-sub">{orderSub.join(' · ')}</span>
                           </td>,
                         ];
@@ -238,12 +246,12 @@ export default function QuantityTable({ showDefaults = false, onCloseDefaults, c
                     {categories.map((c) => {
                       const total = totals.find((item) => item.category === c);
                       if (!total) return <td key={c} className="num group-edge qty-none">{DASH}</td>;
-                      const panels = c === 'panels';
+                      const reading = primaryReading(total, infos.get(c)!);
                       return (
                         <td key={c} className="num group-edge qty-pair">
-                          <span className="qty-pair-net">{panels ? total.lengthM ?? DASH : total.quantityM2}</span>
+                          <span className="qty-pair-net">{reading.net ?? DASH}</span>
                           <span className="qty-pair-sep" aria-hidden="true">·</span>
-                          <span className="qty-pair-order">{panels ? total.orderLengthM ?? DASH : total.orderM2}</span>
+                          <span className="qty-pair-order">{reading.order ?? DASH}</span>
                         </td>
                       );
                     })}
@@ -275,19 +283,25 @@ export default function QuantityTable({ showDefaults = false, onCloseDefaults, c
                 </tr>
               </thead>
               <tbody>
-                {totals.map((total) => (
-                  <tr key={total.category}>
-                    <td>{t(`reportCategories.${total.category}`)}</td>
-                    <td>{total.lengthM ?? DASH}</td>
-                    <td>{total.quantityM2}</td>
-                    <td>{total.wastePercent}%</td>
-                    <td className="order">{total.orderLengthM ?? DASH}</td>
-                    <td className="order">{total.orderM2}</td>
-                  </tr>
-                ))}
+                {totals.map((total) => {
+                  const info = reportColumnInfo(total.category, summaries, t);
+                  // A counted column has neither metres nor m²: its count reads in the quantity columns, with its unit.
+                  const counted = info.unit === 'unit';
+                  return (
+                    <tr key={total.category}>
+                      <td>{info.label}</td>
+                      <td>{total.lengthM ?? DASH}</td>
+                      <td>{counted ? `${total.count ?? 0} ${info.unitLabel}` : info.hasArea ? total.quantityM2 : DASH}</td>
+                      <td>{total.wastePercent}%</td>
+                      <td className="order">{total.orderLengthM ?? DASH}</td>
+                      <td className="order">{counted ? `${total.orderCount ?? 0} ${info.unitLabel}` : info.hasArea ? total.orderM2 : DASH}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>}
+          <WorkBreakdownTable plan={project} />
         </>
       )}
       </div>
@@ -380,14 +394,14 @@ export default function QuantityTable({ showDefaults = false, onCloseDefaults, c
             const def = WORK_TYPE_DEFINITIONS[c];
             return (
               <div className="form-row inline" key={c}>
-                <label>{t('quantityTable.workTypeWaste', { label: t(`workTypes.${def.id}`) })}</label>
+                <label>{t('quantityTable.workTypeWaste', { label: t(`workTypes.${c}`) })}</label>
                 <input
                   type="number"
                   step="1"
                   min="0"
                   max="100"
                   value={projectWasteDefault(def, project)}
-                  onChange={(e) => updateProjectMeta({ [def.wasteDefaultField]: parseFloat(e.target.value) || 0 })}
+                  onChange={(e) => updateProjectMeta({ [def.wasteDefaultField!]: parseFloat(e.target.value) || 0 })}
                 />
               </div>
             );

@@ -4,8 +4,9 @@ import { useT, formatNumber, type TranslateFn } from '../i18n';
 import type { Plan } from '../types';
 import type { PlanFocus } from '../store/planFocusStore';
 import { showOnPlan } from '../lib/showOnPlan';
+import { workItemLabel } from '../lib/workCatalog';
 import { buildRoomSummaries, usedReportCategories } from '../lib/quantities';
-import { categoryPrimaryUnit, roomCategoryQuantity } from '../lib/projectQuantities';
+import { primaryReading, reportColumnInfo, roomCategoryQuantity } from '../lib/projectQuantities';
 import { buildConcreteItems, buildRebarLevelRows } from '../lib/structuralQuantities';
 import { concreteOf, rebarOf, rebarItemsOnPages } from '../lib/structuralPlan';
 import { markLabel } from '../lib/structuralMarks';
@@ -42,12 +43,12 @@ function reviewItems(plan: Plan, t: TranslateFn, quantityPage?: number): ReviewI
     const summary = summaries.find((s) => s.roomId === room.id)!;
     const quantities = usedReportCategories([summary]).map((category) => {
       const q = roomCategoryQuantity(summary, category);
-      const net = category === 'panels' ? q.lengthM : q.quantityM2;
-      const order = category === 'panels' ? q.orderLengthM : q.orderM2;
-      return `${t(`reportCategories.${category}`)}: ${amount(net, categoryPrimaryUnit(category, t))} · ${t('phoneReview.order')}: ${amount(order, categoryPrimaryUnit(category, t))}`;
+      const info = reportColumnInfo(category, [summary], t);
+      const { net, order } = primaryReading(q, info);
+      return `${info.label}: ${amount(net, info.unitLabel)} · ${t('phoneReview.order')}: ${amount(order, info.unitLabel)}`;
     });
     if (!summary.pageCalibrated) quantities.push(t('quantities.notCalibrated'));
-    rows.push({ key: `${plan.id}:${room.id}`, name: room.name, type: 'room', specification: [room.apartmentNumber, room.notes, ...room.workItems.map((w) => t(`workTypes.${w.type}`))].filter(Boolean).join(' · '), quantities, target: target(room.pageNumber, 'room', room.id, room.points), planName: plan.name });
+    rows.push({ key: `${plan.id}:${room.id}`, name: room.name, type: 'room', specification: [room.apartmentNumber, room.notes, ...room.workItems.map((w) => workItemLabel(w, plan, t))].filter(Boolean).join(' · '), quantities, target: target(room.pageNumber, 'room', room.id, room.points), planName: plan.name });
   }
   const concrete = concreteOf(plan);
   for (const row of buildConcreteItems(plan)) {

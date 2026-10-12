@@ -1,16 +1,27 @@
-import type { Plan, Room, WorkItem, WorkType } from '../types';
+import type { Plan, Room, WorkCatalogSnapshot, WorkItem } from '../types';
 import { effectiveHeightM, effectiveWastePercent, itemDeductsOpenings } from './quantities';
-import { workTypeDefinition } from './workTypes';
+import { workItemDefinition } from './workTypes';
+import { withCatalogEntries } from './workCatalog';
 import { polygonAreaPx } from './geometry';
 
 export type BulkConflictPolicy = 'add-missing' | 'update-existing' | 'skip-conflicts';
-export type BulkWorkConfig = Omit<WorkItem, 'id'>;
+/**
+ * A work item to assign to many rooms: a built-in work type, a user-defined category, or a work item
+ * with its own method (type 'custom' with `categoryId`, `method` and optionally `specId`).
+ */
+export type BulkWorkConfig = Omit<WorkItem, 'id' | 'allocations'>;
+
+/** What makes two items "the same work" for bulk assignment: the built-in type, or category + method + work item. */
+export function bulkConfigKey(item: Pick<WorkItem, 'type' | 'categoryId' | 'method' | 'specId'>): string {
+  return item.type === 'custom' ? `custom:${item.categoryId ?? ''}|${item.method ?? ''}|${item.specId ?? ''}` : item.type;
+}
 export type BulkIssue = 'calibration' | 'geometry' | 'configuration' | 'duplicate' | 'unavailable';
 export interface BulkRoomChange {
   roomId: string;
   status: 'updated' | 'skipped' | 'blocked';
   issues: BulkIssue[];
-  conflicts: WorkType[];
+  /** Keys (`bulkConfigKey`) of the configured work the room already has. */
+  conflicts: string[];
   additions: BulkWorkConfig[];
   updates: { itemId: string; config: BulkWorkConfig }[];
 }
@@ -29,9 +40,11 @@ export function bulkRooms(plan: Plan): Room[] { return plan.rooms.filter(r => r.
 
 /** Strip IDs and unsupported fields, and explicitly clear obsolete configuration on updates. */
 function cleanConfig(config: BulkWorkConfig): BulkWorkConfig {
-  const def = workTypeDefinition(config.type);
+  const def = workItemDefinition(config);
   return {
     type: config.type,
+    // Custom work keeps its identity; built-in configurations keep exactly their established shape.
+    ...(config.type === 'custom' ? { categoryId: config.categoryId, method: config.method, ...(config.specId ? { specId: config.specId } : {}) } : {}),
     tilingCategory: config.type === 'tiling' ? config.tilingCategory ?? 'regular' : undefined,
     heightM: def?.height ? config.heightM : undefined,
     wastePercent: config.wastePercent,
@@ -39,8 +52,9 @@ function cleanConfig(config: BulkWorkConfig): BulkWorkConfig {
   };
 }
 export function validBulkConfig(config: BulkWorkConfig, plan: Plan): boolean {
-  const def = workTypeDefinition(config.type);
+  const def = workItemDefinition(config);
   if (!def) return false;
+  if (config.type === 'custom' && !config.categoryId) return false;
   if (config.type === 'tiling' && config.tilingCategory !== undefined && !['regular', 'as'].includes(config.tilingCategory)) return false;
   if (config.heightM !== undefined && (!Number.isFinite(config.heightM) || config.heightM < 0)) return false;
   if (config.wastePercent !== undefined && (!Number.isFinite(config.wastePercent) || config.wastePercent < 0 || config.wastePercent > 100)) return false;
@@ -63,24 +77,26 @@ function configurationMatches(item: WorkItem, config: BulkWorkConfig, plan: Plan
 export function planBulkTakeoff(plan: Plan, roomIds: string[], configs: BulkWorkConfig[], policy: BulkConflictPolicy): BulkPreview {
   const ids = [...new Set(roomIds)];
   const roomMap = new Map(plan.rooms.map(r => [r.id, r]));
-  const configTypes = configs.map(c => c.type);
-  const invalid = !configs.length || new Set(configTypes).size !== configTypes.length ||
+  const configKeys = configs.map(bulkConfigKey);
+  const invalid = !configs.length || new Set(configKeys).size !== configKeys.length ||
     !['add-missing', 'update-existing', 'skip-conflicts'].includes(policy) || configs.some(c => !validBulkConfig(c, plan));
   const settings = configs.map(cleanConfig);
+  // Typed (manual) quantities need no scale; a scale is required only when something is measured.
+  const measured = settings.some(c => workItemDefinition(c)?.basis !== 'manual');
   const entries = ids.map((roomId): BulkRoomChange => {
     const room = roomMap.get(roomId);
     const entry: BulkRoomChange = { roomId, status: 'skipped', issues: [], conflicts: [], additions: [], updates: [] };
     if (!room?.closed) { entry.status = 'blocked'; entry.issues.push('unavailable'); return entry; }
-    entry.conflicts = configTypes.filter(type => room.workItems.some(w => w.type === type));
+    entry.conflicts = configKeys.filter(key => room.workItems.some(w => bulkConfigKey(w) === key));
     if (invalid) entry.issues.push('configuration');
     const mpp = plan.pages[room.pageNumber]?.calibration?.metersPerPixel;
-    if (!mpp || !Number.isFinite(mpp) || mpp <= 0) entry.issues.push('calibration');
+    if (measured && (!mpp || !Number.isFinite(mpp) || mpp <= 0)) entry.issues.push('calibration');
     if (room.points.length < 3 || room.points.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y)) || !(polygonAreaPx(room.points) > 0)) entry.issues.push('geometry');
-    if (policy === 'update-existing' && settings.some(c => room.workItems.filter(w => w.type === c.type).length > 1)) entry.issues.push('duplicate');
+    if (policy === 'update-existing' && settings.some(c => room.workItems.filter(w => bulkConfigKey(w) === bulkConfigKey(c)).length > 1)) entry.issues.push('duplicate');
     if (entry.issues.length) { entry.status = 'blocked'; return entry; }
     if (policy === 'skip-conflicts' && entry.conflicts.length) return entry;
     for (const config of settings) {
-      const existing = room.workItems.find(w => w.type === config.type);
+      const existing = room.workItems.find(w => bulkConfigKey(w) === bulkConfigKey(config));
       if (!existing) entry.additions.push(config);
       else if (policy === 'update-existing' && !configurationMatches(existing, config, plan)) entry.updates.push({ itemId: existing.id, config });
     }
@@ -96,11 +112,15 @@ export function planBulkTakeoff(plan: Plan, roomIds: string[], configs: BulkWork
   };
 }
 
-/** One immutable replacement. Unrelated items, room geometry, classifications and openings stay intact. */
-export function materializeBulkTakeoff(plan: Plan, preview: BulkPreview, makeId: () => string): Plan {
+/**
+ * One immutable replacement. Unrelated items, room geometry, classifications and openings stay intact.
+ * `catalog`: the catalog entries custom configurations refer to, copied into the plan's snapshot.
+ */
+export function materializeBulkTakeoff(plan: Plan, preview: BulkPreview, makeId: () => string, catalog?: Partial<WorkCatalogSnapshot>): Plan {
   if (plan.id !== preview.planId || !preview.changedCount) return plan;
   const changes = new Map(preview.entries.filter(e => e.status === 'updated').map(e => [e.roomId, e]));
-  return { ...plan, updatedAt: Date.now(), rooms: plan.rooms.map(room => {
+  const base = catalog ? withCatalogEntries(plan, catalog) : plan;
+  return { ...base, updatedAt: Date.now(), rooms: plan.rooms.map(room => {
     const change = changes.get(room.id);
     if (!change) return room;
     const updates = new Map(change.updates.map(u => [u.itemId, u.config]));

@@ -5,11 +5,11 @@
  * (`workTypes.<id>`, and `workTypeHeights.<id>` for its height input).
  */
 
-import type { OpeningType, Plan, WorkType } from '../types';
+import type { CalculationMethod, OpeningType, Plan, WorkItem, WorkItemType, WorkType } from '../types';
 import { MEASUREMENT_DEFAULTS } from '../config/measurementDefaults';
 
-/** A quantity's unit, as a dictionary key under `units`: square metres or running metres. */
-export type QuantityUnit = 'm2' | 'lm';
+/** A quantity's unit, as a dictionary key under `units`: square metres, running metres or units (counted). */
+export type QuantityUnit = 'm2' | 'lm' | 'unit';
 
 /**
  * - floorArea: the room polygon's area.
@@ -17,8 +17,9 @@ export type QuantityUnit = 'm2' | 'lm';
  * - perimeter: running metres along the perimeter, minus applicable opening widths; the m² reading
  *   is that length × the strip height.
  * - floorAndUpturn: floor area plus a perimeter strip turned up the walls (perimeter × height).
+ * - manual: the quantity typed on the item (`WorkItem.manualQuantity`), in the definition's unit.
  */
-export type CalculationBasis = 'floorArea' | 'wallArea' | 'perimeter' | 'floorAndUpturn';
+export type CalculationBasis = 'floorArea' | 'wallArea' | 'perimeter' | 'floorAndUpturn' | 'manual';
 
 /** Plan fields that hold the user's per-project default waste %. */
 export type WasteDefaultField =
@@ -33,14 +34,14 @@ export type WasteDefaultField =
 type HeightDefaultField = 'defaultCladdingHeightM' | 'defaultPanelHeightM' | 'wallHeightDefaultM';
 
 export interface WorkTypeDefinition {
-  id: WorkType;
+  id: WorkItemType;
   /** Unit of the item's primary quantity. */
   unit: QuantityUnit;
   basis: CalculationBasis;
   /** Waste % when neither the item nor the project sets one. */
   defaultWastePercent: number;
-  /** Where the project keeps its own default waste % for this type. */
-  wasteDefaultField: WasteDefaultField;
+  /** Where the project keeps its own default waste % for this type (built-in types only). */
+  wasteDefaultField?: WasteDefaultField;
   /** Whether openings are deducted unless the item says otherwise (`WorkItem.deductOpenings`). */
   deductsOpenings: boolean;
   /** Opening types that reduce this work. Empty = openings never affect it. */
@@ -121,12 +122,58 @@ export const WORK_TYPE_DEFINITIONS: Record<WorkType, WorkTypeDefinition> = {
 export const WORK_TYPE_ORDER: WorkType[] = ['tiling', 'cladding', 'panels', 'painting', 'plaster', 'waterproofing'];
 
 /** Tolerates a work type this build doesn't know (a project saved by a newer version): it counts as nothing. */
-export function workTypeDefinition(type: WorkType): WorkTypeDefinition | undefined {
-  return WORK_TYPE_DEFINITIONS[type];
+export function workTypeDefinition(type: WorkItemType): WorkTypeDefinition | undefined {
+  return Object.hasOwn(WORK_TYPE_DEFINITIONS, type) ? WORK_TYPE_DEFINITIONS[type as WorkType] : undefined;
+}
+
+export const CALCULATION_METHODS: CalculationMethod[] = ['floorArea', 'wallArea', 'ceilingArea', 'perimeter', 'manualArea', 'manualLength', 'manualCount'];
+
+const WALL_OPENINGS: OpeningType[] = ['door', 'window', 'custom'];
+
+/**
+ * The calculation of a user-defined category, by method — the same bases the built-in types use, so
+ * a custom wall finish deducts openings exactly like paint, and a custom strip like skirting.
+ * The ceiling is measured as the room's floor area; it is reported as its own surface.
+ */
+export const METHOD_DEFINITIONS: Record<CalculationMethod, WorkTypeDefinition> = {
+  floorArea: { id: 'custom', unit: 'm2', basis: 'floorArea', defaultWastePercent: 0, deductsOpenings: false, deductedOpeningTypes: [] },
+  ceilingArea: { id: 'custom', unit: 'm2', basis: 'floorArea', defaultWastePercent: 0, deductsOpenings: false, deductedOpeningTypes: [] },
+  wallArea: {
+    id: 'custom', unit: 'm2', basis: 'wallArea', defaultWastePercent: 0, deductsOpenings: true, deductedOpeningTypes: WALL_OPENINGS,
+    height: { projectField: 'wallHeightDefaultM', fallbackM: MEASUREMENT_DEFAULTS.wallHeightM },
+  },
+  perimeter: {
+    id: 'custom', unit: 'lm', basis: 'perimeter', defaultWastePercent: 0, deductsOpenings: true, deductedOpeningTypes: ['door'],
+    height: { projectField: 'defaultPanelHeightM', fallbackM: MEASUREMENT_DEFAULTS.panelHeightM },
+  },
+  manualArea: { id: 'custom', unit: 'm2', basis: 'manual', defaultWastePercent: 0, deductsOpenings: false, deductedOpeningTypes: [] },
+  manualLength: { id: 'custom', unit: 'lm', basis: 'manual', defaultWastePercent: 0, deductsOpenings: false, deductedOpeningTypes: [] },
+  manualCount: { id: 'custom', unit: 'unit', basis: 'manual', defaultWastePercent: 0, deductsOpenings: false, deductedOpeningTypes: [] },
+};
+
+export function isCalculationMethod(value: unknown): value is CalculationMethod {
+  return typeof value === 'string' && (CALCULATION_METHODS as string[]).includes(value);
+}
+
+/**
+ * The definition an item calculates with: its built-in type's, or its own method's for a custom
+ * item. undefined only for a type this build does not know, or a custom item without a valid
+ * method — which the UI and reports flag instead of counting as zero.
+ */
+export function workItemDefinition(item: Pick<WorkItem, 'type' | 'method'>): WorkTypeDefinition | undefined {
+  if (item.type === 'custom') return isCalculationMethod(item.method) ? METHOD_DEFINITIONS[item.method] : undefined;
+  return workTypeDefinition(item.type);
+}
+
+/** The method a built-in type corresponds to, for labelling reports ('floorAndUpturn' has no custom equivalent). */
+export function builtInMethodKey(type: WorkType): CalculationMethod | 'floorAndUpturn' {
+  const basis = WORK_TYPE_DEFINITIONS[type].basis;
+  return basis === 'floorAndUpturn' ? 'floorAndUpturn' : basis === 'manual' ? 'manualArea' : basis;
 }
 
 /** Plan default waste % for a work type (before the AS-tiling special case in lib/quantities). */
 export function projectWasteDefault(def: WorkTypeDefinition, project: Plan): number {
+  if (!def.wasteDefaultField) return def.defaultWastePercent;
   const v = project[def.wasteDefaultField];
   return typeof v === 'number' && Number.isFinite(v) ? v : def.defaultWastePercent;
 }

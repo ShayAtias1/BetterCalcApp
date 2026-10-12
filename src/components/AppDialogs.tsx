@@ -12,6 +12,11 @@ function RequestDialog({ request: d }: { request: DialogRequest }) {
   return <AppModal title={d.title ?? t(d.kind === 'prompt' ? 'dialogs.inputTitle' : d.destructive ? 'dialogs.deleteTitle' : d.kind === 'message' ? 'dialogs.noticeTitle' : 'dialogs.confirmTitle')} onCancel={cancel} descriptionId={`dialog-message-${d.id}`}>
     <form onSubmit={e => { e.preventDefault(); settleDialog(d.id, d.kind === 'prompt' ? value.trim() : true); }}>
       <p className="app-dialog-message" id={`dialog-message-${d.id}`}>{d.message}</p>
+      {d.notice && <p className="app-dialog-message" role="note">{d.notice}</p>}
+      {d.disclosure && <details>
+        <summary>{t('aiConfirmation.privacy')}</summary>
+        <p className="app-dialog-message">{d.disclosure}</p>
+      </details>}
       {d.kind === 'prompt' && <input className="app-dialog-input" autoFocus dir="auto" aria-labelledby={`dialog-message-${d.id}`}
         value={value} onChange={e => setValue(e.target.value)} required />}
       <div className="modal-actions">

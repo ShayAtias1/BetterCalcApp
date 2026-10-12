@@ -14,7 +14,17 @@ test('opening review reuses room dock/editor and keeps review decisions explicit
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     await page.route(/\/ai\/(?:health|opening-)/, route => { errors.push('Unexpected AI request'); return route.abort(); });
-    const html = await server.transformIndexHtml('/review-test', '<html lang="he" dir="rtl"><body><div id="root"></div></body></html>');
+    // Isolate review rendering from background PDF activation; transport is never exercised here.
+    await page.route('**/src/lib/ai/workflow.ts', route => route.fulfill({contentType:'text/javascript',body:`
+      import {create} from '/node_modules/.vite/deps/zustand.js';
+      export const useAiWorkflow=create(()=>({jobs:[],ready:true,error:null,sourceHash:null,resolvedIds:[],reviewScope:null}));
+      export const initializeAiWorkflow=async()=>{};
+      export const activateAiPage=async()=>{};
+      export const startAiDetection=async()=>{};
+      export const armOneClick=()=>{};
+      export const cancelOneClick=()=>{};
+    `}));
+    const html = await server.transformIndexHtml('/review-test', '<html lang="he" dir="rtl"><body><div class="workspace" style="height:100vh"><header class="top-bar" style="height:60px"></header><div id="root"></div></div></body></html>');
     await page.route('**/review-test', route => route.fulfill({ contentType: 'text/html', body: html }));
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/review-test`);
     await page.evaluate(async () => {
@@ -72,6 +82,7 @@ test('opening review reuses room dock/editor and keeps review decisions explicit
     assert.equal(await queue.locator('li').count(), 3);
     assert.deepEqual(await roomDock.locator('.ai-review-launcher').boundingBox(),roomLauncherBefore);
     assert.deepEqual(await dock.locator('.ai-review-launcher').boundingBox(),openingLauncherBefore);
+    await dock.getByRole('button',{name:'צמצם תצוגה',exact:true}).click();
     const compact = await dock.locator('.ai-review-window').boundingBox();
     await dock.getByRole('button',{name:'הארכת תצוגה',exact:true}).click();
     const extended = await dock.locator('.ai-review-window').boundingBox();
@@ -145,7 +156,7 @@ test('opening review reuses room dock/editor and keeps review decisions explicit
     await page.evaluate(() => { window.renderReview(); });
     assert.ok(await dock.locator('.ai-review-launcher').innerText().then(t => t.includes('2 / 3')));
     assert.equal(await dock.locator('.ai-review-window').count(),0);
-    await page.locator('aside').getByRole('button',{name:'עריכה · Door A',exact:true}).click();
+    await page.locator('aside .opening-list-item').filter({hasText:'Door A'}).click();
     assert.equal(await dock.locator('.ai-review-window').count(),1);
     await dock.getByRole('button',{name:'סגירת החלונית',exact:true}).click();
     assert.equal(await dock.locator('.ai-review-window').count(),0);
@@ -155,8 +166,8 @@ test('opening review reuses room dock/editor and keeps review decisions explicit
     const openingBoxes = page.locator('aside').getByRole('checkbox',{name:/למחיקה$/});
     const firstRow = page.locator('aside .opening-list-row').first();
     const box = await firstRow.locator('input[type=checkbox]').boundingBox();
-    const edit = await firstRow.getByRole('button',{name:'עריכה · Door A',exact:true}).boundingBox();
-    assert.ok(box.x < edit.x);
+    const edit = await firstRow.locator('.opening-list-item').boundingBox();
+    assert.ok(box.x > edit.x);
     await openingBoxes.first().check();
     await allOpenings.check();
     assert.ok(await page.locator('aside').getByRole('status').innerText().then(t=>t.includes('5 פתחים נבחרו')));

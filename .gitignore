@@ -42,3 +42,7 @@ demo/video/public/
 
 # Original provider captures/customer-plan fixtures stay local; tests use synthetic data.
 tests/ai/fixtures/openings-vision-002/
+
+# Generated local report exports and review artifacts.
+/output/
+/outputs/

@@ -1,19 +1,19 @@
 import type { LegacyOpeningRef, NewPlanOpening, Plan, PlanOpening, PlanOpeningPatch, Room } from '../types';
 
+import { openingKinds, openingMechanisms, openingDimensionFields, openingAccessDefault, mechanismsForOpening } from './openingOptions';
+
 /** Pure reader: old plans stay byte-for-byte untouched. No lazy/destructive migration. */
 export function openingsOf(plan: Plan): PlanOpening[] {
   return Array.isArray(plan.openings) ? plan.openings : [];
 }
 const refKey = (ref: LegacyOpeningRef) => JSON.stringify([ref.roomId, ref.openingId]);
-const kinds = ['door', 'window', 'open-passage', 'custom', 'unknown'];
-const mechanisms = ['hinged', 'sliding', 'fixed', 'open', 'unknown'];
 const access = ['supported', 'unsupported', 'unknown'];
 
 export function validatePlanOpening(plan: Plan, opening: PlanOpening): { errors: string[]; warnings: string[]; canApprove: boolean } {
   const errors: string[] = [], warnings: string[] = [];
   if (!opening.id || opening.planId !== plan.id) errors.push('Invalid opening identity or plan ownership');
   if (!Number.isInteger(opening.pageNumber) || opening.pageNumber < 1 || !plan.pages[opening.pageNumber]) errors.push('Unknown page');
-  if (!kinds.includes(opening.kind) || !mechanisms.includes(opening.mechanism) || !access.includes(opening.walkableAccess)) errors.push('Invalid classification');
+  if (!openingKinds.includes(opening.kind) || !openingMechanisms.includes(opening.mechanism) || !access.includes(opening.walkableAccess)) errors.push('Invalid classification');
   if (!['manual', 'import', 'legacy'].includes(opening.source)) errors.push('Invalid provenance');
   if (!['draft', 'approved', 'rejected'].includes(opening.approval.status) ||
       (opening.approval.reviewedAt !== null && !Number.isFinite(opening.approval.reviewedAt))) errors.push('Invalid approval');
@@ -23,6 +23,10 @@ export function validatePlanOpening(plan: Plan, opening: PlanOpening): { errors:
     if (n === null) { warnings.push(`${key} unknown`); continue; }
     if (typeof n !== 'number' || !Number.isFinite(n) || (key === 'sillHeightM' ? n < 0 : n <= 0) || (key === 'quantity' && !Number.isInteger(n))) errors.push(`Invalid ${key}`);
   }
+  if (opening.suggestedDimensions !== undefined && (!Array.isArray(opening.suggestedDimensions) ||
+      new Set(opening.suggestedDimensions).size !== opening.suggestedDimensions.length ||
+      opening.suggestedDimensions.some(key => !openingDimensionFields.includes(key)))) errors.push('Invalid suggested dimensions');
+  if (opening.suggestedDimensions?.length) warnings.push('Suggested dimensions require confirmation');
   const geometry = opening.geometry;
   if (geometry !== null) {
     const points = [geometry?.endpointA, geometry?.endpointB];
@@ -89,8 +93,16 @@ function sameOpeningValue(a: unknown, b: unknown): boolean {
 export function updatePlanOpening(plan: Plan, id: string, patch: PlanOpeningPatch, now: number): Plan {
   const current = openingsOf(plan).find(o => o.id === id);
   if (!current) return plan;
+  if (patch.kind !== undefined && patch.kind !== current.kind) {
+    const mechanism = patch.mechanism ?? current.mechanism;
+    patch = {...patch, walkableAccess: openingAccessDefault(patch.kind),
+      mechanism: mechanismsForOpening(patch.kind).includes(mechanism) ? mechanism : 'unknown'};
+  }
+  if (current.suggestedDimensions?.length && !Object.hasOwn(patch, 'suggestedDimensions')) {
+    patch = {...patch, suggestedDimensions: current.suggestedDimensions.filter(key => !Object.hasOwn(patch, key))};
+  }
   // Runtime whitelist prevents callers from bypassing the approval action or changing identity.
-  const allowed = ['pageNumber', 'entryMethod', 'geometry', 'kind', 'mechanism', 'walkableAccess', 'roomIds', 'roomSides', 'apartmentNumber', 'widthM', 'heightM', 'sillHeightM', 'quantity', 'source', 'legacyRefs', 'label', 'notes', 'widthSource', 'quantityReview'] as const;
+  const allowed = ['pageNumber', 'entryMethod', 'geometry', 'kind', 'mechanism', 'walkableAccess', 'roomIds', 'roomSides', 'apartmentNumber', 'widthM', 'heightM', 'sillHeightM', 'quantity', 'source', 'legacyRefs', 'label', 'notes', 'widthSource', 'quantityReview', 'suggestedDimensions'] as const;
   const editable = Object.fromEntries(allowed.filter(k => Object.hasOwn(patch, k) && !sameOpeningValue(current[k], patch[k])).map(k => [k, patch[k]]));
   if (!Object.keys(editable).length) return plan;
   if (Object.hasOwn(editable, 'roomIds') && !Object.hasOwn(patch, 'roomSides')) editable.roomSides = undefined;

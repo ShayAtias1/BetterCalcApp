@@ -4,7 +4,7 @@
  * and work-type enums come out; no names, numbers of m² or geometry.
  */
 
-import type { Plan, RoomQuantitySummary, WorkType } from '../types';
+import type { Plan, RoomQuantitySummary, WorkItemType, WorkType } from '../types';
 import { EXTRA_REPORT_CATEGORIES } from '../types';
 import { buildRoomSummaries, isPageCalibrated } from './quantities';
 import { WORK_TYPE_ORDER } from './workTypes';
@@ -28,8 +28,8 @@ function summaryHasWaste(s: RoomQuantitySummary): boolean {
 }
 
 /** Distinct work types in canonical order. */
-export function workTypesOf(types: Iterable<WorkType>): WorkType[] {
-  const set = new Set(types);
+export function workTypesOf(types: Iterable<WorkItemType>): WorkType[] {
+  const set = new Set<WorkItemType>(types);
   return WORK_TYPE_ORDER.filter((t) => set.has(t));
 }
 
@@ -61,7 +61,7 @@ export function reportContents(plans: { plan: Plan; summaries: RoomQuantitySumma
   wasteApplied: boolean;
   roomCount: number;
 } {
-  const types: WorkType[] = [];
+  const types: WorkItemType[] = [];
   let wasteApplied = false;
   let roomCount = 0;
   for (const { plan, summaries } of plans) {

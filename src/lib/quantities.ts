@@ -1,6 +1,9 @@
 import { canonicalOpeningDeduction, duplicateOpeningIds, type OpeningAudit } from './openingQuantities';
 import type {
   Calibration,
+  CustomColumnQuantity,
+  CustomReportKey,
+  ReportColumn,
   ExtraReportCategory,
   Opening,
   Plan,
@@ -13,7 +16,8 @@ import type {
 import { EXTRA_REPORT_CATEGORIES } from '../types';
 import { t, type TranslateFn } from '../i18n';
 import { polygonAreaM2, polygonPerimeterM, round } from './geometry';
-import { projectHeightDefault, projectWasteDefault, workTypeDefinition, WORK_TYPE_DEFINITIONS } from './workTypes';
+import { projectHeightDefault, projectWasteDefault, workItemDefinition, WORK_TYPE_DEFINITIONS, type WorkTypeDefinition } from './workTypes';
+import { builtinTypeOf, categoryDefaultMethod, customReportKey, itemUnitName, planCategory } from './workCatalog';
 
 /** Report order of every category. */
 export const ALL_REPORT_CATEGORIES: ReportCategory[] = ['tiling_regular', 'tiling_as', 'cladding', 'panels', ...EXTRA_REPORT_CATEGORIES];
@@ -58,7 +62,7 @@ export function openingAreaM2(opening: Opening): number {
  * for its type, else the catalogue fallback (projects saved before that default existed).
  */
 export function effectiveHeightM(item: WorkItem, project: Plan): number {
-  const def = workTypeDefinition(item.type);
+  const def = workItemDefinition(item);
   if (!def?.height) return 0;
   return finiteOr(item.heightM, projectHeightDefault(def, project));
 }
@@ -70,7 +74,7 @@ export function effectiveTilingAsWastePercent(project: Plan): number {
 
 /** Whether this item has openings taken off it: the type must allow it, then the item's own switch, else the type's default. */
 export function itemDeductsOpenings(item: WorkItem): boolean {
-  const def = workTypeDefinition(item.type);
+  const def = workItemDefinition(item);
   if (!def || def.deductedOpeningTypes.length === 0) return false;
   return item.deductOpenings ?? def.deductsOpenings;
 }
@@ -88,6 +92,8 @@ export interface WorkItemCalc {
   lengthM: number | null;
   grossLengthM: number | null;
   deductedLengthM: number | null;
+  /** Manual count items only: the number of units. */
+  count?: number | null;
 }
 
 /**
@@ -95,7 +101,7 @@ export interface WorkItemCalc {
  * `areaM2`/`perimeterM` come from `roomMetrics` — 0 on an uncalibrated page, and so is everything here.
  */
 export function calculateWorkItem(item: WorkItem, room: Room, areaM2: number, perimeterM: number, project: Plan): WorkItemCalc {
-  const def = workTypeDefinition(item.type);
+  const def = workItemDefinition(item);
   const none: WorkItemCalc = { grossM2: 0, deductedM2: 0, netM2: 0, lengthM: null, grossLengthM: null, deductedLengthM: null };
   if (!def) return none;
 
@@ -145,9 +151,77 @@ export function calculateWorkItem(item: WorkItem, room: Room, areaM2: number, pe
         deductedLengthM: perimeterM - lengthM,
       };
     }
+    case 'manual': {
+      // Typed by the user in the method's unit; needs no page scale and has no openings.
+      const quantity = nonNegative(item.manualQuantity);
+      if (def.unit === 'lm') return { ...none, lengthM: quantity, grossLengthM: quantity, deductedLengthM: 0 };
+      if (def.unit === 'unit') return { ...none, count: quantity };
+      return { ...none, grossM2: quantity, netM2: quantity };
+    }
     default:
       return none;
   }
+}
+
+/** An item's primary quantity: running metres for strips and lengths, units for counts, else net m². */
+export function itemPrimaryQuantity(def: WorkTypeDefinition, calc: WorkItemCalc): number {
+  if (def.unit === 'unit') return calc.count ?? 0;
+  if (def.unit === 'lm') return calc.lengthM ?? 0;
+  return calc.netM2;
+}
+
+/**
+ * The columns of a room's user-defined categories (one per category and method), summed like the
+ * built-in buckets. Typed quantities need no scale; measured ones are null on an unscaled page.
+ */
+function customColumns(project: Plan, room: Room, areaM2: number, perimeterM: number, pageCalibrated: boolean): RoomQuantitySummary['custom'] {
+  const out: Partial<Record<CustomReportKey, CustomColumnQuantity & { sum: number; sumOrder: number; sumArea: number; sumOrderArea: number }>> = {};
+  for (const item of room.workItems) {
+    const key = customReportKey(item);
+    const def = key ? workItemDefinition(item) : undefined;
+    if (!key || !def) continue;
+    const calc = calculateWorkItem(item, room, areaM2, perimeterM, project);
+    const waste = effectiveWastePercent(item, project);
+    const manual = def.basis === 'manual';
+    const strip = def.basis === 'perimeter';
+    let column = out[key];
+    if (!column) {
+      const categoryId = item.categoryId!;
+      const builtinType = builtinTypeOf(categoryId);
+      column = out[key] = {
+        categoryName: builtinType ? null : planCategory(project, categoryId)?.name ?? null,
+        builtinType,
+        method: item.method!,
+        showMethod: item.method !== categoryDefaultMethod(categoryId, project),
+        unit: def.unit,
+        unitName: def.unit === 'unit' ? itemUnitName(item, project) : null,
+        manual,
+        quantity: null, order: null, wastePercent: waste, areaM2: null, orderAreaM2: null,
+        sum: 0, sumOrder: 0, sumArea: 0, sumOrderArea: 0,
+      };
+    }
+    const primary = itemPrimaryQuantity(def, calc);
+    column.sum += primary;
+    column.sumOrder += primary * (1 + waste / 100);
+    if (strip) {
+      column.sumArea += calc.netM2;
+      column.sumOrderArea += calc.netM2 * (1 + waste / 100);
+    }
+  }
+  const keys = Object.keys(out) as CustomReportKey[];
+  if (!keys.length) return undefined;
+  return Object.fromEntries(keys.map((key) => {
+    const { sum, sumOrder, sumArea, sumOrderArea, ...column } = out[key]!;
+    const available = column.manual || pageCalibrated;
+    const strip = column.method === 'perimeter';
+    return [key, {
+      ...column,
+      quantity: available ? round(sum, 2) : null,
+      order: available ? round(sumOrder, 2) : null,
+      areaM2: available && strip ? round(sumArea, 2) : null,
+      orderAreaM2: available && strip ? round(sumOrderArea, 2) : null,
+    }];
+  }));
 }
 
 /**
@@ -156,7 +230,7 @@ export function calculateWorkItem(item: WorkItem, room: Room, areaM2: number, pe
  * built with it), so regular and AS tiling never diverge by accident.
  */
 export function defaultWasteFor(item: WorkItem, project: Plan): number {
-  const def = workTypeDefinition(item.type);
+  const def = workItemDefinition(item);
   if (!def) return 0;
   if (item.type === 'tiling' && item.tilingCategory === 'as') return effectiveTilingAsWastePercent(project);
   return projectWasteDefault(def, project);
@@ -171,9 +245,13 @@ export function effectiveWastePercent(item: WorkItem, project: Plan): number {
   return finiteOr(item.wastePercent, defaultWasteFor(item, project));
 }
 
-/** Report category an item is tallied under (tiling is split by category); null for an unknown type. */
-function reportCategoryOf(item: WorkItem): ReportCategory | null {
-  if (!workTypeDefinition(item.type)) return null;
+/**
+ * Report category an item is tallied under (tiling is split by category); null for an unknown type
+ * and for user-defined categories, which are reported by the work-item breakdown (lib/workAllocation)
+ * so the built-in report columns and totals stay exactly as they were.
+ */
+export function reportCategoryOf(item: WorkItem): ReportCategory | null {
+  if (item.type === 'custom' || !workItemDefinition(item)) return null;
   if (item.type === 'tiling') return item.tilingCategory === 'as' ? 'tiling_as' : 'tiling_regular';
   return item.type;
 }
@@ -197,6 +275,7 @@ export function buildRoomSummaries(project: Plan): RoomQuantitySummary[] {
     const calibration = project.pages[room.pageNumber]?.calibration ?? null;
     const pageCalibrated = isPageCalibrated(project, room.pageNumber);
     const { areaM2, perimeterM } = roomMetrics(room, calibration);
+    const custom = customColumns(project, room, areaM2, perimeterM, pageCalibrated);
 
     const buckets: Record<ReportCategory, Bucket> = {
       tiling_regular: emptyBucket(),
@@ -225,7 +304,7 @@ export function buildRoomSummaries(project: Plan): RoomQuantitySummary[] {
       }
       const bucket = buckets[category];
       bucket.areaM2 += calc.netM2;
-      if (workTypeDefinition(item.type)?.basis === 'wallArea') {
+      if (workItemDefinition(item)?.basis === 'wallArea') {
         bucket.grossM2 += calc.grossM2;
         bucket.deductedM2 += calc.deductedM2;
       }
@@ -279,6 +358,8 @@ export function buildRoomSummaries(project: Plan): RoomQuantitySummary[] {
             }))
         : [],
       notes: room.notes,
+      // Only rooms with user-defined categories carry the field, so older reports stay identical.
+      ...(custom ? { custom } : {}),
     };
   });
 }
@@ -301,7 +382,7 @@ export function roomOpeningDetails(room: Room): OpeningDetail[] {
   return (room.openings ?? []).map((opening) => {
     const categories = new Set<ReportCategory>();
     for (const item of room.workItems) {
-      const def = workTypeDefinition(item.type);
+      const def = workItemDefinition(item);
       const category = reportCategoryOf(item);
       if (!def || !category || !itemDeductsOpenings(item)) continue;
       if (def.deductedOpeningTypes.includes(opening.type)) categories.add(category);
@@ -337,8 +418,15 @@ export function openingCountsText(openings: Opening[], tr: TranslateFn = t): str
  * The report categories at least one room uses (has an item of, scale or not), in report order.
  * Screen and PDF tables show a column group only for these.
  */
-export function usedReportCategories(summaries: RoomQuantitySummary[]): ReportCategory[] {
-  return ALL_REPORT_CATEGORIES.filter((c) => summaries.some((s) => categoryWastePercent(s, c) != null));
+export function usedReportCategories(summaries: RoomQuantitySummary[]): ReportColumn[] {
+  return [...ALL_REPORT_CATEGORIES.filter((c) => summaries.some((s) => categoryWastePercent(s, c) != null)), ...usedCustomColumns(summaries)];
+}
+
+/** User-defined columns some room uses, in first-seen order, after every built-in one. */
+export function usedCustomColumns(summaries: RoomQuantitySummary[]): CustomReportKey[] {
+  const keys = new Set<CustomReportKey>();
+  for (const s of summaries) for (const key of Object.keys(s.custom ?? {}) as CustomReportKey[]) keys.add(key);
+  return [...keys];
 }
 
 function categoryWastePercent(s: RoomQuantitySummary, c: ReportCategory): number | null {
@@ -432,7 +520,7 @@ export function buildReportCategoryTotals(project: Plan, summaries: RoomQuantity
   };
 
   const categories: ReportCategory[] = ['tiling_regular', 'tiling_as', 'cladding', 'panels', ...usedExtraCategories(summaries)];
-  return categories.map((category) => ({
+  const builtIn: ReportCategoryTotal[] = categories.map((category) => ({
     category,
     quantityM2: round(totals[category].quantityM2, 2),
     wastePercent: defaultWaste[category],
@@ -441,4 +529,24 @@ export function buildReportCategoryTotals(project: Plan, summaries: RoomQuantity
     lengthM: category === 'panels' ? round(panelsLengthM, 2) : null,
     orderLengthM: category === 'panels' ? round(panelsOrderLengthM, 2) : null,
   }));
+  return [...builtIn, ...customTotals(summaries)];
+}
+
+/** Totals of the user-defined columns, read the same way as a room's (see projectQuantities.roomCategoryQuantity). */
+function customTotals(summaries: RoomQuantitySummary[]): ReportCategoryTotal[] {
+  return usedCustomColumns(summaries).map((key) => {
+    const columns = summaries.flatMap((s) => (s.custom?.[key] ? [s.custom[key]!] : []));
+    const sum = (pick: (c: CustomColumnQuantity) => number | null) => round(columns.reduce((n, c) => n + (pick(c) ?? 0), 0), 2);
+    const first = columns[0];
+    const linear = first.unit === 'lm', count = first.unit === 'unit';
+    return {
+      category: key,
+      quantityM2: first.unit === 'm2' ? sum((c) => c.quantity) : sum((c) => c.areaM2),
+      orderM2: first.unit === 'm2' ? sum((c) => c.order) : sum((c) => c.orderAreaM2),
+      wastePercent: first.wastePercent ?? 0,
+      lengthM: linear ? sum((c) => c.quantity) : null,
+      orderLengthM: linear ? sum((c) => c.order) : null,
+      ...(count ? { count: sum((c) => c.quantity), orderCount: sum((c) => c.order) } : {}),
+    };
+  });
 }

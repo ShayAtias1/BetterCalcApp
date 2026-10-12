@@ -13,9 +13,12 @@ const review=parseOpeningResult(result,manifest,'fixture');
 Object.assign(globalThis,{DOMMatrix:class{},DOMPoint:class{},DOMRect:class{},Path2D:class{}});
 const {useAppStore}=await import('../../src/store/appStore.ts');const s=()=>useAppStore.getState();
 after(()=>s().setProject(null));
-test('AI imports deterministic drafts and deferred markers without defaults, associations or legacy changes',()=>{
+test('AI imports deterministic drafts with suggested defaults and no associations or legacy changes',()=>{
  const p=importOpeningReview(PLAN_A,review,1);assert.equal(p.openings!.length,2);assert.deepEqual(p.rooms,PLAN_A.rooms);
- for(const o of p.openings!){assert.equal(o.approval.status,'draft');assert.equal(o.source,'import');assert.equal(o.widthM,null);assert.equal(o.quantity,null);assert.deepEqual(o.roomIds,[]);assert.equal(o.aiDetection!.sourceHash,manifest.sourceHash);}
+ for(const o of p.openings!){assert.equal(o.approval.status,'draft');assert.equal(o.source,'import');assert.deepEqual(o.roomIds,[]);assert.equal(o.aiDetection!.sourceHash,manifest.sourceHash);}
+ assert.equal(p.openings![0].widthM,.8);assert.equal(p.openings![0].heightM,2.1);assert.equal(p.openings![0].sillHeightM,0);assert.equal(p.openings![0].quantity,1);
+ assert.equal(p.openings![0].walkableAccess,'supported');assert.deepEqual(p.openings![0].suggestedDimensions,['widthM','heightM','sillHeightM','quantity']);
+ assert.equal(p.openings![1].widthM,null);assert.equal(p.openings![1].quantity,null);
  assert.deepEqual(p.openings![0].aiDetection!.provenance!.original,result.openings[0]);assert.equal(p.openings![1].geometry,null);assert.equal(validatePlanOpening(p,p.openings![1]).canApprove,false);
  assert.equal(importOpeningReview(p,review,2),p);
  const deleted={...p,openings:[]};assert.equal(importOpeningReview(deleted,review,3),deleted);
@@ -39,7 +42,20 @@ test('only approved quantity-eligible AI openings deduct; real edits invalidate 
  s().updatePlanOpening(id,{widthM:1,heightM:2,sillHeightM:0,quantity:1});assert.equal(audit().areaM2,0);s().approvePlanOpening(id);assert.equal(audit().areaM2,2);
  s().updatePlanOpening(id,{geometry:{endpointA:{x:10,y:20},endpointB:{x:50,y:20}}});assert.equal(audit().areaM2,0);assert.equal(s().project!.openings![0].quantityReview!.associationsConfirmed,false);
 });
-test('modal translations retain paid-call consent and exact Hebrew action without stale cost placeholders',()=>{
+test('modal translations retain credit consent and privacy disclosures without stale cost placeholders',()=>{
  assert.equal(translate('he','openingAi.title'),'זיהוי דלתות וחלונות באמצעות AI');
- for(const language of ['he','en'] as const){const copy=translate(language,'openingAi.consent');assert.ok(copy.includes('OpenAI'));assert.ok(copy.includes(language==='he'?'בתשלום':'paid'));assert.ok(!/\{(?:estimate|reservation)\}/.test(copy));}
+ for(const language of ['he','en'] as const){const copy=translate(language,'openingAi.consent');assert.ok(copy.includes(language==='he'?'קרדיטים':'credits'));assert.ok(translate(language,'openingAi.disclosure').includes(language==='he'?'ספק AI חיצוני':'external AI provider'));assert.ok(!/\{(?:estimate|reservation)\}/.test(copy));}
+});
+
+test('window imports get editable suggested defaults; replays preserve approved values and manual access',()=>{
+ const data=structuredClone(result);data.openings[0].type='window';
+ const r=parseOpeningResult(data,manifest,'window-fixture');
+ const p=importOpeningReview(PLAN_A,r,1),o=p.openings![0];
+ assert.equal(o.widthM,1.2);assert.equal(o.heightM,1.2);assert.equal(o.sillHeightM,1);assert.equal(o.quantity,1);
+ assert.equal(o.walkableAccess,'unsupported');assert.equal(o.mechanism,'unknown');
+ o.widthM=2.4;o.walkableAccess='supported';o.suggestedDimensions=[];o.approval={status:'approved',reviewedAt:2};
+ assert.equal(importOpeningReview(p,r,3),p);
+ const withoutTombstone={...p,aiOpeningImportKeys:[]};
+ const replay=importOpeningReview(withoutTombstone,r,4);
+ assert.equal(replay.openings!.length,p.openings!.length);assert.deepEqual(replay.openings![0],o);
 });

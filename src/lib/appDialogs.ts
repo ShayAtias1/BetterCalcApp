@@ -1,9 +1,12 @@
 import { create } from 'zustand';
+import { t } from '../i18n';
 
 export interface DialogOptions {
   title?: string;
   confirmLabel?: string;
   destructive?: boolean;
+  disclosure?: string;
+  notice?: string;
 }
 export interface DialogRequest extends DialogOptions {
   id: number;
@@ -22,6 +25,15 @@ function request(kind: DialogRequest['kind'], message: string, options: DialogOp
 }
 export async function confirmDialog(message: string, options: DialogOptions = {}): Promise<boolean> {
   return await request('confirm', message, options) === true;
+}
+/** Shared credit consent; processing disclosures remain separately expandable. */
+export function confirmAiDialog(disclosure: string, notice?: string): Promise<boolean> {
+  return confirmDialog(t('aiConfirmation.description'), {
+    title: t('aiConfirmation.title'),
+    confirmLabel: t('aiConfirmation.confirm'),
+    disclosure,
+    notice,
+  });
 }
 export async function promptDialog(message: string, initialValue = '', options: DialogOptions = {}): Promise<string | null> {
   const value = await request('prompt', message, options, initialValue);

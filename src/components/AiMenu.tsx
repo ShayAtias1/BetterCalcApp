@@ -56,7 +56,6 @@ export default function AiMenu({ openId, setOpenId }: { openId: MenuId | null; s
           </div>
           {import.meta.env.DEV && <div className="ai-menu-section ai-menu-run">
             <p className="ai-menu-title">{t('aiMenu.runNew')}</p>
-            <p className="menu-hint">{t('aiMenu.runNote')}</p>
             <AiSpaceDetectionPanel />
           </div>}
         </div>

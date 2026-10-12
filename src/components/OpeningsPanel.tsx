@@ -3,8 +3,9 @@ import { useAppStore } from '../store/appStore';
 import { useOpeningsAiUi } from '../lib/ai/openingsUi';
 import { useT } from '../i18n';
 import { confirmDialog } from '../lib/appDialogs';
-import { measuredOpeningWidth, openingClassification, openingPresets, presetOf, suggestOpeningRooms, type OpeningPreset } from '../lib/manualOpenings';
-import { buildOpeningQuantityReport, openingQuantityFeedback } from '../lib/openingQuantityReport';
+import { measuredOpeningWidth, openingPresets, suggestOpeningRooms, type OpeningPreset } from '../lib/manualOpenings';
+import { buildOpeningQuantityReport, openingQuantityFeedback, workTypeName } from '../lib/openingQuantityReport';
+import { openingKinds, openingKindLabel, mechanismsForOpening, openingMechanismLabel, openingDescription } from '../lib/openingOptions';
 import { validatePlanOpening } from '../lib/planOpenings';
 import type { PlanOpening, PlanOpeningPatch } from '../types';
 import NumberField from './NumberField';
@@ -75,7 +76,7 @@ export default function OpeningsPanel({ readOnly = false, editorOnly = false, hi
     if (latest.project?.id !== plan.id || latest.selectedOpeningId !== o.id || latest.project.openings?.find(item => item.id === o.id) !== o) return false;
     return patch({ roomIds: ids, roomSides: next, legacyRefs: o.legacyRefs.filter(ref => ids.includes(ref.roomId)), apartmentNumber: undefined });
   };
-  const typeKey = (opening: PlanOpening): TextKey => opening.kind === 'door' && opening.mechanism === 'unknown' ? 'unclassifiedDoor' : opening.kind === 'custom' ? 'custom' : presetOf(opening);
+  const typeLabel = (opening: PlanOpening) => openingDescription(opening, t);
   const validation = o ? validatePlanOpening(plan, o) : null;
   const quantityReport = buildOpeningQuantityReport(plan, undefined, new Set([state.currentPage]));
   const feedback = o ? openingQuantityFeedback(plan, o, quantityReport) : null;
@@ -143,14 +144,14 @@ export default function OpeningsPanel({ readOnly = false, editorOnly = false, hi
     </div>}
     <div className={`opening-list ${selection.length ? 'has-selection' : ''}`} aria-label={text('allPage')}>
       {openings.map(item => {
-        const name = item.label || text(typeKey(item));
+        const name = item.label || typeLabel(item);
         const checked = selectedIds.includes(item.id);
         return <div key={item.id} className={`opening-list-row ${o?.id === item.id ? 'selected' : ''} ${checked ? 'checked' : ''}`}>
         {!readOnly && <input type="checkbox" className="room-assignment-checkbox" aria-label={t('openingListSelection.select', { name })}
           checked={checked} onChange={() => toggleSelection(item.id)} />}
         <button type="button" className="btn-ghost opening-list-item" onClick={() => editOpening(item)}>
           {item.label && <span className="opening-list-mark" dir="ltr">{item.label}</span>}
-          <span className="opening-list-label"><span>{text(typeKey(item))}</span><small>{openingLocation(item)}{item.aiDetection?' · AI':''}</small></span>
+          <span className="opening-list-label"><span>{typeLabel(item)}</span><small>{openingLocation(item)}{item.aiDetection?' · AI':''}</small></span>
           <span className={`opening-status-pill ${item.approval.status}`}>{text(item.approval.status)}</span>
         </button>
         {!readOnly && <div className="opening-list-row-actions">
@@ -191,13 +192,12 @@ export default function OpeningsPanel({ readOnly = false, editorOnly = false, hi
       </div>}
       <div className="opening-fields">
         <label className="form-row">{text('label')}<input value={o.label ?? ''} onChange={e => patch({ label: e.target.value })} /></label>
-        <label className="form-row">{text('type')}<select value={typeKey(o)} onChange={e => patch(e.target.value === 'custom' ? {kind:'custom',mechanism:'unknown',walkableAccess:'unknown'} : openingClassification(e.target.value as OpeningPreset))}>
-          {openingPresets.map(p => <option key={p} value={p}>{text(p)}</option>)}
-          {typeKey(o) === 'unclassifiedDoor' && <option value="unclassifiedDoor">{text('unclassifiedDoor')}</option>}
-          <option value="custom">{text('custom')}</option>
+        <label className="form-row">{text('type')}<select value={o.kind} onChange={e => patch({kind:e.target.value as PlanOpening['kind']})}>
+          {openingKinds.map(kind => <option key={kind} value={kind}>{openingKindLabel(kind, t)}</option>)}
         </select></label>
         <label className="form-row">{text('mechanism')}<select value={o.mechanism} onChange={e => patch({ mechanism: e.target.value as PlanOpening['mechanism'] })}>
-          {(['hinged','sliding','fixed','open','unknown'] as const).map(m => <option key={m} value={m}>{text(m === 'unknown' ? 'unknownMechanism' : m)}</option>)}
+          {mechanismsForOpening(o.kind).map(m => <option key={m} value={m}>{openingMechanismLabel(m, t)}</option>)}
+          {!mechanismsForOpening(o.kind).includes(o.mechanism) && <option value={o.mechanism}>{openingMechanismLabel(o.mechanism, t)}</option>}
         </select></label>
         <label className="form-row">{text('access')}<select value={o.walkableAccess} onChange={e => patch({ walkableAccess: e.target.value as PlanOpening['walkableAccess'] })}>
           {(['supported','unsupported','unknown'] as const).map(v => <option key={v} value={v}>{text(v === 'unknown' ? 'unknownAccess' : v)}</option>)}
@@ -205,6 +205,10 @@ export default function OpeningsPanel({ readOnly = false, editorOnly = false, hi
       </div>
       <section className="opening-section">
         <h4>{text('dimensions')}</h4>
+        {!!o.suggestedDimensions?.length && <div className="opening-placement-note">
+          <p>{text('suggestedDimensions')}</p>
+          <button type="button" className="btn-secondary small" onClick={() => patch({suggestedDimensions:[]})}>{text('confirmDimensions')}</button>
+        </div>}
         <div className="opening-dims">
         {(['widthM','heightM','sillHeightM'] as const).map((key, index) => <label className="form-row" key={key}>{text((['width','height','sill'] as const)[index])}
           <NumberField precision={2} value={o[key] ?? undefined} onChange={value => {
@@ -246,7 +250,7 @@ export default function OpeningsPanel({ readOnly = false, editorOnly = false, hi
         {feedback.reasons.length > 0 && <ul>{feedback.reasons.map(reason => <li key={reason}>{t(`openingQuantities.${reason}`)}</li>)}</ul>}
         {feedback.work.length === 0 && o.roomIds.length > 0 && <p>{t('openingQuantities.noWorkItems')}</p>}
         {feedback.work.length > 0 && <ul>{feedback.work.map(item => <li key={`${item.roomId}-${item.itemId}`}>
-          <strong>{plan.rooms.find(room => room.id === item.roomId)?.name} · {t(`workTypes.${item.type}`)}</strong>: {' '}
+          <strong>{plan.rooms.find(room => room.id === item.roomId)?.name} · {workTypeName(plan, item, t)}</strong>: {' '}
           {item.openingAudit.reason ? t(`openingQuantities.${item.openingAudit.reason}`) : item.capped ? t('openingQuantities.capped') :
             `${t('openingQuantities.deducted')}: ${Number((item.unit === 'lm' ? item.openingAudit.lengthM : item.openingAudit.areaM2).toFixed(2))} ${t(`units.${item.unit}`)}`}
         </li>)}</ul>}

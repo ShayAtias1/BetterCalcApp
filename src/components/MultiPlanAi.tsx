@@ -1,4 +1,5 @@
 import { useT } from '../i18n';
+import { confirmAiDialog } from '../lib/appDialogs';
 import { canAuthorTakeoff } from '../lib/workspaceCapabilities';
 import { useBulkTakeoffDialog } from './bulkTakeoffEntry';
 import { useEffect, useRef, useState, type RefObject } from 'react';
@@ -180,7 +181,7 @@ export default function MultiPlanAi(){
             <div className="mp-section-title"><h3>{l.selectedPlans}</h3>{!resuming&&<button className="btn-ghost" onClick={()=>setStage('plans')}>{l.editPlans}</button>}</div>
             <ul className="mp-scope-documents">{groupPages(scope.pages).map(([id,group])=><li key={id}><Icon name="file" size={18}/><div><strong dir="auto">{group.name}</strong><span className="muted">{l.pages}: <bdi>{pageRanges(group.pages.map(p=>p.pageNumber))}</bdi></span>{group.pages.some(p=>pageStatus(p)==='processing')&&<span className="mp-accent-text">{l.inProgress}</span>}{group.pages.some(p=>pageStatus(p)==='failed')&&<span className="mp-danger-text">{group.pages.filter(p=>pageStatus(p)==='failed').length} {l.failed}</span>}</div><span className="mp-document-count">{group.pages.length} {l.pages}</span></li>)}</ul>
             <div className="mp-section-title"><h3>{l.measurements}</h3>{!resuming&&<button className="btn-ghost" onClick={()=>setStage('calculations')}>{l.editCalculations}</button>}</div><ul className="mp-measurements">{scope.calculations.map(c=><li key={c}><Icon name="check" size={16}/>{l[c]}</li>)}</ul>
-          </div><aside className="mp-cost"><span className="mp-eyebrow">{l.estimate}</span><strong className="mp-cost-value"><bdi dir="ltr">${cost.low.toFixed(3)}–${cost.high.toFixed(3)}</bdi></strong><p className="muted">{l.notGuaranteed}</p><p>{l.confirmation}</p><details><summary>{l.costDetails}</summary><p className="muted">{l.historical}</p></details></aside></div>
+          </div><aside className="mp-cost">{newCount>0&&<p>{t('aiConfirmation.status')}</p>}<details><summary>{t('aiConfirmation.privacy')}</summary><p>{l.confirmation}</p><span className="mp-eyebrow">{l.estimate}</span><strong className="mp-cost-value"><bdi dir="ltr">${cost.low.toFixed(3)}–${cost.high.toFixed(3)}</bdi></strong><p className="muted">{l.notGuaranteed}</p><p className="muted">{l.historical}</p></details></aside></div>
           <div className="mp-notice"><Icon name="scan" size={18}/><p>{l.afterStart}</p></div>
         </>}
         {stage==='results'&&<>
@@ -221,7 +222,7 @@ export default function MultiPlanAi(){
         <div className="mp-footer-actions">
           {stage==='plans'&&<><span className="mp-footer-hint muted">{!totalSelected?l.selectAtLeast:''}</span><button className="btn-primary" disabled={busy||loadingInventory||!totalSelected||!batchReady} onClick={()=>setStage('calculations')}>{l.next}</button></>}
           {stage==='calculations'&&<><span className="mp-footer-hint muted">{!calculations.length?l.chooseAtLeast:''}</span><button className="btn-secondary" disabled={busy} onClick={()=>setStage('plans')}>{l.back}</button><button className="btn-primary" disabled={busy||loadingInventory||!totalSelected||!calculations.length||!batchReady} onClick={prepareScope}>{l.steps[2]}</button></>}
-          {stage==='scope'&&scope&&<><button className="btn-secondary" disabled={busy} onClick={()=>setStage(resuming?'results':'calculations')}>{l.back}</button><button className="btn-primary" disabled={busy||globalRunning||!batchReady} onClick={()=>{setBatchId(scope.id);setStage('results');setStopping(false);void runBatch(scope);}}>{newCount?(resuming?l.confirmResume:l.confirm):l.useResults}{newCount>0&&` (${newCount})`}</button></>}
+          {stage==='scope'&&scope&&<><button className="btn-secondary" disabled={busy} onClick={()=>setStage(resuming?'results':'calculations')}>{l.back}</button><button className="btn-primary" disabled={busy||globalRunning||!batchReady} onClick={()=>void action(async()=>{if(newCount>0&&!await confirmAiDialog(l.confirmation))return;setBatchId(scope.id);setStage('results');setStopping(false);void runBatch(scope);})}>{newCount?t('aiConfirmation.confirm'):l.useResults}</button></>}
           {stage==='results'&&<><button className="btn-ghost" disabled={busy} onClick={()=>void action(async()=>{if(await useAppStore.getState().closePlan())setOpen(false);})}>{l.projectReport}</button><button className="btn-secondary" onClick={()=>setOpen(false)}>{l.close}</button></>}
         </div>
       </footer>

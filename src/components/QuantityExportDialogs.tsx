@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import ExportContentPicker from './ExportContentPicker';
+import PdfDrawingOptionsPicker from './PdfDrawingOptionsPicker';
+import type { PdfDrawingOptions } from '../lib/pdfDrawingLayers';
 import { useAppStore } from '../store/appStore';
 import { useQuantityExportInfo } from '../hooks/useQuantityExportInfo';
 import { planForReport } from '../lib/reportTitle';
@@ -66,13 +68,13 @@ function useExportRunner(info: Info, surface: 'topbar_menu' | 'quantities_panel'
     }
   };
 
-  const runPdf = async (pageNumbers: number[], content: ExportContent, includeOpeningDetails = false) => {
+  const runPdf = async (pageNumbers: number[], content: ExportContent, includeOpeningDetails = false, drawingOptions: PdfDrawingOptions = {}) => {
     setBusy('pdf');
     try {
       const { filteredSummaries, filteredTotals } = scoped(pageNumbers, true);
       await trackedExport(
         { export_kind: 'quantity_pdf', surface, ...quantityExportDetails(project, filteredSummaries, pageNumbers, exportablePages.length) },
-        () => exportQuantitiesToPdf(planForReport(project, projectName), filteredSummaries, filteredTotals, overlayVisible, pageNumbers, content, language, {includeOpeningDetails})
+        () => exportQuantitiesToPdf(planForReport(project, projectName), filteredSummaries, filteredTotals, overlayVisible, pageNumbers, content, language, {includeOpeningDetails, ...drawingOptions})
       );
     } catch (err) {
       notifyExportFailed(err);
@@ -89,6 +91,7 @@ function PdfDialog({ info, surface }: { info: Info; surface: 'topbar_menu' | 'qu
   const close = useAppStore((s) => s.setQuantityExportDialog);
   const { runPdf } = useExportRunner(info, surface);
   const [includeOpeningDetails,setIncludeOpeningDetails]=useState(false);
+  const [drawingOptions, setDrawingOptions] = useState<PdfDrawingOptions>({});
   const { exportablePages, available } = info;
   // What to export (sections) and which pages are two separate choices.
   const [state, setState] = useState<{ pages: Set<number>; content: ExportContent }>(() => ({
@@ -102,6 +105,7 @@ function PdfDialog({ info, surface }: { info: Info; surface: 'topbar_menu' | 'qu
         <h3>{t('quantityExport.pdfTitle')}</h3>
         <ExportContentPicker sections={EXPORT_SECTIONS} labels="pdf" content={state.content} available={available} onChange={(content) => setState({ ...state, content })} />
         <p className="muted">{t('quantityExport.contentHint')}</p>
+        {state.content.plan && <PdfDrawingOptionsPicker value={drawingOptions} onChange={setDrawingOptions} />}
         {state.content.finishes && <label className="opening-review-check"><input type="checkbox" checked={includeOpeningDetails} onChange={e=>setIncludeOpeningDetails(e.target.checked)}/>{t('openingQuantities.includeDetails')}</label>}
         {exportablePages.length > 1 && (
           <>
@@ -141,11 +145,11 @@ function PdfDialog({ info, surface }: { info: Info; surface: 'topbar_menu' | 'qu
           </button>
           <button
             className="btn-primary"
-            disabled={!hasAnyContent(state.content) || state.pages.size === 0}
+            disabled={!hasAnyContent(state.content) || state.pages.size === 0 || (state.content.plan && drawingOptions.drawingMode === 'separate' && drawingOptions.drawingLayers?.length === 0)}
             onClick={() => {
               const pages = Array.from(state.pages).sort((a, b) => a - b);
               close(null);
-              void runPdf(pages, state.content, includeOpeningDetails);
+              void runPdf(pages, state.content, includeOpeningDetails, drawingOptions);
             }}
           >
             {t('common.export')}

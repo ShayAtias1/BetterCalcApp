@@ -6,7 +6,8 @@ import { basisText, concreteStatusText, levelReportSpecification, levelQuantity,
 import type { ConcreteItemRow, ProjectConcrete, ProjectRebar, RebarBasis, RebarLevelRow, StructuralReport } from './structuralQuantities';
 
 /*
- * The concrete and rebar sheets of the plan and project workbooks - item-first, like the Quantities
+ * The Structural Quantities sheet of the plan and project workbooks: concrete, rebar and stirrups as
+ * sections of ONE sheet - item-first, like the Quantities
  * panel and the plan PDF: one row per concrete element / mesh level / manual-bars item, then ONE
  * total row. No summary block under the items. Only written when there are items, and after every
  * existing sheet, so a workbook without them is exactly what it always was.
@@ -34,6 +35,7 @@ function fill(cell: ExcelJS.Cell, argb: string) {
 
 function headerRow(sheet: ExcelJS.Worksheet, labels: string[]) {
   const row = sheet.addRow(labels);
+  row.height = 32;
   row.eachCell({ includeEmpty: true }, (c) => {
     fill(c, C_HEADER);
     c.font = { color: { argb: 'FFFFFFFF' }, bold: true };
@@ -42,11 +44,23 @@ function headerRow(sheet: ExcelJS.Worksheet, labels: string[]) {
 }
 
 function styleRow(row: ExcelJS.Row, argb: string, bold = false) {
+  row.height = 28;
   row.eachCell({ includeEmpty: true }, (c) => {
     fill(c, argb);
-    c.alignment = { horizontal: 'center' };
+    c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    c.border = { bottom: { style: 'hair', color: { argb: 'FFCBD5E1' } } };
     if (bold) c.font = { bold: true };
   });
+}
+
+function filterSection(sheet: ExcelJS.Worksheet, first: number, last: number, headers: string[]) {
+  if (last < first) return;
+  sheet.addTable({ name: `Structural_${sheet.id}_${first}`, ref: `A${first - 1}`, headerRow: true,
+    columns: headers.map(name => ({ name, filterButton: true })),
+    rows: Array.from({ length: last - first + 1 }, (_, index) => headers.map((_, c) => sheet.getRow(first + index).getCell(c + 1).value)),
+    style: { theme: 'TableStyleLight1', showRowStripes: false },
+  });
+  if (!sheet.views.some(view => view.state === 'frozen')) sheet.views = [{ state: 'frozen', ySplit: first - 1, rightToLeft: sheet.views[0]?.rightToLeft, showGridLines: true }];
 }
 
 /**
@@ -69,15 +83,38 @@ function colLetter(n: number): string {
 
 // ---------- the two entry points ----------
 
-/** One plan's concrete and rebar sheets (the plan workbook). */
+/** The one structural sheet, created on first use (a workbook without structural data has none). */
+function structuralSheet(workbook: ExcelJS.Workbook, x: ExportContext): () => ExcelJS.Worksheet {
+  let sheet: ExcelJS.Worksheet | null = null;
+  return () => (sheet ??= workbook.addWorksheet(x.t('exports.excel.sheets.structural').slice(0, 31), { views: [{ rightToLeft: x.rtl, showGridLines: true, state: 'normal' }] }));
+}
+
+/** A section heading inside the structural sheet. */
+function section(sheet: ExcelJS.Worksheet, title: string) {
+  if (sheet.rowCount > 0) sheet.addRow([]);
+  const row = sheet.addRow([title]);
+  row.getCell(1).font = { bold: true, size: 13, color: { argb: C_HEADER } };
+  row.height = 22;
+}
+
+/** Widths shared by the sections: each column keeps the widest any section needs. */
+function widen(sheet: ExcelJS.Worksheet, widths: number[]) {
+  widths.forEach((w, i) => {
+    const column = sheet.getColumn(i + 1);
+    column.width = Math.max(column.width ?? 0, w);
+  });
+}
+
+/** One plan's concrete and rebar (the plan workbook). */
 export function addStructuralSheets(workbook: ExcelJS.Workbook, report: StructuralReport, x: ExportContext) {
+  const sheet = structuralSheet(workbook, x);
   if (report.concrete) {
     const { items, summary } = report.concrete;
-    addConcreteSheet(workbook, items.map((item) => ({ item })), { volumeM3: summary.volumeM3, orderM3: summary.orderM3, missingCount: summary.missingCount }, false, x);
+    addConcreteSheet(sheet(), items.map((item) => ({ item })), { volumeM3: summary.volumeM3, orderM3: summary.orderM3, missingCount: summary.missingCount }, false, x);
   }
   if (report.rebar) {
     const { levels, summary } = report.rebar;
-    addRebarAndStirrupSheets(workbook, levels.map((row) => ({ row })), summary, summary.missingItemCount, false, x);
+    addRebarAndStirrupSheets(workbook, sheet(), levels.map((row) => ({ row })), summary, summary.missingItemCount, false, x);
   }
 }
 
@@ -92,10 +129,11 @@ export function addProjectStructuralSheets(
   project: { concrete: ProjectConcrete | null; rebar: ProjectRebar | null },
   x: ExportContext
 ) {
+  const sheet = structuralSheet(workbook, x);
   if (project.concrete) {
     const c = project.concrete;
     addConcreteSheet(
-      workbook,
+      sheet(),
       sources.flatMap((s) => (s.report.concrete?.items ?? []).map((item) => ({ planName: s.planName, item }))),
       { volumeM3: c.volumeM3, orderM3: c.orderM3, missingCount: c.missingCount },
       true,
@@ -104,7 +142,7 @@ export function addProjectStructuralSheets(
   }
   if (project.rebar) {
     const r = project.rebar;
-    addRebarAndStirrupSheets(workbook, sources.flatMap((s) => (s.report.rebar?.levels ?? []).map((row) => ({ planName: s.planName, row }))), r, r.missingItemCount, true, x);
+    addRebarAndStirrupSheets(workbook, sheet(), sources.flatMap((s) => (s.report.rebar?.levels ?? []).map((row) => ({ planName: s.planName, row }))), r, r.missingItemCount, true, x);
   }
 }
 
@@ -115,7 +153,7 @@ const PLAN_WIDTH = 22;
 const CONCRETE_WIDTHS = [8, 12, 18, 16, 14, 14, 10, 14, 22];
 
 function addConcreteSheet(
-  workbook: ExcelJS.Workbook,
+  sheet: ExcelJS.Worksheet,
   items: { planName?: string; item: ConcreteItemRow }[],
   totals: { volumeM3: number; orderM3: number; missingCount: number },
   withPlan: boolean,
@@ -123,7 +161,7 @@ function addConcreteSheet(
 ) {
   const { t } = x;
   const o = withPlan ? 1 : 0; // every column after Plan moves one to the right
-  const sheet = workbook.addWorksheet(t('exports.excel.sheets.concrete'), { views: [{ rightToLeft: x.rtl }] });
+  section(sheet, t('exports.excel.sheets.concrete'));
   const m3 = t('units.m3');
   const base = [
     t('exports.structural.headers.page'),
@@ -137,7 +175,7 @@ function addConcreteSheet(
     t('exports.structural.headers.status'),
   ];
   const headers = withPlan ? [t('exports.common.plan'), ...base] : base;
-  columnWidths(withPlan ? [PLAN_WIDTH, ...CONCRETE_WIDTHS] : CONCRETE_WIDTHS, headers, x.language, 2).forEach((w, i) => (sheet.getColumn(i + 1).width = w));
+  widen(sheet, columnWidths(withPlan ? [PLAN_WIDTH, ...CONCRETE_WIDTHS] : CONCRETE_WIDTHS, headers, x.language, 2));
   headerRow(sheet, headers);
 
   const rowFor = (planName: string | undefined, cells: (string | number | null)[]) => sheet.addRow(withPlan ? [planName ?? '', ...cells] : cells);
@@ -167,6 +205,8 @@ function addConcreteSheet(
   });
   const last = sheet.rowCount;
 
+  filterSection(sheet, first, last, headers);
+
   // The total: live formulas over the item rows (a not-calculable row holds a dash, which SUM skips).
   const netL = colLetter(col(6));
   const orderL = colLetter(col(8));
@@ -191,7 +231,7 @@ interface RebarTotals {
 const REBAR_WIDTHS = [8, 9, 14, 11, 34, 12, 16, 11, 14, 10, 14, 26];
 
 function addRebarSheet(
-  workbook: ExcelJS.Workbook,
+  sheet: ExcelJS.Worksheet,
   rows: { planName?: string; row: RebarLevelRow }[],
   totals: RebarTotals,
   missingItemCount: number,
@@ -201,7 +241,7 @@ function addRebarSheet(
   const { t } = x;
   const meshOnly = rows.length > 0 && rows.every(({ row }) => row.kind === 'mesh');
   const o = withPlan ? 1 : 0;
-  const sheet = workbook.addWorksheet(t('exports.excel.sheets.rebar'), { views: [{ rightToLeft: x.rtl }] });
+  section(sheet, t('exports.excel.sheets.rebar'));
   const kg = t('units.kg');
   const base = [
     t('exports.structural.headers.page'),
@@ -218,7 +258,7 @@ function addRebarSheet(
     t('exports.structural.headers.status'),
   ];
   const headers = withPlan ? [t('exports.common.plan'), ...base] : base;
-  columnWidths(withPlan ? [PLAN_WIDTH, ...REBAR_WIDTHS] : REBAR_WIDTHS, headers, x.language, 2).forEach((w, i) => (sheet.getColumn(i + 1).width = w));
+  widen(sheet, columnWidths(withPlan ? [PLAN_WIDTH, ...REBAR_WIDTHS] : REBAR_WIDTHS, headers, x.language, 2));
   headerRow(sheet, headers);
 
   const rowFor = (planName: string | undefined, cells: (string | number | null)[]) => sheet.addRow(withPlan ? [planName ?? '', ...cells] : cells);
@@ -257,6 +297,7 @@ function addRebarSheet(
     if (d.kind === 'bars') row.getCell(col(5)).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
   });
   const last = sheet.rowCount;
+  filterSection(sheet, first, last, headers);
 
   // One total row: weights only (sheets and bars are different units, so no combined quantity).
   const totalFmt = totals.basis === 'estimated' ? ESTIMATE_FMT : NUM_FMT;
@@ -272,7 +313,7 @@ function addRebarSheet(
 }
 
 /** Stirrups have a numerical execution sheet; existing Mesh/Bars spreadsheets keep their columns. */
-function addRebarAndStirrupSheets(workbook: ExcelJS.Workbook, rows: { planName?: string; row: RebarLevelRow }[], totals: RebarTotals, missing: number, withPlan: boolean, x: ExportContext) {
+function addRebarAndStirrupSheets(workbook: ExcelJS.Workbook, sheet: ExcelJS.Worksheet, rows: { planName?: string; row: RebarLevelRow }[], totals: RebarTotals, missing: number, withPlan: boolean, x: ExportContext) {
   const stirrups = rows.filter(({ row }) => row.kind === 'stirrup');
   const regular = rows.filter(({ row }) => row.kind !== 'stirrup');
   if (regular.length) {
@@ -281,17 +322,17 @@ function addRebarAndStirrupSheets(workbook: ExcelJS.Workbook, rows: { planName?:
     const separated: RebarTotals = { weightKg: calculated.reduce((sum, { row }) => sum + row.netWeightKg!, 0),
       orderWeightKg: regular.some(({ row }) => row.orderWeightKg === null) ? null : regular.reduce((sum, { row }) => sum + row.orderWeightKg!, 0),
       basis: !calculated.length ? null : !estimated ? 'exact' : estimated === calculated.length ? 'estimated' : 'mixed' };
-    addRebarSheet(workbook, regular, stirrups.length ? separated : totals,
+    addRebarSheet(sheet, regular, stirrups.length ? separated : totals,
       stirrups.length ? new Set(regular.filter(({ row }) => row.status !== 'ok').map(({ planName, row }) => `${planName}|${row.itemId}`)).size : missing, withPlan, x);
   }
-  if (stirrups.length) addStirrupSheet(workbook, stirrups, withPlan, x);
+  if (stirrups.length) addStirrupSheet(workbook, sheet, stirrups, withPlan, x);
 }
 
 /** Rasterise the shared report vectors only at Excel's PNG embedding boundary. */
 function stirrupThumbnailPng(shape: ReturnType<typeof prepareStirrupShape>): string {
   const canvas = document.createElement('canvas');
-  canvas.width = 168;
-  canvas.height = 112;
+  canvas.width = 336;
+  canvas.height = 224;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Unable to render the Stirrup shape thumbnail.');
   ctx.fillStyle = '#ffffff';
@@ -300,11 +341,11 @@ function stirrupThumbnailPng(shape: ReturnType<typeof prepareStirrupShape>): str
   const ys = shape.points.map((point) => point.y);
   const minX = Math.min(...xs), maxX = Math.max(...xs);
   const minY = Math.min(...ys), maxY = Math.max(...ys);
-  const scale = Math.min(144 / Math.max(maxX - minX, 1), 88 / Math.max(maxY - minY, 1));
-  const x = (value: number) => 84 + (value - (minX + maxX) / 2) * scale;
-  const y = (value: number) => 56 + (value - (minY + maxY) / 2) * scale;
+  const scale = Math.min(288 / Math.max(maxX - minX, 1), 176 / Math.max(maxY - minY, 1));
+  const x = (value: number) => 168 + (value - (minX + maxX) / 2) * scale;
+  const y = (value: number) => 112 + (value - (minY + maxY) / 2) * scale;
   ctx.strokeStyle = '#c2410c';
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 6;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.beginPath();
@@ -316,17 +357,17 @@ function stirrupThumbnailPng(shape: ReturnType<typeof prepareStirrupShape>): str
   return canvas.toDataURL('image/png');
 }
 
-function addStirrupSheet(workbook: ExcelJS.Workbook, rows: { planName?: string; row: RebarLevelRow }[], withPlan: boolean, x: ExportContext) {
+function addStirrupSheet(workbook: ExcelJS.Workbook, sheet: ExcelJS.Worksheet, rows: { planName?: string; row: RebarLevelRow }[], withPlan: boolean, x: ExportContext) {
   const { t } = x;
-  const sheet = workbook.addWorksheet(t('rebar.stirrup.excelSheet'), { views: [{ rightToLeft: x.rtl }] });
+  section(sheet, t('rebar.stirrup.excelSheet'));
   const headers = [t('exports.structural.headers.page'), t('concrete.mark'), t('rebar.stirrup.shape'), t('rebar.stirrup.report.shapeType'), t('rebar.diameter'),
     `${t('rebar.stirrup.geometricLength')} (${t('units.m')})`, `${t('rebar.stirrup.lengthUsed')} (${t('units.m')})`,
     t('rebar.stirrup.lengthSource'), t('rebar.stirrup.quantity'), `${t('rebar.totalLength')} (${t('units.m')})`,
     `${t('quantitiesPanel.cols.netWeight')} (${t('units.kg')})`, `${t('quantitiesPanel.cols.orderWeight')} (${t('units.kg')})`, t('exports.structural.headers.status')];
   if (withPlan) headers.unshift(t('exports.common.plan'));
-  const widths = [12, 20, 14, 40, 12, 18, 18, 20, 12, 18, 18, 18, 24];
+  const widths = [12, 20, 28, 40, 12, 18, 18, 20, 12, 18, 18, 18, 24];
   if (withPlan) widths.unshift(PLAN_WIDTH);
-  columnWidths(widths, headers, x.language, 2).forEach((width, index) => sheet.getColumn(index + 1).width = width);
+  widen(sheet, columnWidths(widths, headers, x.language, 2));
   headerRow(sheet, headers);
   const offset = withPlan ? 1 : 0;
   // Preserve the existing value columns, shifted only by the new thumbnail column.
@@ -344,18 +385,19 @@ function addStirrupSheet(workbook: ExcelJS.Workbook, rows: { planName?: string; 
     styleRow(row, index % 2 ? C_ZEBRA_B : C_ZEBRA_A);
     row.getCell(column(3)).alignment = { horizontal: 'center', wrapText: true };
     [4, 5, 6, 8, 9, 10, 11].forEach((original) => row.getCell(column(original)).numFmt = original === 4 || original === 8 ? PCT_FMT : NUM_FMT);
-    row.height = 48;
+    row.height = 96;
     if (shape?.segments.length) {
       const imageId = workbook.addImage({ base64: stirrupThumbnailPng(shape), extension: 'png' });
       sheet.addImage(imageId, {
-        tl: { col: 2 + offset + 0.07, row: row.number - 1 + 0.06 },
-        ext: { width: 84, height: 56 },
+        tl: { nativeCol: 2 + offset, nativeRow: row.number - 1, nativeColOff: 5 * 9525, nativeRowOff: 4 * 9525 } as ExcelJS.Anchor,
+        br: { nativeCol: 2 + offset, nativeRow: row.number - 1, nativeColOff: 185 * 9525, nativeRowOff: 124 * 9525 } as ExcelJS.Anchor,
         editAs: 'oneCell',
       });
     }
   });
   const last = sheet.rowCount;
   const total = sheet.addRow(new Array(headers.length).fill(''));
+  filterSection(sheet, first, last, headers);
   total.getCell(column(2)).value = t('rebar.summary.total');
   for (const original of [8, 9, 10, 11]) {
     const values = rows.map(({ row }) => original === 8 ? row.parts[0].barCount : original === 9 ? row.parts[0].netLengthM : original === 10 ? row.netWeightKg : row.orderWeightKg);

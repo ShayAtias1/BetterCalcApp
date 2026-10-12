@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import ExcelJS from 'exceljs';
+import { sectionOf } from './sectionView.ts';
 import { PLAN_A } from './fixtures.ts';
 import type { Plan, Project } from '../../src/types/index.ts';
 import type { RebarMesh, RebarBars } from '../../src/types/structural.ts';
@@ -120,9 +121,10 @@ test('purchase source reaches plan/project summaries, PDF cells and numeric Exce
     const metadata: Project = { id: 'project', name: 'Project', createdAt: 0, updatedAt: 0, planIds: [p.id] };
     for (const [wb, offset] of [[buildQuantitiesWorkbook([], [], language, report), 0], [buildProjectWorkbook(metadata, [p], language), 1]] as const) {
       const read = new ExcelJS.Workbook(); await read.xlsx.load(await wb.xlsx.writeBuffer());
-      const sheet = read.getWorksheet(context.t('exports.excel.sheets.rebar'))!;
-      near(sheet.getCell(2, 11 + offset).value as number, purchase, 0.0001);
-      near(sheet.getCell(2, 9 + offset).value as number, engineering.weightKg!, 0.0001);
+      // The Rebar section of the one structural sheet; its first item row is the second row of the section.
+      const sheet = sectionOf(read, context.t('exports.excel.sheets.structural'), context.t('exports.excel.sheets.rebar'))!;
+      near(sheet.getRow(2).getCell(11 + offset).value as number, purchase, 0.0001);
+      near(sheet.getRow(2).getCell(9 + offset).value as number, engineering.weightKg!, 0.0001);
     }
   }
 });

@@ -55,10 +55,12 @@ test('plan workbook: sheets, formulas and values', async (t) => {
   const sheets = await dump(buildQuantitiesWorkbook(summaries, areas, 'he'));
   assert.deepEqual(
     sheets.map((s) => s.name),
-    ['סיכום כולל', 'כתב כמויות', 'ניכוי פתחים', 'הריסה ובנייה']
+    // A compact plan workbook: the schedule (summary, schedule, areas) and the openings sheet.
+    ['כתב כמויות', 'הריסה ובנייה', 'פתחים וניכויים']
   );
   assert.ok(sheets.every((s) => s.rightToLeft));
-  assert.deepEqual(referencedSheets(sheets), ['כתב כמויות']);
+  // The plan's summary reads the schedule on the same sheet: no cross-sheet references.
+  assert.deepEqual(referencedSheets(sheets), []);
   t.assert.snapshot(sheets);
 });
 
@@ -75,10 +77,10 @@ test('project workbook: sheets, formulas and values', async (t) => {
   const sheets = await dump(buildProjectWorkbook(PROJECT, [PLAN_A, PLAN_B], 'he'));
   assert.deepEqual(
     sheets.map((s) => s.name),
-    // The opening schedule follows the finishes sheets whenever a plan has openings (the fixtures have room openings).
-    ['סיכום פרויקט', 'תוכניות', 'חדרים', 'סוגי עבודה', 'ספירת פתחים פיזיים', 'טבלת פתחים']
+    // Project summary, one schedule for all plans, and the openings sheet (the fixtures have room openings).
+    ['סיכום פרויקט', 'כתב כמויות', 'הריסה ובנייה', 'פתחים וניכויים']
   );
   assert.ok(sheets.every((s) => s.rightToLeft));
-  assert.deepEqual(referencedSheets(sheets), ['תוכניות']);
+  assert.deepEqual(referencedSheets(sheets), ['כתב כמויות']);
   t.assert.snapshot(sheets);
 });

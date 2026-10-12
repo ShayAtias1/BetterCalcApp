@@ -41,3 +41,11 @@ test('quantity-only entry method persists without coordinates or conversion of l
  assert.equal(opening.entryMethod,'takeoff');assert.equal(opening.geometry,null);assert.equal(opening.approval.status,'draft');assert.equal(opening.quantityReview?.associationsConfirmed,false);
  assert.equal(validatePlanOpening(loaded,opening).canApprove,true);assert.deepEqual(loaded.rooms,PLAN_A.rooms);
 });
+
+test('suggested defaults and new mechanisms survive existing save/load without rewriting approved openings',async()=>{
+ const {aiOpeningDefaults}=await import('../../src/lib/openingOptions.ts');
+ const plan=addPlanOpening(structuredClone(PLAN_A),{pageNumber:1,geometry:null,entryMethod:'takeoff',kind:'window',mechanism:'tilt-and-turn',walkableAccess:'unsupported',roomIds:[],widthM:null,heightM:null,sillHeightM:null,quantity:null,source:'import',legacyRefs:[],...aiOpeningDefaults('window')},'suggested',1);
+ await savePlan(plan);const loaded=(await loadPlan(plan.id))!;
+ assert.deepEqual(loaded.openings,plan.openings);assert.deepEqual(loaded.rooms,PLAN_A.rooms);
+ assert.deepEqual(loaded.openings![0].suggestedDimensions,['widthM','heightM','sillHeightM','quantity']);
+});

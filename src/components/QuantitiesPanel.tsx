@@ -9,6 +9,7 @@ import { ConcreteQuantityTable, RebarQuantityTable } from './StructuralQuantityT
 import { concreteOf, rebarOf } from '../lib/structuralPlan';
 import Icon from './Icon';
 import { buildReportCategoryTotals, buildRoomSummaries } from '../lib/quantities';
+import { isCustomColumn, primaryReading, reportColumnInfo } from '../lib/projectQuantities';
 import { formatNumber, useT } from '../i18n';
 
 /** Never smaller than a header plus a couple of rows, never taller than leaving a strip of plan. */
@@ -99,10 +100,17 @@ export default function QuantitiesPanel({ mobileOpen = false, onMobileClose, onM
   // keeps the space without hiding the numbers. Same calculation as the table's totals.
   const closedTotals = useMemo(() => {
     if (!project || (desktop && open)) return [];
-    return buildReportCategoryTotals(project, buildRoomSummaries(project))
-      .filter((total) => (total.lengthM ?? total.quantityM2) > 0)
-      .map((total) => ({ category: total.category, value: total.lengthM ?? total.quantityM2, unit: total.lengthM !== null ? 'units.m' as const : 'units.m2' as const }));
-  }, [project, desktop, open]);
+    const summaries = buildRoomSummaries(project);
+    return buildReportCategoryTotals(project, summaries)
+      .map((total) => {
+        const info = reportColumnInfo(total.category, summaries, t);
+        const value = primaryReading(total, info).net ?? 0;
+        // Built-in columns keep their established units; custom ones name their own.
+        const unit = isCustomColumn(total.category) ? info.unitLabel : t(total.lengthM !== null ? 'units.m' : 'units.m2');
+        return { category: total.category, label: info.label, value, unit };
+      })
+      .filter((total) => total.value > 0);
+  }, [project, desktop, open, t]);
 
   if (!project) return null;
 
@@ -117,7 +125,7 @@ export default function QuantitiesPanel({ mobileOpen = false, onMobileClose, onM
         <span className="muted qty-closed-count">{t('quantitiesPanel.rooms', { count: roomCount })}</span>
         {desktop && closedTotals.length > 0 && <span className="qty-closed-totals">
           {closedTotals.map((total) => <span key={total.category}>
-            {t(`reportCategories.${total.category}`)} <bdi className="tnum">{formatNumber(total.value)}</bdi> {t(total.unit)}
+            {total.label} <bdi className="tnum">{formatNumber(total.value)}</bdi> {total.unit}
           </span>)}
         </span>}
         <button className="btn-secondary small qty-open-btn" onClick={() => desktop ? setOpen(true) : onMobileOpen?.()}>

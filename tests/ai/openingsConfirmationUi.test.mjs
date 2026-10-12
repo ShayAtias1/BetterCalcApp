@@ -45,11 +45,15 @@ test('openings use the app AI confirmation without exposing costs', async () => 
       const dialog = page.getByRole('dialog');
       const copy = await dialog.innerText();
       assert.ok(!/0\.205|5\.61|USD|\$|reservation|estimated|שריון|משוערת/i.test(copy));
-      assert.ok(copy.includes('OpenAI'));
-      assert.ok(copy.includes(language === 'he' ? 'אישור ידני' : 'manual review and approval'));
+      assert.ok(copy.includes(language === 'he' ? 'אישור שימוש בקרדיטים' : 'Confirm credit use'));
+      assert.ok(!copy.includes('OpenAI'));
+      await dialog.getByText(language==='he'?'מידע על עיבוד נתונים ופרטיות':'Data processing and privacy information',{exact:true}).click();
+      const disclosure=await dialog.innerText();
+      assert.ok(disclosure.includes(language==='he'?'ספק AI חיצוני':'external AI provider'));
+      assert.ok(disclosure.includes(language==='he'?'לאשר את התוצאות ידנית':'approve the results manually'));
       assert.ok(copy.includes(language === 'he' ? 'בקשת זיהוי חדשה' : 'new detection request'));
       assert.equal(await page.evaluate(() => window.preparedOpening.preview.requestDigest), 'bound-request');
-      const start = dialog.getByRole('button',{name:language === 'he' ? 'התחל זיהוי' : 'Start detection',exact:true});
+      const start = dialog.getByRole('button',{name:language === 'he' ? 'אישור והפעלה' : 'Confirm and run',exact:true});
       assert.equal(await start.count(),1);
       // Escape cancels just as it does for room detection. Submission requires an explicit click.
       await page.keyboard.press('Escape');

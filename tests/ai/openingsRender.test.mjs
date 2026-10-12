@@ -24,7 +24,7 @@ test('Hebrew detection control is disabled for saved results; uncertain markers 
  globalThis.openingsRenderApp=useAppStore.getState();globalThis.openingsRenderUi=useOpeningsAiUi.getState();
  const button=renderToStaticMarkup(createElement(Panel));assert.ok(button.includes('זיהוי דלתות וחלונות באמצעות AI'));assert.ok(button.includes('disabled'));
  const render=()=>renderToStaticMarkup(createElement(Overlay,{zoom:2,screenToNative:()=>({x:0,y:0}),hoverPoint:null,editable:true,isPanGesture:()=>false}));
- assert.ok(render().includes('<rect'));assert.ok(render().includes('>?</text>'));
+ assert.ok(render().includes('<rect'));assert.ok(render().includes('הצעת AI'));assert.ok(!render().includes('<text'));
  useOpeningsAiUi.setState({sourceHash:'b'.repeat(64)});globalThis.openingsRenderUi=useOpeningsAiUi.getState();assert.ok(!render().includes('data-opening-id'));
  useAppStore.getState().setProject(null);
 });

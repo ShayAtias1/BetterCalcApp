@@ -95,14 +95,15 @@ test('a plan with finishes only exports exactly as before — with or without th
   assert.deepEqual(structuralPageNumbers(PLAN_A), []);
 });
 
-test('with structural data the finishes sheets are untouched and the new sheets come last', async () => {
+test('with structural data the finishes sheets are untouched and the structural sheet comes last', async () => {
   const p = plan([el({})], [mesh([layer()])]);
   const summaries = buildRoomSummaries(p);
   const areas = p.measurements.filter((m) => m.tool === 'area' && m.areaKind && typeof m.areaM2 === 'number');
   const base = await dump(buildQuantitiesWorkbook(summaries, areas, 'he'));
   const withStructural = await dump(buildQuantitiesWorkbook(summaries, areas, 'he', buildStructuralReport(p)));
   assert.deepEqual(withStructural.slice(0, base.length), base);
-  assert.deepEqual(withStructural.slice(base.length).map((s) => s.name), ['בטון', 'זיון']);
+  // Concrete and rebar are sections of one structural sheet.
+  assert.deepEqual(withStructural.slice(base.length).map((s) => s.name), ['כמויות שלד']);
 });
 
 const he = translatorFor('he');

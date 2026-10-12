@@ -315,10 +315,11 @@ export default function PdfViewer() {
   useEffect(() => {
     structuralDrag.current = null;
     barDrag.current = null;
+    suppressStructuralClick.current = false;
     setBarPreview(null);
     setStructuralPreview(null);
   }, [project, currentPage, toolMode, drawTarget, selectedRoomId, selectedConcreteId, selectedRebarId, selectedDrawnBarId, selectedStirrupPlacementId,
-    selectedDetectionCandidateId, detectionCandidates, overlayVisible.finishes, overlayVisible.concrete, overlayVisible.rebar, meshLayoutView.editing]);
+    selectedDetectionCandidateId, detectionCandidates, overlayVisible.finishes, overlayVisible.concrete, overlayVisible.rebar, meshLayoutView.editing, openingPlacement]);
 
   const spaceHeld = useRef(false);
   const isPanning = useRef(false);
@@ -409,7 +410,7 @@ export default function PdfViewer() {
   const room = project?.rooms.find((r) => r.id === selectedRoomId) ?? null;
   const areaPlan = structuralPlan ?? project;
   const selectedArea = (() => {
-    if (!areaPlan || toolMode !== 'select') return null;
+    if (!areaPlan || toolMode !== 'select' || openingPlacement) return null;
     if (drawTarget === 'room' && overlayVisible.finishes) {
       if (!touchInput && !reviewOnly) {
         const candidate = detectionCandidates.find(c => c.id === selectedDetectionCandidateId && c.pageNumber === currentPage && c.localAi?.planId === project?.id);
@@ -439,6 +440,8 @@ export default function PdfViewer() {
     return null;
   })();
   const metersPerPixel = project?.pages[currentPage]?.calibration?.metersPerPixel ?? 0;
+  // Every selected area displays editing handles, including move and touch modes.
+  const areaEditing = !!selectedArea && !reviewOnly;
   // A tool that yields real-world numbers is active on a page with no scale.
   const grid = computeGrid(metersPerPixel, gridSpacingM, zoom);
   const needsCalibrationHint =
@@ -949,7 +952,7 @@ export default function PdfViewer() {
   };
 
   const handleDoubleClick = (e: MouseEvent) => {
-    if (reviewOnly) return;
+    if (reviewOnly || openingPlacement) return;
     if (useAiWorkflow.getState().oneClickArmed) return;
     if (toolMode !== 'select' || drawTarget !== 'room' || !overlayVisible.finishes || spaceHeld.current) return;
     const edgeTarget = !touchInput && (e.target as Element).closest?.('[data-polygon-edge]');
@@ -1178,11 +1181,11 @@ export default function PdfViewer() {
 
   const desktopStart = useRef<Pick<ReturnType<typeof useAppStore.getState>, 'project' | 'history' | 'future' | 'dirty'> | null>(null);
   const navigation = usePlanNavigation({
-    transform, reviewOnly, contextKey: `${project?.id}:${currentPage}:${toolMode}:${drawTarget}:${selectedRoomId}:${selectedDetectionCandidateId}:${selectedConcreteId}:${selectedRebarId}:${selectedStirrupPlacementId}:${selectedMarkupId}:${selectedDrawnBarId}:${meshLayoutView.level}:${meshLayoutView.editing}`,
-    editing: { begin: (x, y, target, pointerType) => meshTouch.active ? meshTouch.editing.begin(x, y, target, pointerType) : touch.editing.begin(x, y, target, pointerType),
+    transform, reviewOnly, contextKey: `${project?.id}:${currentPage}:${toolMode}:${drawTarget}:${selectedRoomId}:${selectedDetectionCandidateId}:${selectedConcreteId}:${selectedRebarId}:${selectedStirrupPlacementId}:${selectedMarkupId}:${selectedDrawnBarId}:${meshLayoutView.level}:${meshLayoutView.editing}:${!!openingPlacement}`,
+    editing: { begin: (x, y, target, pointerType) => openingPlacement ? false : meshTouch.active ? meshTouch.editing.begin(x, y, target, pointerType) : touch.editing.begin(x, y, target, pointerType),
       move: (x, y) => { meshTouch.editing.move(x, y); touch.editing.move(x, y); },
       end: (x, y) => { meshTouch.editing.end(x, y); touch.editing.end(x, y); },
-      cancel: () => { meshTouch.editing.cancel(); touch.editing.cancel(); } }, managedMouse: fieldDraft || geometryAction !== 'browse',
+      cancel: () => { meshTouch.editing.cancel(); touch.editing.cancel(); } }, managedMouse: !openingPlacement && (fieldDraft || geometryAction !== 'browse'),
     onDesktopStart: () => {
       const { project, history, future, dirty } = useAppStore.getState();
       desktopStart.current = { project, history, future, dirty };
@@ -1200,7 +1203,7 @@ export default function PdfViewer() {
     },
     onTap: (x, y, target) => {
       if (openingPlacement && !reviewOnly) { useAppStore.getState().placeOpeningPoint(screenToNative(x,y)); return; }
-      const openingId = target instanceof Element ? target.closest('[data-opening-id]')?.getAttribute('data-opening-id') : null;
+      const openingId = !areaEditing && target instanceof Element ? target.closest('[data-opening-id]')?.getAttribute('data-opening-id') : null;
       if (openingId && overlayVisible.finishes && !reviewOnly && toolMode === 'select') { useAppStore.getState().selectPlanOpening(openingId); return; }
       if (meshTouch.tap(x, y) || touch.tap(x, y)) return;
       const markupId = target instanceof Element ? target.closest('[data-markup-id]')?.getAttribute('data-markup-id') : null;
@@ -1609,7 +1612,7 @@ export default function PdfViewer() {
                 );
               })()}
             {overlayVisible.finishes && <OpeningsOverlay zoom={zoom} screenToNative={screenToNative}
-              hoverPoint={hoverPoint} editable={!reviewOnly && toolMode === 'select'}
+              hoverPoint={hoverPoint} editable={!reviewOnly && toolMode === 'select'} interactionDisabled={areaEditing}
               isPanGesture={() => spaceHeld.current} />}
           </svg>
         )}

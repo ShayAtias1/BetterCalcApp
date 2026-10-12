@@ -12,6 +12,8 @@ import { projectExportDetails, trackedExport } from '../lib/analytics';
 import { notifyExportFailed } from '../lib/exportFailure';
 import Icon from './Icon';
 import ExportContentPicker from './ExportContentPicker';
+import PdfDrawingOptionsPicker from './PdfDrawingOptionsPicker';
+import type { PdfDrawingOptions } from '../lib/pdfDrawingLayers';
 import { everything, hasAnyContent, type ExportContent } from '../lib/exportContent';
 import { BrandHomeLink } from './BrandLogo';
 import NewComparisonDialog from './compare/NewComparisonDialog';
@@ -40,11 +42,13 @@ const DOMAIN_LABEL = { finishes: 'workspace.tabs.rooms', concrete: 'workspace.ta
 const DASH = '-';
 const fmt = (v: number | null) => (v == null ? DASH : formatNumber(v));
 
-/** The main reading of an amount: running metres for skirting, m² for everything else. */
-function primary(a: CategoryAmount, t: TranslateFn): string {
+/** The main reading of an amount: units for a counted category, running metres for skirting and strips, m² for everything else. */
+function primary(a: CategoryAmount, t: TranslateFn, unitLabel: string): string {
+  if (a.count != null) return `${fmt(a.count)} ${unitLabel}`;
   return a.lengthM != null ? `${fmt(a.lengthM)} ${t('units.lm')}` : `${fmt(a.quantityM2)} ${t('units.m2')}`;
 }
-function primaryOrder(a: CategoryAmount, t: TranslateFn): string {
+function primaryOrder(a: CategoryAmount, t: TranslateFn, unitLabel: string): string {
+  if (a.orderCount != null) return `${fmt(a.orderCount)} ${unitLabel}`;
   return a.orderLengthM != null ? `${fmt(a.orderLengthM)} ${t('units.lm')}` : `${fmt(a.orderM2)} ${t('units.m2')}`;
 }
 
@@ -91,10 +95,12 @@ export default function ProjectOverview() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  // The project export asks what to include: Finishes, Concrete, Rebar (no plan drawings here).
-  const [exportDialog, setExportDialog] = useState<{ kind: 'excel' | 'pdf'; content: ExportContent; includeOpeningDetails?: boolean } | null>(null);
+  // The project export asks what to include: the plan drawings (PDF only), Finishes, Concrete, Rebar.
+  const [exportDialog, setExportDialog] = useState<({ kind: 'excel' | 'pdf'; content: ExportContent; includeOpeningDetails?: boolean } & PdfDrawingOptions) | null>(null);
+  const overlayVisible = useAppStore((s) => s.overlayVisible);
   const exportAvailable: ExportContent = {
-    plan: false,
+    // The PDF can open each plan with its drawings; the Excel workbook never holds drawings.
+    plan: plans.length > 0,
     // Finishes is offered whenever there are rooms - and for a project with nothing at all, so the old empty report still exports.
     finishes: plans.some((p) => p.rooms.length > 0) || !(structural.concrete || structural.rebar),
     concrete: !!structural.concrete,
@@ -366,15 +372,15 @@ export default function ProjectOverview() {
                               <Icon name={open ? 'chevron-up' : 'chevron-down'} size={13} />
                               {total.label}
                             </td>
-                            <td>{primary(total, t)}</td>
-                            <td className="order">{primaryOrder(total, t)}</td>
+                            <td>{primary(total, t, total.unit)}</td>
+                            <td className="order">{primaryOrder(total, t, total.unit)}</td>
                           </tr>
                           {open &&
                             total.perPlan.map((p) => (
                               <tr key={p.planId} className="project-summary-plan">
                                 <td>{p.planName}</td>
-                                <td>{primary(p, t)}</td>
-                                <td>{primaryOrder(p, t)}</td>
+                                <td>{primary(p, t, total.unit)}</td>
+                                <td>{primaryOrder(p, t, total.unit)}</td>
                               </tr>
                             ))}
                         </Fragment>
@@ -405,26 +411,27 @@ export default function ProjectOverview() {
           <div className="modal">
             <h3>{t(exportDialog.kind === 'excel' ? 'quantityExport.projectExcelTitle' : 'quantityExport.projectPdfTitle')}</h3>
             <ExportContentPicker
-              sections={['finishes', 'concrete', 'rebar']}
+              sections={exportDialog.kind === 'pdf' ? ['plan', 'finishes', 'concrete', 'rebar'] : ['finishes', 'concrete', 'rebar']}
               content={exportDialog.content}
               available={exportAvailable}
               onChange={(content) => setExportDialog({ ...exportDialog, content })}
             />
             {exportDialog.kind === 'pdf' && exportDialog.content.finishes && <label className="opening-review-check"><input type="checkbox" checked={exportDialog.includeOpeningDetails??false} onChange={e=>setExportDialog({...exportDialog,includeOpeningDetails:e.target.checked})}/>{t('openingQuantities.includeDetails')}</label>}
+            {exportDialog.kind === 'pdf' && exportDialog.content.plan && <PdfDrawingOptionsPicker value={exportDialog} onChange={options => setExportDialog({ ...exportDialog, ...options })} />}
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setExportDialog(null)}>
                 {t('common.cancel')}
               </button>
               <button
                 className="btn-primary"
-                disabled={!hasAnyContent(exportDialog.content)}
+                disabled={!hasAnyContent(exportDialog.kind === 'pdf' ? exportDialog.content : { ...exportDialog.content, plan: false }) || (exportDialog.kind === 'pdf' && exportDialog.content.plan && exportDialog.drawingMode === 'separate' && exportDialog.drawingLayers?.length === 0)}
                 onClick={() => {
-                  const { kind, content, includeOpeningDetails = false } = exportDialog;
+                  const { kind, content, includeOpeningDetails = false, drawingMode, drawingLayers } = exportDialog;
                   setExportDialog(null);
                   void run(kind, () =>
                     kind === 'excel'
                       ? runProjectExport('project_excel', () => exportProjectToExcel(project, plans, content, language))
-                      : runProjectExport('project_pdf', () => exportProjectToPdf(project, plans, content, language, {includeOpeningDetails}))
+                      : runProjectExport('project_pdf', () => exportProjectToPdf(project, plans, content, language, { includeOpeningDetails, overlays: overlayVisible, drawingMode, drawingLayers }))
                   );
                 }}
               >

@@ -1,6 +1,7 @@
 import type { Plan, PlanOpening } from '../../types';
 import type { AiOpeningReview } from '../../types/aiOpenings';
 import { validatePlanOpening } from '../planOpenings';
+import { aiOpeningDefaults, openingAccessDefault } from '../openingOptions';
 
 /** Deterministic IDs plus persistent review tombstones prevent replay after deletion/undo. */
 export function importOpeningReview(plan:Plan,review:AiOpeningReview,now:number):Plan {
@@ -9,7 +10,7 @@ export function importOpeningReview(plan:Plan,review:AiOpeningReview,now:number)
   const common={planId:plan.id,pageNumber:review.pageNumber,entryMethod:'plan' as const,source:'import' as const,
     roomIds:[],legacyRefs:[],widthM:null,heightM:null,sillHeightM:null,quantity:null,
     quantityReview:{associationsConfirmed:false,distinctLegacyRoomIds:[]},approval:{status:'draft' as const,reviewedAt:null},createdAt:now,updatedAt:now};
-  const added:PlanOpening[]=[...review.candidates.map(c=>({...common,id:c.id,geometry:structuredClone(c.geometry),...c.classification,
+  const added:PlanOpening[]=[...review.candidates.map(c=>({...common,id:c.id,geometry:structuredClone(c.geometry),...c.classification, ...aiOpeningDefaults(c.classification.kind), walkableAccess:openingAccessDefault(c.classification.kind),
     aiDetection:{reviewKey:review.key,sourceHash:review.sourceHash,bbox:structuredClone(c.bbox),provenance:structuredClone(c.provenance)}})),
     ...review.deferred.map(c=>({...common,id:c.id,geometry:null,kind:'unknown' as const,mechanism:'unknown' as const,walkableAccess:'unknown' as const,
       aiDetection:{reviewKey:review.key,sourceHash:review.sourceHash,bbox:structuredClone(c.bbox),deferred:structuredClone(c.original)}}))];

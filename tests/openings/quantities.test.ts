@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import {sectionOf} from '../takeoff/sectionView.ts';
 import assert from 'node:assert/strict';
 import type { Plan, PlanOpening, WorkType } from '../../src/types/index.ts';
 import { PLAN_A } from '../takeoff/fixtures.ts';
@@ -78,10 +79,10 @@ test('plan/project Excel and PDF table data share counts, schedules, dimensions,
  for(const language of ['he','en'] as const){
   const x=exportContext(language),tables=openingReportTables([p,p2],x);assert.equal(tables[0].rows.at(-1)![1],'2');assert.equal(tables[1].rows.length,2);
   const workbook=buildQuantitiesWorkbook(buildRoomSummaries(p),[],language,undefined,p,new Set([1]));
-  const schedule=workbook.getWorksheet(x.t('openingQuantities.schedule'))!;assert.equal(schedule.getRow(2).getCell(3).value,1);assert.equal(schedule.getRow(2).getCell(6).value,1);assert.equal(schedule.views[0].rightToLeft,language==='he');
-  const bytes=await workbook.xlsx.writeBuffer();const loaded=new (await import('exceljs')).default.Workbook();await loaded.xlsx.load(bytes);assert.equal(loaded.getWorksheet(schedule.name)!.getRow(2).getCell(7).value,1);
+  const schedule=sectionOf(workbook,x.t('exports.excel.sheets.openings'),x.t('openingQuantities.schedule'))!;assert.equal(schedule.getRow(2).getCell(3).value,1);assert.equal(schedule.getRow(2).getCell(6).value,1);assert.equal(schedule.views[0].rightToLeft,language==='he');
+  const bytes=await workbook.xlsx.writeBuffer();const loaded=new (await import('exceljs')).default.Workbook();await loaded.xlsx.load(bytes);assert.equal(sectionOf(loaded,x.t('exports.excel.sheets.openings'),x.t('openingQuantities.schedule'))!.getRow(2).getCell(7).value,1);
   const project=buildProjectWorkbook({id:'project-1',name:'Project',createdAt:1,updatedAt:1,planIds:[p.id,p2.id]},[p,p2],language);
-  assert.equal(project.getWorksheet(x.t('openingQuantities.counts'))!.getRow(4).getCell(2).value,2);
+  assert.equal(sectionOf(project,x.t('exports.excel.sheets.openings'),x.t('openingQuantities.counts'))!.getRow(4).getCell(2).value,2);
   assert.deepEqual(openingReportTables([p],x,undefined,new Set([2])),[]);
  }
  assert.deepEqual(Object.keys(he.openingQuantities).sort(),Object.keys(en.openingQuantities).sort());

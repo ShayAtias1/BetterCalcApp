@@ -75,7 +75,7 @@ test('English plan workbook: names, direction, formulas and numbers match the He
 
   assert.deepEqual(
     en.map((s) => s.name),
-    ['Overall Summary', 'Quantity Takeoff', 'Opening Deductions', 'Demolition & New Construction']
+    ['Quantity Schedule', 'Demolition & New Construction', 'Openings & Deductions']
   );
   assert.ok(en.every((s) => !s.rightToLeft), 'English sheets run left to right');
   assert.ok(he.every((s) => s.rightToLeft), 'Hebrew sheets are unchanged: right to left');
@@ -86,23 +86,19 @@ test('English plan workbook: names, direction, formulas and numbers match the He
   assert.ok(formulas > 20, `formulas were compared (${formulas})`);
   assert.ok(numbers > 20, `numbers were compared (${numbers})`);
 
-  // The summary's formulas reach the data sheet by its English name, and that sheet exists.
-  const referenced = new Set<string>();
-  for (const s of en)
-    for (const v of Object.values(s.cells))
-      if (isFormula(v)) for (const m of v.formula.matchAll(/'((?:[^']|'')+)'!/g)) referenced.add(m[1].replace(/''/g, "'"));
-  assert.deepEqual([...referenced], ['Quantity Takeoff']);
-  assert.ok(en.some((s) => s.name === 'Quantity Takeoff'));
-  const summary = en[0].cells;
-  assert.ok(Object.values(summary).some((v) => isFormula(v) && v.formula.startsWith("'Quantity Takeoff'!")));
+  // The plan's summary reads the category totals of the schedule on the same sheet.
+  const schedule = en[0].cells;
+  assert.ok(Object.values(schedule).some((v) => isFormula(v) && /SUMIFS/.test(v.formula)));
+  assert.ok(!Object.values(schedule).some((v) => isFormula(v) && v.formula.includes('!')));
 });
 
 test('English plan workbook: headers, units and labels are English; only the user\'s own text stays Hebrew', async () => {
   const summaries = buildRoomSummaries(PLAN_A);
   const en = await dump(buildQuantitiesWorkbook(summaries, areas, 'en'));
-  const data = en.find((s) => s.name === 'Quantity Takeoff')!;
-  const headers = Object.entries(data.cells).filter(([a]) => /^[A-Z]+1$/.test(a)).map(([, v]) => v);
-  assert.deepEqual(headers.slice(0, 6), ['Apartment', 'Room', 'Standard floor tiling area (m²)', 'AS floor tiling area (m²)', 'Wall cladding area (m²)', 'Skirting area (m²)']);
+  const data = en.find((s) => s.name === 'Quantity Schedule')!;
+  const headerRow = '1';
+  const headers = Object.entries(data.cells).filter(([a]) => a.replace(/^[A-Z]+/, '') === headerRow).map(([, v]) => v);
+  assert.deepEqual(headers, ['Apartment', 'Room', 'Category', 'Work type / specification', 'Unit', 'Net quantity', 'Waste (%)', 'To order', 'Area (m²)', 'Area to order (m²)', 'Openings', 'Notes', 'Category key', 'Apartment key']);
   for (const h of headers) assert.ok(!HEBREW.test(String(h)), `header ${h}`);
 
   // Every Hebrew string left in the workbook is something the project's own data says.
@@ -115,9 +111,9 @@ test('English plan workbook: headers, units and labels are English; only the use
     for (const [addr, v] of Object.entries(s.cells))
       if (typeof v === 'string' && HEBREW.test(v)) assert.ok([...own].some((o) => v.includes(o)), `${s.name}!${addr} is Hebrew but not user data: ${v}`);
   for (const s of en) assert.ok(!HEBREW.test(s.name));
-  const areaSheet = en.find((s) => s.name === 'Demolition & New Construction')!;
-  assert.ok(Object.values(areaSheet.cells).includes('Demolition'));
-  assert.ok(Object.values(areaSheet.cells).includes('Area (m²)'));
+  // Demolition and new construction areas are a section of the schedule sheet.
+  assert.ok(Object.values(en.find(s=>s.name==='Demolition & New Construction')!.cells).includes('Demolition'));
+  assert.ok(en.some(s=>s.name==='Demolition & New Construction'));
 });
 
 test('English project workbook: names, direction, formulas and numbers match the Hebrew one', async () => {
@@ -125,18 +121,15 @@ test('English project workbook: names, direction, formulas and numbers match the
   const en = await dump(buildProjectWorkbook(PROJECT, [PLAN_A, PLAN_B], 'en'));
   assert.deepEqual(
     en.map((s) => s.name),
-    ['Project Summary', 'Plans', 'Rooms', 'Work Types', 'Physical opening counts', 'Opening schedule']
+    ['Project Summary', 'Quantity Schedule', 'Demolition & New Construction', 'Openings & Deductions']
   );
   assert.ok(en.every((s) => !s.rightToLeft));
   assert.ok(he.every((s) => s.rightToLeft));
   const { formulas, numbers } = await parity(he, en);
   assert.ok(formulas > 10 && numbers > 20, `compared ${formulas} formulas and ${numbers} numbers`);
-  assert.ok(Object.values(en[0].cells).some((v) => isFormula(v) && v.formula.startsWith("'Plans'!")));
-  // The metadata line carries an English date, not a Hebrew-locale one.
-  const meta = Object.values(en[0].cells).find((v) => typeof v === 'string' && /plans? ·/.test(v)) as string;
-  assert.match(meta, /^2 plans · \d{1,2} [A-Z][a-z]{2} \d{4}$/);
+  assert.ok(Object.values(en[0].cells).some((v) => isFormula(v) && v.formula.includes("'Quantity Schedule'!")));
   // Units are English and the quantities stay real numbers.
-  const workItems = en[3];
+  const workItems = en[1];
   assert.ok(Object.values(workItems.cells).includes('m²') && Object.values(workItems.cells).includes('lm'));
   assert.ok(Object.values(en[1].cells).some((v) => typeof v === 'number'));
 });

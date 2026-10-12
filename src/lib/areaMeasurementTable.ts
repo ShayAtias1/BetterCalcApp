@@ -122,6 +122,34 @@ export function drawAreaMeasurementTable<T extends WallMeasurementLike>(
 
   newPage();
 
+  for (const row of areaMeasurementTableRows(measurements, x, options).rows) {
+    ensureRoom(1);
+    drawRow(row.cells, row.kind === 'grand' ? C_GRAND : row.kind === 'subtotal' ? C_TOTAL : row.zebra ? C_ZEBRA_B : C_ZEBRA_A, row.kind === 'row' ? undefined : { bold: true });
+  }
+}
+
+export interface AreaTableRow {
+  cells: string[];
+  kind: 'row' | 'subtotal' | 'grand';
+  /** Alternate row shading within a kind's rows. */
+  zebra: boolean;
+}
+
+/**
+ * The demolition/construction table's content — headers, column weights and rows (one per marked
+ * area/wall, then per-kind and grand totals) — shared by the stand-alone pages above and the
+ * quantity report's flowing section.
+ */
+export function areaMeasurementTableRows<T extends WallMeasurementLike>(
+  measurements: T[],
+  x: ReturnType<typeof exportContext>,
+  options: Pick<AreaTableOptions, 'numbering' | 'showPage'> = {}
+): { headers: string[]; weights: number[]; rows: AreaTableRow[] } {
+  const { t } = x;
+  const showPage = !!options.showPage;
+  const headers = (showPage ? HEADER_KEYS_WITH_PAGE : HEADER_KEYS).map((k) => t(`exports.common.areaHeaders.${k}`));
+  const weights = x.rtl ? (showPage ? WEIGHTS_WITH_PAGE : WEIGHTS) : showPage ? WEIGHTS_WITH_PAGE_LTR : WEIGHTS_LTR;
+  const out: AreaTableRow[] = [];
   const kinds: Array<'demolition' | 'construction'> = ['demolition', 'construction'];
   const numbers = options.numbering ?? numberAreaMeasurements(measurements);
   // Padded to the column count so the same row builder serves both layouts.
@@ -136,10 +164,11 @@ export function drawAreaMeasurementTable<T extends WallMeasurementLike>(
     // apart — including the rule that only wall-mode rows carry running metres.
     const { areaM2: subtotal, lengthM: subLength } = changeTotals(rows, kind);
     rows.forEach((m, i) => {
-      ensureRoom(1);
       const isWall = m.calcMode === 'wall';
-      drawRow(
-        cells(
+      out.push({
+        kind: 'row',
+        zebra: i % 2 === 1,
+        cells: cells(
           `${numbers.get(m.id) ?? ''}`,
           t(`areaKinds.${kind}`),
           m.pageNumber === undefined ? DASH : `${m.pageNumber}`,
@@ -148,23 +177,12 @@ export function drawAreaMeasurementTable<T extends WallMeasurementLike>(
           isWall ? `${round(m.wallHeightM ?? 0, 2)}` : DASH,
           `${round(m.areaM2 ?? 0, 2)}`
         ),
-        i % 2 === 0 ? C_ZEBRA_A : C_ZEBRA_B
-      );
+      });
     });
     grandTotal += subtotal;
     grandLength += subLength;
-    ensureRoom(1);
-    drawRow(
-      cells(t('exports.common.kindTotal', { kind: t(`areaKinds.${kind}`) }), '', '', '', subLength > 0 ? `${round(subLength, 2)}` : DASH, '', `${round(subtotal, 2)}`),
-      C_TOTAL,
-      { bold: true }
-    );
+    out.push({ kind: 'subtotal', zebra: false, cells: cells(t('exports.common.kindTotal', { kind: t(`areaKinds.${kind}`) }), '', '', '', subLength > 0 ? `${round(subLength, 2)}` : DASH, '', `${round(subtotal, 2)}`) });
   }
-
-  ensureRoom(1);
-  drawRow(
-    cells(t('exports.common.grandTotal'), '', '', '', grandLength > 0 ? `${round(grandLength, 2)}` : DASH, '', `${round(grandTotal, 2)}`),
-    C_GRAND,
-    { bold: true }
-  );
+  out.push({ kind: 'grand', zebra: false, cells: cells(t('exports.common.grandTotal'), '', '', '', grandLength > 0 ? `${round(grandLength, 2)}` : DASH, '', `${round(grandTotal, 2)}`) });
+  return { headers, weights, rows: out };
 }

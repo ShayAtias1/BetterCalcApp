@@ -178,9 +178,9 @@ test('finishes summary mode: only a project with neither finishes nor structural
 // ---------- project Excel ----------
 
 
-test('a project without concrete or rebar retains legacy sheets plus canonical opening reports', async () => {
+test('a project without concrete or rebar has no structural sheet; openings are one sheet of sections', async () => {
   const wb = buildProjectWorkbook(PROJECT(['plan-a', 'plan-b']), [PLAN_A, PLAN_B], 'he');
-  assert.deepEqual(wb.worksheets.map((s) => s.name), ['סיכום פרויקט', 'תוכניות', 'חדרים', 'סוגי עבודה', 'ספירת פתחים פיזיים', 'טבלת פתחים']);
+  assert.deepEqual(wb.worksheets.map((s) => s.name), ['סיכום פרויקט', 'כתב כמויות', 'הריסה ובנייה', 'פתחים וניכויים']);
 });
 
 // ---------- project PDF ----------

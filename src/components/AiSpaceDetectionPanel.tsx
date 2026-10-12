@@ -1,5 +1,5 @@
 import { pendingAiReviewCandidates } from '../lib/localAiReview';
-import { confirmDialog } from '../lib/appDialogs';
+import { confirmAiDialog } from '../lib/appDialogs';
 import { canAuthorTakeoff, isTouchInput } from '../lib/workspaceCapabilities';
 import { useAppStore } from '../store/appStore';
 import { useT } from '../i18n';
@@ -27,13 +27,14 @@ export default function AiSpaceDetectionPanel(){
   const hasDrafts=pending.length>0;
   return <section className="ai-tools-section" aria-labelledby="ai-tools-title">
     <h3 id="ai-tools-title">{t('aiTools.title')}</h3>
+    <p className="menu-hint">{t('aiConfirmation.status')}</p>
     <div className="ai-tools-actions">
       <button className="btn-secondary ai-tool-button" disabled={!ready||!!active||recovering||hasDrafts} onClick={async()=>{
-        if(await confirmDialog(t('aiTools.fullPageConsent'), { title: t('dialogs.aiTitle'), confirmLabel: t('dialogs.aiStart') }))void startAiDetection();
+        if(await confirmAiDialog(t('aiDetection.disclosure')))void startAiDetection();
       }}><Icon name="scan" size={16}/><span>{t('aiTools.allSpaces')}</span></button>
       <button className={`btn-secondary ai-tool-button${oneClickArmed?' active':''}`} disabled={!ready||!!active||recovering||!canAuthorTakeoff()||isTouchInput()} aria-pressed={oneClickArmed} aria-label={t(oneClickArmed?'aiDetection.cancelOneClick':'aiTools.oneClick')} onClick={async()=>{
         if(oneClickArmed)cancelOneClick();
-        else if(await confirmDialog(t('aiTools.oneClickConsent'), { title: t('dialogs.aiTitle'), confirmLabel: t('dialogs.aiArm') }))armOneClick();
+        else if(await confirmAiDialog(t('aiDetection.oneClickDisclosure')))armOneClick();
       }}><Icon name="target" size={16}/><span>{t('aiTools.oneClick')}</span>{oneClickArmed&&<Icon name="close" size={14}/>}</button>
       <button className="btn-secondary ai-tool-button" disabled={!folder||!batchReady} onClick={()=>{cancelOneClick();openMultiPlan(true);}}><Icon name="layers" size={16}/><span>{t('aiTools.multiPlan')}</span></button>
       <AiOpeningsPanel />

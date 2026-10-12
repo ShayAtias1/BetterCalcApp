@@ -67,6 +67,7 @@ export function useTouchTakeoff({ transform, area, line, bar, contextKey, onArea
   }, []);
   const editing: PlanPointerEdit = {
     begin: (x, y, _target, pointerType) => {
+      if (state.openingPlacement) return false;
       const native = transform.screenToNative(x, y);
       const radius = nativeHitRadius(transform.getView().zoom, pointerType);
       if (activeDraft && points.length) {
@@ -190,7 +191,7 @@ export function useTouchTakeoff({ transform, area, line, bar, contextKey, onArea
   return { editing, tap, precision, activeDraft, points, key, action, minPoints, distanceResult, finish, cancel, back, editNote,
     canEditBar: !!bar,
     canEditNote: !!state.project?.markups?.some((m) => m.id === state.selectedMarkupId && m.tool === 'text'),
-    canEditGeometry: canAuthorTakeoff() && !state.selectedMarkupId && !!(area || line || bar) && state.toolMode === 'select',
+    canEditGeometry: canAuthorTakeoff() && !state.openingPlacement && !state.selectedMarkupId && !!(area || line || bar) && state.toolMode === 'select',
     rectangleDraft: activeDraft && points.length === 2 && (state.toolMode === 'draw-rect' || (state.toolMode === 'measure' && state.measureTool === 'area' && state.areaShape === 'rectangle')) ? rectanglePoints(points) : null,
   };
 }

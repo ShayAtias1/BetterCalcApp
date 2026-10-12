@@ -1,10 +1,12 @@
+import { openingDescription as openingTypeDescription } from './openingOptions';
 import type { Plan, PlanOpening } from '../types';
 import { buildOpeningSchedule, type OpeningAudit, type OpeningScheduleRow } from './openingQuantities';
 import { calculateWorkItem, roomMetrics } from './quantities';
-import { workTypeDefinition } from './workTypes';
+import { workItemDefinition, type QuantityUnit } from './workTypes';
 import type { ExportContext } from './exportLanguage';
+import { workItemLabel } from './workCatalog';
 export interface OpeningWorkReport {
- roomId:string; itemId:string; type:Plan['rooms'][number]['workItems'][number]['type']; unit:'m2'|'lm'; gross:number; deducted:number; net:number;
+ roomId:string; itemId:string; categoryId?:string; type:Plan['rooms'][number]['workItems'][number]['type']; unit:QuantityUnit; gross:number; deducted:number; net:number;
  audit:OpeningAudit[];
 }
 export function buildOpeningQuantityReport(plan:Plan, roomScope?:Set<string>, pageScope?:Set<number>) {
@@ -14,9 +16,9 @@ export function buildOpeningQuantityReport(plan:Plan, roomScope?:Set<string>, pa
   if(roomScope&&!roomScope.has(room.id)||pageScope&&!pageScope.has(room.pageNumber))continue;
   const metrics=roomMetrics(room,plan.pages[room.pageNumber]?.calibration??null);
   for(const item of room.workItems){
-   const def=workTypeDefinition(item.type);if(!def||!['wallArea','perimeter'].includes(def.basis))continue;
+   const def=workItemDefinition(item);if(!def||!['wallArea','perimeter'].includes(def.basis))continue;
    const calc=calculateWorkItem(item,room,metrics.areaM2,metrics.perimeterM,plan);
-   work.push({roomId:room.id,itemId:item.id,type:item.type,unit:def.unit,gross:calc.grossLengthM??calc.grossM2,deducted:calc.deductedLengthM??calc.deductedM2,net:calc.lengthM??calc.netM2,audit:calc.openingAudit??[]});
+   work.push({roomId:room.id,itemId:item.id,categoryId:item.categoryId,type:item.type,unit:def.unit,gross:calc.grossLengthM??calc.grossM2,deducted:calc.deductedLengthM??calc.deductedM2,net:calc.lengthM??calc.netM2,audit:calc.openingAudit??[]});
   }
  }
  // A rejected record is a resolved review decision (e.g. a dismissed AI detection), not missing
@@ -29,6 +31,8 @@ export function buildOpeningQuantityReport(plan:Plan, roomScope?:Set<string>, pa
  const listed=schedule.filter(r=>!isRejected(r)||r.countedQuantity!==null);
  return {schedule,listed,work,rejected,incomplete,doors:count('door'),windows:count('window')};
 }
+/** The work item's name as reports show it (a custom category by its snapshot name). */
+export function workTypeName(plan:Plan,w:Pick<OpeningWorkReport,'itemId'|'type'|'categoryId'>,tr:ExportContext['t']):string{return workItemLabel({id:w.itemId,type:w.type,categoryId:w.categoryId},plan,tr);}
 export interface OpeningReportTable { title:string; headers:string[]; widths:number[]; rows:string[][] }
 /** Shared text/data layout for the UI, plan/project PDF and Excel. Numbers come from the
  * existing quantity engine; this layer only formats approved/legacy precedence and audit reasons. */
@@ -39,7 +43,7 @@ export function openingReportTables(plans:Plan[],x:ExportContext,roomScope?:Set<
  if(!reports.some(r=>r.report.listed.length))return [];
  // Readable names only: room and opening ids are internal (imported openings use JSON keys).
  const roomName=(plan:Plan,id:string)=>plan.rooms.find(r=>r.id===id)?.name||t('exports.common.unnamedRoom');
- const typeLabel=(row:OpeningScheduleRow)=>row.kind==='door'&&['hinged','sliding'].includes(row.mechanism)?t(`openingTools.${row.mechanism as 'hinged'|'sliding'}`):row.kind==='open-passage'?t('openingTools.passage'):row.kind==='door'?t('openingQuantities.door'):t(`openingTools.${row.kind==='custom'?'custom':row.kind==='window'?'window':'unknown'}`);
+ const typeLabel=(row:OpeningScheduleRow)=>openingTypeDescription(row,t);
  const openingDescription=(row:OpeningScheduleRow|undefined)=>!row?'-':[typeLabel(row),row.label,row.widthM!==null&&row.heightM!==null?`${fmt(row.widthM)}×${fmt(row.heightM)}`:''].filter(Boolean).join(' · ');
  const tables:OpeningReportTable[]=[{
  title:txt('counts'),headers:[t('exports.common.plan'),txt('doors'),txt('windows'),txt('status')],widths:[24,12,12,40],
@@ -51,8 +55,8 @@ export function openingReportTables(plans:Plan[],x:ExportContext,roomScope?:Set<
  // Old legacy-only exports already explain their deductions. This detailed additional ledger
  // is needed when canonical objects exist; it includes both historical and canonical amounts.
  if(plans.some(p=>p.openings?.length)){
-  tables.push({title:txt('deductions'),headers:[t('exports.common.plan'),txt('rooms'),t('exports.common.item'),txt('gross'),txt('deducted'),txt('net'),txt('unit')],widths:[20,20,24,12,12,12,10],rows:reports.flatMap(({plan,report:r})=>r.work.map(w=>{const calibrated=(plan.pages[plan.rooms.find(room=>room.id===w.roomId)!.pageNumber]?.calibration?.metersPerPixel??0)>0;return [plan.name,roomName(plan,w.roomId),t(`workTypes.${w.type}`),calibrated?fmt(w.gross):t('exports.common.notCalibrated'),calibrated?fmt(w.deducted):'-',calibrated?fmt(w.net):'-',t(`units.${w.unit}`)];}))});
-  tables.push({title:txt('exclusions'),headers:[t('exports.common.plan'),txt('rooms'),txt('type'),t('exports.common.item'),txt('status')],widths:[20,22,24,20,55],rows:reports.flatMap(({plan,report:r})=>r.work.flatMap(w=>w.audit.filter(a=>a.reason&&!r.rejected.has(a.openingId)).map(a=>[plan.name,roomName(plan,w.roomId),openingDescription(r.schedule.find(row=>row.source==='canonical'&&row.id===a.openingId)),t(`workTypes.${w.type}`),t(`openingQuantities.${a.reason!}`)])))});
+  tables.push({title:txt('deductions'),headers:[t('exports.common.plan'),txt('rooms'),t('exports.common.item'),txt('gross'),txt('deducted'),txt('net'),txt('unit')],widths:[20,20,24,12,12,12,10],rows:reports.flatMap(({plan,report:r})=>r.work.map(w=>{const calibrated=(plan.pages[plan.rooms.find(room=>room.id===w.roomId)!.pageNumber]?.calibration?.metersPerPixel??0)>0;return [plan.name,roomName(plan,w.roomId),workTypeName(plan,w,t),calibrated?fmt(w.gross):t('exports.common.notCalibrated'),calibrated?fmt(w.deducted):'-',calibrated?fmt(w.net):'-',t(`units.${w.unit}`)];}))});
+  tables.push({title:txt('exclusions'),headers:[t('exports.common.plan'),txt('rooms'),txt('type'),t('exports.common.item'),txt('status')],widths:[20,22,24,20,55],rows:reports.flatMap(({plan,report:r})=>r.work.flatMap(w=>w.audit.filter(a=>a.reason&&!r.rejected.has(a.openingId)).map(a=>[plan.name,roomName(plan,w.roomId),openingDescription(r.schedule.find(row=>row.source==='canonical'&&row.id===a.openingId)),workTypeName(plan,w,t),t(`openingQuantities.${a.reason!}`)])))});
  }
  return tables.filter(table=>table.rows.length>0);
 }
@@ -117,7 +121,7 @@ export function openingPdfSchedule(plans: Plan[], x: ExportContext, options: Ope
 /** Actual nonzero room-side deductions, aggregated once per work item, before waste. */
 export function openingPdfDeductions(plans: Plan[], x: ExportContext): OpeningReportTable | null {
  const rows=plans.flatMap(plan=>buildOpeningQuantityReport(plan).work.filter(w=>w.deducted>0 && (plan.pages[plan.rooms.find(r=>r.id===w.roomId)!.pageNumber]?.calibration?.metersPerPixel??0)>0).map(w=>[
-   plan.name,plan.rooms.find(r=>r.id===w.roomId)?.name||x.t('exports.common.unnamedRoom'),x.t(`workTypes.${w.type}`),x.number(w.gross),x.number(w.deducted),x.number(w.net),x.t(`units.${w.unit}`)
+   plan.name,plan.rooms.find(r=>r.id===w.roomId)?.name||x.t('exports.common.unnamedRoom'),workTypeName(plan,w,x.t),x.number(w.gross),x.number(w.deducted),x.number(w.net),x.t(`units.${w.unit}`)
  ]));
  if(!rows.length)return null;
  return {title:x.t('openingQuantities.deductions'),headers:[x.t('exports.common.plan'),x.t('openingQuantities.rooms'),x.t('exports.common.item'),x.t('openingQuantities.gross'),x.t('openingQuantities.deducted'),x.t('openingQuantities.net'),x.t('openingQuantities.unit')],widths:[20,20,24,12,12,12,10],rows};

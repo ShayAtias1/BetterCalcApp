@@ -4,10 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "postinstall": "node scripts/fix-exceljs-sheet-properties.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "node --experimental-test-module-mocks --import ./tests/resolve-ts.mjs --import ./tests/browser-stubs.mjs --test 'tests/**/*.test.ts'",
+    "test": "node --experimental-test-module-mocks --import ./tests/resolve-ts.mjs --import ./tests/browser-stubs.mjs --test 'tests/**/*.test.ts' 'tests/**/*.test.mjs'",
     "preview": "vite preview",
     "demo:smoke": "node demo/smoke.mjs",
     "demo:qto": "node demo/qto-demo.mjs",

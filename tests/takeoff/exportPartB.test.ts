@@ -14,6 +14,7 @@ import { withStructuralPages } from '../../src/lib/structuralPlan.ts';
 import { exportContext } from '../../src/lib/exportLanguage.ts';
 import type { Plan, Point, Project } from '../../src/types/index.ts';
 import type { ConcreteElement, MeshReinforcement, RebarItem, RebarMesh } from '../../src/types/structural.ts';
+import { sectionOf, type SectionView } from './sectionView.ts';
 
 const cal = { pixelDistance: 100, realDistanceMeters: 1, metersPerPixel: 0.01 };
 const rect = (w: number, h: number): Point[] => [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }];
@@ -45,8 +46,8 @@ async function reread(wb: ExcelJS.Workbook) {
   await out.xlsx.load(await wb.xlsx.writeBuffer());
   return out;
 }
-const rowOf = (sheet: ExcelJS.Worksheet, r: number) => (sheet.getRow(r).values as unknown[]).slice(1);
-const texts = (sheet: ExcelJS.Worksheet) => {
+const rowOf = (sheet: ExcelJS.Worksheet | SectionView, r: number) => (sheet.getRow(r).values as unknown[]).slice(1);
+const texts = (sheet: ExcelJS.Worksheet | SectionView) => {
   const out: string[] = [];
   sheet.eachRow((row) => row.eachCell((c) => typeof c.value === 'string' && out.push(c.value)));
   return out;
@@ -63,6 +64,9 @@ function planWorkbook(p: Plan, content: ExportContent, lang: 'he' | 'en' = 'en',
 }
 const only = (...keys: (keyof ExportContent)[]): ExportContent => ({ ...NO_CONTENT, ...Object.fromEntries(keys.map((k) => [k, true])) });
 const names = (wb: ExcelJS.Workbook) => wb.worksheets.map((s) => s.name);
+const STRUCT = 'Structural Quantities';
+/** A structural section (Concrete / Rebar) of the one Structural Quantities sheet, as its own table. */
+const sec = (wb: ExcelJS.Workbook, title: string, sheet = STRUCT) => sectionOf(wb, sheet, title)!;
 
 const MIXED = () =>
   plan('a', 'Plan A', [slab({ autoNumber: 1 })], [mesh({ autoNumber: 1 }), bars({ autoNumber: 1 })], true);
@@ -72,11 +76,14 @@ const MIXED = () =>
 test('plan Excel content: any combination, no sheet for an unselected domain, Finishes sheets untouched', async () => {
   const p = MIXED();
   const finishesOnly = names(planWorkbook(p, only('finishes')));
-  assert.ok(finishesOnly.length > 0 && !finishesOnly.includes('Concrete') && !finishesOnly.includes('Rebar'));
-  assert.deepEqual(names(planWorkbook(p, only('concrete'))), ['Concrete']);
-  assert.deepEqual(names(planWorkbook(p, only('rebar'))), ['Rebar']);
-  assert.deepEqual(names(planWorkbook(p, only('concrete', 'rebar'))), ['Concrete', 'Rebar']);
-  assert.deepEqual(names(planWorkbook(p, ALL_CONTENT)), [...finishesOnly, 'Concrete', 'Rebar']); // structural sheets come last
+  assert.deepEqual(finishesOnly, ['Quantity Schedule', 'Demolition & New Construction', 'Openings & Deductions']);
+  // Concrete and rebar are sections of ONE structural sheet, which holds only the chosen ones.
+  assert.deepEqual(names(planWorkbook(p, only('concrete'))), [STRUCT]);
+  assert.ok(sec(await reread(planWorkbook(p, only('concrete'))), 'Concrete') && !sectionOf(await reread(planWorkbook(p, only('concrete'))), STRUCT, 'Rebar'));
+  assert.deepEqual(names(planWorkbook(p, only('rebar'))), [STRUCT]);
+  assert.ok(!sectionOf(await reread(planWorkbook(p, only('rebar'))), STRUCT, 'Concrete'));
+  assert.deepEqual(names(planWorkbook(p, only('concrete', 'rebar'))), [STRUCT]);
+  assert.deepEqual(names(planWorkbook(p, ALL_CONTENT)), [...finishesOnly, STRUCT]); // the structural sheet comes last
   // Finishes sheets are identical whether or not structural sheets follow
   const dump = async (wb: ExcelJS.Workbook) => (await reread(wb)).worksheets.slice(0, finishesOnly.length).map((s) => JSON.stringify(s.getSheetValues()));
   assert.deepEqual(await dump(planWorkbook(p, ALL_CONTENT)), await dump(planWorkbook(p, only('finishes'))));
@@ -87,8 +94,9 @@ test('plan Excel content: any combination, no sheet for an unselected domain, Fi
 test('plan Excel pages: content and pages are separate filters; a selected domain with nothing on the pages gets no empty sheet', async () => {
   const p = plan('a', 'Plan A', [slab({ pageNumber: 1, autoNumber: 1 }), slab({ pageNumber: 2, autoNumber: 2 })], [mesh({ pageNumber: 1, autoNumber: 1 })]);
   const page2 = await reread(planWorkbook(p, ALL_CONTENT, 'en', [2]));
-  assert.deepEqual(names(page2), ['Concrete']); // page 2 has no rebar: no Rebar sheet
-  assert.equal(page2.getWorksheet('Concrete')!.getRow(2).getCell(3).value, 'Slab 02');
+  assert.deepEqual(names(page2), [STRUCT]);
+  assert.ok(!sectionOf(page2, STRUCT, 'Rebar')); // page 2 has no rebar: no Rebar section
+  assert.equal(sec(page2, 'Concrete').getRow(2).getCell(3).value, 'Slab 02');
   assert.deepEqual(names(planWorkbook(p, ALL_CONTENT, 'en', [3])), []);
 });
 
@@ -101,7 +109,7 @@ test('plan Excel Concrete: one row per element, then ONE total row - no summary 
     slab({ autoNumber: 3, depthM: undefined }), // thickness missing
     slab({ autoNumber: 4, pageNumber: 3 }), // page not calibrated
   ], []);
-  const sheet = (await reread(planWorkbook(p, only('concrete'), 'en'))).getWorksheet('Concrete')!;
+  const sheet = sec(await reread(planWorkbook(p, only('concrete'), 'en')), 'Concrete');
   assert.deepEqual(rowOf(sheet, 1), ['Sheet', 'Type', 'Mark', 'Concrete grade', 'Dimension', 'Net (m3)'.replace('m3', 'm³'), 'Waste (%)', 'To order (m³)', 'Status']);
   assert.equal(sheet.rowCount, 1 + 4 + 1); // header + items + total: nothing underneath
   const [s1, wall, missing, uncal] = [2, 3, 4, 5].map((r) => rowOf(sheet, r));
@@ -117,15 +125,15 @@ test('plan Excel Concrete: one row per element, then ONE total row - no summary 
   const total = sheet.getRow(6);
   assert.equal(total.getCell(2).value, 'Total');
   const net = total.getCell(6).value as { formula: string; result: number };
-  assert.equal(net.formula, 'ROUND(SUM(F2:F5),2)');
+  assert.equal(net.formula, `ROUND(SUM(F${sheet.at(2)}:F${sheet.at(5)}),2)`);
   near(net.result, 19);
-  assert.equal((total.getCell(8).value as { formula: string }).formula, 'ROUND(SUM(H2:H5),2)');
+  assert.equal((total.getCell(8).value as { formula: string }).formula, `ROUND(SUM(H${sheet.at(2)}:H${sheet.at(5)}),2)`);
   assert.equal(total.getCell(9).value, 'Missing data: 2');
   assert.equal(sheet.getCell('F2').numFmt, '#,##0.00');
   const all = texts(sheet);
   assert.ok(!all.some((t) => /Summary|By plan|not included/i.test(t)));
   // Hebrew
-  const he = (await reread(planWorkbook(p, only('concrete'), 'he'))).getWorksheet('בטון')!;
+  const he = sec(await reread(planWorkbook(p, only('concrete'), 'he')), 'בטון', 'כמויות שלד');
   assert.deepEqual([rowOf(he, 2)[1], rowOf(he, 2)[2], rowOf(he, 3)[2], rowOf(he, 6)[1]], ['תקרה', 'תקרה 01', 'קורה A', 'סה"כ']);
   assert.equal(he.views[0].rightToLeft, true);
 });
@@ -140,7 +148,7 @@ test('plan Excel Rebar: Mesh per level and Bars as items; sheet count, size and 
     bars({ autoNumber: 1, wastePercent: 10 }),
     mesh({ autoNumber: 4, bottom: u(0, 0) }), // incomplete
   ]);
-  const sheet = (await reread(planWorkbook(p, only('rebar'), 'en'))).getWorksheet('Rebar')!;
+  const sheet = sec(await reread(planWorkbook(p, only('rebar'), 'en')), 'Rebar');
   assert.deepEqual(rowOf(sheet, 1), ['Sheet', 'Type', 'Mark', 'Level', 'Specification', 'Quantity', 'Sheet size', 'Overlap (cm)', 'Net weight (kg)', 'Waste (%)', 'To order (kg)', 'Status']);
   assert.equal(sheet.rowCount, 1 + 6 + 1); // header + (Bottom, Top, directional Bottom, irregular, bars, incomplete) + total
   const rows = [2, 3, 4, 5, 6, 7].map((r) => rowOf(sheet, r));
@@ -175,13 +183,13 @@ test('plan Excel Rebar: Mesh per level and Bars as items; sheet count, size and 
   const total = sheet.getRow(8);
   assert.equal(total.getCell(2).value, 'Total');
   assert.equal(total.getCell(6).value, '');
-  assert.equal((total.getCell(9).value as { formula: string }).formula, 'ROUND(SUM(I2:I7),2)');
+  assert.equal((total.getCell(9).value as { formula: string }).formula, `ROUND(SUM(I${sheet.at(2)}:I${sheet.at(7)}),2)`);
   assert.equal(total.getCell(11).value, '-'); // irregular Mesh has no physical purchase weight
   assert.equal(total.getCell(12).value, 'Includes estimate · Missing data: 1');
   const all = texts(sheet);
   assert.ok(!all.some((t) => /Summary|diameter|By plan|Bar lines|not a bar count/i.test(t)));
   // Hebrew
-  const he = (await reread(planWorkbook(p, only('rebar'), 'he'))).getWorksheet('זיון')!;
+  const he = sec(await reread(planWorkbook(p, only('rebar'), 'he')), 'זיון', 'כמויות שלד');
   assert.deepEqual(rowOf(he, 2).slice(1, 6), ['רשת', 'רשת 01', 'תחתון', 'Ø12 @ 20 ס"מ - שני הכיוונים', '4 רשתות']);
   assert.equal(rowOf(he, 6)[5], '10 מוטות');
   assert.ok(!texts(he).some((t) => t.includes('שורות זיון')));
@@ -189,9 +197,9 @@ test('plan Excel Rebar: Mesh per level and Bars as items; sheet count, size and 
 
 test('plan Excel Rebar: old meshes (flat layers) and an estimate-only plan', async () => {
   const old = mesh({ autoNumber: 1, bottom: undefined, layers: [{ id: 'l1', diameterMm: 12, spacingM: 0.2, direction: 'long' }, { id: 'l2', diameterMm: 12, spacingM: 0.2, direction: 'short' }] });
-  const sheet = (await reread(planWorkbook(plan('a', 'A', [], [old]), only('rebar')))).getWorksheet('Rebar')!;
+  const sheet = sec(await reread(planWorkbook(plan('a', 'A', [], [old]), only('rebar'))), 'Rebar');
   assert.equal(rowOf(sheet, 2)[4], 'Ø12 @ 20 cm - Both directions'); // read as one uniform Bottom level
-  const est = (await reread(planWorkbook(plan('a', 'A', [], [mesh({ points: L_SHAPE })]), only('rebar')))).getWorksheet('Rebar')!;
+  const est = sec(await reread(planWorkbook(plan('a', 'A', [], [mesh({ points: L_SHAPE })]), only('rebar'))), 'Rebar');
   const total = est.getRow(3);
   assert.equal(total.getCell(12).value, 'Estimate');
   assert.ok(total.getCell(9).numFmt.includes('≈'));
@@ -205,20 +213,20 @@ test('project Excel: one item row per element / mesh level / bars item behind a 
   const a = plan('a', 'Plan A', [slab({ autoNumber: 1, grade: 'B30' }), slab({ autoNumber: 2, depthM: undefined })], [mesh({ autoNumber: 1, top: u(10, 0.15) }), bars({ autoNumber: 1 })]);
   const b = plan('b', 'Plan B', [slab({ autoNumber: 1, depthM: 0.3 })], [mesh({ autoNumber: 1, points: L_SHAPE })]);
   const wb = await reread(buildProjectWorkbook(PROJECT(['a', 'b']), [a, b], 'en'));
-  assert.deepEqual(names(wb), ['Project Summary', 'Plans', 'Rooms', 'Work Types', 'Concrete', 'Rebar']);
+  assert.deepEqual(names(wb), [STRUCT]);
 
-  const cs = wb.getWorksheet('Concrete')!;
+  const cs = sec(wb, 'Concrete');
   assert.deepEqual(rowOf(cs, 1).slice(0, 4), ['Plan', 'Sheet', 'Type', 'Mark']);
   assert.equal(cs.rowCount, 1 + 3 + 1);
   assert.deepEqual([rowOf(cs, 2)[0], rowOf(cs, 3)[0], rowOf(cs, 4)[0]], ['Plan A', 'Plan A', 'Plan B']);
   assert.equal(rowOf(cs, 3)[9], 'Thickness missing');
   const net = cs.getRow(5).getCell(7).value as { formula: string; result: number };
-  assert.equal(net.formula, 'ROUND(SUM(G2:G4),2)'); // shifted one column by Plan
+  assert.equal(net.formula, `ROUND(SUM(G${cs.at(2)}:G${cs.at(4)}),2)`); // shifted one column by Plan
   near(net.result, 16 + 24);
   assert.equal(cs.getRow(5).getCell(10).value, 'Missing data: 1');
   assert.ok(!texts(cs).some((t) => /Summary by|By plan/i.test(t)));
 
-  const rs = wb.getWorksheet('Rebar')!;
+  const rs = sec(wb, 'Rebar');
   assert.deepEqual(rowOf(rs, 1).slice(0, 5), ['Plan', 'Sheet', 'Type', 'Mark', 'Level']);
   // Plan A: Mesh 01 Bottom + Top, Bars 01; Plan B: the irregular Mesh 01
   assert.equal(rs.rowCount, 1 + 4 + 1);
@@ -227,23 +235,24 @@ test('project Excel: one item row per element / mesh level / bars item behind a 
   assert.equal(rowOf(rs, 3)[4], 'Top');
   assert.deepEqual([rowOf(rs, 5)[6], rowOf(rs, 5)[12]], ['-', 'Estimate']);
   const total = rs.getRow(6);
-  assert.equal((total.getCell(10).value as { formula: string }).formula, 'ROUND(SUM(J2:J5),2)');
+  assert.equal((total.getCell(10).value as { formula: string }).formula, `ROUND(SUM(J${rs.at(2)}:J${rs.at(5)}),2)`);
   assert.equal(total.getCell(13).value, 'Includes estimate');
   assert.ok(!texts(rs).some((t) => /Summary|By plan|diameter/i.test(t)));
 });
 
 test('project Excel content: structural-only selection, structural-only project, and no regression without structural data', async () => {
   const a = plan('a', 'Plan A', [slab({ autoNumber: 1 })], [bars({ autoNumber: 1 })]);
-  assert.deepEqual(names(buildProjectWorkbook(PROJECT(['a']), [a], 'en', only('concrete', 'rebar'))), ['Concrete', 'Rebar']);
-  assert.deepEqual(names(buildProjectWorkbook(PROJECT(['a']), [a], 'en', only('rebar'))), ['Rebar']);
-  assert.deepEqual(names(buildProjectWorkbook(PROJECT(['a']), [a], 'en', only('finishes'))), ['Project Summary', 'Plans', 'Rooms', 'Work Types']);
+  assert.deepEqual(names(buildProjectWorkbook(PROJECT(['a']), [a], 'en', only('concrete', 'rebar'))), [STRUCT]);
+  assert.deepEqual(names(buildProjectWorkbook(PROJECT(['a']), [a], 'en', only('rebar'))), [STRUCT]);
+  // A project without rooms: only the summary (its plans); no empty schedule or openings sheet.
+  assert.deepEqual(names(buildProjectWorkbook(PROJECT(['a']), [a], 'en', only('finishes'))), []);
   // a project without structural data: no structural sheets, whichever sections are selected (the
   // fixtures have room openings, so the finishes sheets are followed by the opening schedule)
-  assert.deepEqual(names(buildProjectWorkbook(PROJECT(['plan-a', 'plan-b']), [PLAN_A, PLAN_B], 'he', ALL_CONTENT)), ['סיכום פרויקט', 'תוכניות', 'חדרים', 'סוגי עבודה', 'ספירת פתחים פיזיים', 'טבלת פתחים']);
+  assert.deepEqual(names(buildProjectWorkbook(PROJECT(['plan-a', 'plan-b']), [PLAN_A, PLAN_B], 'he', ALL_CONTENT)), ['סיכום פרויקט', 'כתב כמויות', 'הריסה ובנייה', 'פתחים וניכויים']);
   assert.deepEqual(names(buildProjectWorkbook(PROJECT(['plan-a']), [PLAN_A], 'he', only('concrete', 'rebar'))), []);
   const he = await reread(buildProjectWorkbook(PROJECT(['a']), [a], 'he', only('concrete')));
-  assert.equal(he.getWorksheet('בטון')!.views[0].rightToLeft, true);
-  assert.equal(rowOf(he.getWorksheet('בטון')!, 1)[0], 'תוכנית');
+  assert.equal(sec(he, 'בטון', 'כמויות שלד').views[0].rightToLeft, true);
+  assert.equal(rowOf(sec(he, 'בטון', 'כמויות שלד'), 1)[0], 'תוכנית');
 });
 
 // ---------- project PDF ----------

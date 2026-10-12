@@ -84,13 +84,13 @@ function mappedBox(b:OpeningBox,tileId:OpeningTileId,m:AiManifest):OpeningBox {
   const a=mappedPoint({x:b.x1,y:b.y1},tileId,m),z=mappedPoint({x:b.x2,y:b.y2},tileId,m);
   return {x1:a.x,y1:a.y,x2:z.x,y2:z.y};
 }
-/** Proposed classification only. Access for doors/windows is kept conservative. */
+/** Proposed classification only; passage accessibility follows the selected kind. */
 export function openingClassification(type:OpeningDetectionType):AiOpeningCandidate['classification'] {
   switch(type){
-    case 'hinged-door':return {kind:'door',mechanism:'hinged',walkableAccess:'unknown'};
-    case 'sliding-door':return {kind:'door',mechanism:'sliding',walkableAccess:'unknown'};
-    case 'doorway':return {kind:'door',mechanism:'open',walkableAccess:'unknown'};
-    case 'open-passage':return {kind:'open-passage',mechanism:'open',walkableAccess:'unknown'};
+    case 'hinged-door':return {kind:'door',mechanism:'hinged',walkableAccess:'supported'};
+    case 'sliding-door':return {kind:'door',mechanism:'sliding',walkableAccess:'supported'};
+    case 'doorway':return {kind:'door',mechanism:'unknown',walkableAccess:'supported'};
+    case 'open-passage':return {kind:'open-passage',mechanism:'open',walkableAccess:'supported'};
     case 'window':return {kind:'window',mechanism:'unknown',walkableAccess:'unsupported'};
     case 'unknown-opening':return {kind:'unknown',mechanism:'unknown',walkableAccess:'unknown'};
     default:throw new Error('Invalid opening classification.');

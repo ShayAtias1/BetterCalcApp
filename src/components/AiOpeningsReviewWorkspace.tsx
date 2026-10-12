@@ -3,7 +3,7 @@ import AiReviewWindow, { OPEN_OPENINGS_REVIEW } from './AiReviewWindow';
 import { useAppStore } from '../store/appStore';
 import { useOpeningsAiUi } from '../lib/ai/openingsUi';
 import { validatePlanOpening } from '../lib/planOpenings';
-import { presetOf } from '../lib/manualOpenings';
+import { openingDescription } from '../lib/openingOptions';
 import { useT } from '../i18n';
 import type { PlanOpening } from '../types';
 import OpeningsPanel from './OpeningsPanel';
@@ -24,7 +24,7 @@ export default function AiOpeningsReviewWorkspace({ part }: { part?: 'queue' | '
   useEffect(() => { setError(''); }, [selected?.id]);
   if (!plan || !openings.length) return null;
   const actions = () => useAppStore.getState();
-  const label = (o: PlanOpening) => o.label || t(`openingTools.${o.kind === 'custom' ? 'custom' : o.kind === 'door' && o.mechanism === 'unknown' ? 'unclassifiedDoor' : presetOf(o)}`);
+  const label = (o: PlanOpening) => o.label || openingDescription(o,t);
   const select = (id: string | null) => {
     actions().setDrawTarget('room'); actions().setToolMode('select');
     actions().selectPlanOpening(id); actions().setOverlayVisible('finishes', true);

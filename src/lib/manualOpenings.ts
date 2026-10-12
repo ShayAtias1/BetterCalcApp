@@ -1,4 +1,5 @@
 import type { Plan, PlanOpening, PlanOpeningPatch, Point } from '../types';
+import { openingAccessDefault } from './openingOptions';
 function pointInPolygon(p: Point, points: Point[]): boolean {
   let inside = false;
   for (let i=0,j=points.length-1;i<points.length;j=i++) {
@@ -82,7 +83,7 @@ export function quantityOpeningInput(plan: Plan, roomId: string, kind: 'door' | 
   const room = plan.rooms.find(item => item.id === roomId);
   if (!room) throw new Error('Unknown room');
   return {pageNumber: room.pageNumber, entryMethod: 'takeoff', geometry: null, kind,
-    mechanism: 'unknown', walkableAccess: 'unknown', roomIds: [room.id], roomSides: [{roomId:room.id},null],
+    mechanism: 'unknown', walkableAccess: openingAccessDefault(kind), roomIds: [room.id], roomSides: [{roomId:room.id},null],
     apartmentNumber: room.apartmentNumber, source: 'manual', legacyRefs: [], widthSource: 'manual',
     quantityReview: {associationsConfirmed:false,distinctLegacyRoomIds:[]}, ...dimensions};
 }

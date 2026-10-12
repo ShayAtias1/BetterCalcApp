@@ -19,14 +19,16 @@ export interface PlanOpening {
   quantityReview?: { associationsConfirmed: boolean; distinctLegacyRoomIds: string[] };
   widthSource?: 'manual' | 'calibration';
   kind: PlanOpeningKind;
-  mechanism: 'hinged' | 'sliding' | 'fixed' | 'open' | 'unknown';
+  mechanism: 'hinged' | 'sliding' | 'fragmentation-resistant' | 'mamad' | 'tilt-and-turn' | 'fixed' | 'open' | 'unknown';
   walkableAccess: 'supported' | 'unsupported' | 'unknown';
   roomIds: string[];
   /** Optional editor sides; roomIds remain the authoritative room associations. */
   roomSides?: [OpeningRoomSide, OpeningRoomSide];
   /** Explicit attribution for standalone openings; related rooms remain authoritative. */
   apartmentNumber?: string;
-  /** null means unknown. Never inferred from a class. Manual placement may explicitly measure width using calibration. */
+  /** Suggested values require explicit quantity review; absent on historical confirmed data. */
+  suggestedDimensions?: ('widthM' | 'heightM' | 'sillHeightM' | 'quantity')[];
+  /** null means unknown. Manual placement may explicitly measure width using calibration. */
   widthM: number | null;
   heightM: number | null;
   sillHeightM: number | null;

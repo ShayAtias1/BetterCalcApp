@@ -44,9 +44,77 @@ export type ReportCategory = 'tiling_regular' | 'tiling_as' | 'cladding' | 'pane
  */
 export const PANEL_HEIGHT_M = MEASUREMENT_DEFAULTS.panelHeightM;
 
+/**
+ * How a work category's quantity is measured. The geometric methods reuse the room's calculated
+ * area/perimeter; the manual ones take a number typed on the work item (no page scale needed).
+ */
+export type CalculationMethod = 'floorArea' | 'wallArea' | 'ceilingArea' | 'perimeter' | 'manualArea' | 'manualLength' | 'manualCount';
+
+/** A built-in work type, or an item of a user-defined category (`WorkItem.categoryId` + `method`). */
+export type WorkItemType = WorkType | 'custom';
+
+/**
+ * One share of a work item's calculated quantity, assigned to a work item / specification of the
+ * catalog (e.g. "White paint"). `quantity: null` is the automatic remainder: the calculated quantity
+ * minus every manual share. Shares split the item's quantity — they never add to it.
+ */
+export interface WorkAllocation {
+  id: string;
+  /** A `WorkSpec` id, resolved through the plan's catalog snapshot. */
+  specId: string;
+  quantity: number | null;
+}
+
+/** A user-defined work category of the local catalog (built-in work types are not stored). */
+export interface WorkCategory {
+  id: string;
+  name: string;
+  method: CalculationMethod;
+  /** Unit name for `manualCount` (e.g. "sacks"); the other methods have fixed units. */
+  unitLabel?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** A work item / material specification within a category (built-in or user-defined). */
+export interface WorkSpec {
+  id: string;
+  /** A `WorkCategory` id, or `builtin:<WorkType>` for a built-in work type. */
+  categoryId: string;
+  name: string;
+  /** Free text: size, product, colour… */
+  specification?: string;
+  /**
+   * Its own calculation method (e.g. "Ceiling paint" under Painting). Absent: the category's method.
+   * A work item with its own method is added to a room as its own quantity, never as a share of the
+   * category's quantity, so floor, wall and ceiling amounts stay separate.
+   */
+  method?: CalculationMethod;
+  /** Unit name for its own `manualCount` method. */
+  unitLabel?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** The catalog entries a plan uses, copied in when first used so later catalog edits never change it. */
+export interface WorkCatalogSnapshot {
+  categories: WorkCategory[];
+  specs: WorkSpec[];
+}
+
 export interface WorkItem {
   id: string;
-  type: WorkType;
+  type: WorkItemType;
+  /** type 'custom' only: the category in the plan's catalog snapshot. */
+  categoryId?: string;
+  /** type 'custom' only: the category's method, kept on the item so it always calculates. */
+  method?: CalculationMethod;
+  /** type 'custom' only: the work item / spec with its own method this room item measures. */
+  specId?: string;
+  /** Manual methods only: the quantity in the method's unit. */
+  manualQuantity?: number;
+  /** Optional split of the calculated quantity between work items / specifications. */
+  allocations?: WorkAllocation[];
   /** Only relevant for type 'tiling' — regular or AS (wet-area) tiling. Defaults to 'regular' if unset. */
   tilingCategory?: TilingCategory;
   /** For every type but tiling — height in meters used to multiply the perimeter. Falls back to the project default. */
@@ -184,6 +252,8 @@ export interface Plan {
   areaKindColors: Record<AreaKind, string>;
   /** Default wall height (meters) used to seed new 'wall' calc-mode area measurements; editable per-measurement afterward. */
   wallHeightDefaultM: number;
+  /** Catalog entries this plan uses (see WorkCatalogSnapshot). Absent on plans that never used one. */
+  workCatalog?: WorkCatalogSnapshot;
 }
 
 export type ToolMode = 'select' | 'pan' | 'calibrate' | 'draw' | 'draw-rect' | 'measure' | 'export-region' | 'markup';
@@ -277,10 +347,39 @@ export interface Measurement {
 }
 
 /** One row per room, matching the contractor-facing quantities report layout. */
+/** A report column of a user-defined category (or of a work item with its own method): `custom:<categoryId>|<method>`. */
+export type CustomReportKey = `custom:${string}`;
+/** Any column of the quantity reports: a built-in report category or a custom one. */
+export type ReportColumn = ReportCategory | CustomReportKey;
+
+/** One custom column's numbers for one room, with what is needed to name it in any language. */
+export interface CustomColumnQuantity {
+  /** The user's category name; null for a built-in category (named by the dictionary). */
+  categoryName: string | null;
+  builtinType: WorkType | null;
+  method: CalculationMethod;
+  /** Whether the label names the method too (it differs from the category's own). */
+  showMethod: boolean;
+  unit: 'm2' | 'lm' | 'unit';
+  /** Unit name of a counted column, when the catalog gives one. */
+  unitName: string | null;
+  /** Typed (manual) quantities need no page scale. */
+  manual: boolean;
+  /** Primary quantity in `unit`; null when not calculable (page not calibrated). */
+  quantity: number | null;
+  order: number | null;
+  wastePercent: number | null;
+  /** Strips (perimeter method) only: the m² reading. */
+  areaM2: number | null;
+  orderAreaM2: number | null;
+}
+
 export interface RoomQuantitySummary {
   roomId: string;
   apartmentNumber: string;
   roomName: string;
+  /** User-defined categories' columns; absent when the room has none (older reports are unchanged). */
+  custom?: Partial<Record<CustomReportKey, CustomColumnQuantity>>;
   /**
    * False when the room's page has no scale. All the numbers below are then `null` — the room's
    * quantities are *not calculable*, which is a different thing from a real zero, and every
@@ -333,7 +432,10 @@ export interface CategoryQuantity {
 }
 
 export interface ReportCategoryTotal {
-  category: ReportCategory;
+  category: ReportColumn;
+  /** Counted custom columns only: the number of units, and with waste. */
+  count?: number | null;
+  orderCount?: number | null;
   quantityM2: number;
   wastePercent: number;
   orderM2: number;

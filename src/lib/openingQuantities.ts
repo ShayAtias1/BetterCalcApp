@@ -1,7 +1,7 @@
 import type { Plan, PlanOpening, Room, WorkItem } from '../types';
 import { openingsOf, validatePlanOpening } from './planOpenings';
-import { workTypeDefinition } from './workTypes';
-export type OpeningReason = 'notApproved' | 'unconfirmedRooms' | 'unassociated' | 'unknownDimensions' | 'unknownQuantity' | 'unknownType' | 'duplicate' | 'invalid' | 'legacyPrecedence' | 'legacyConflict' | 'legacyUnresolved' | 'disabled' | 'notApplicable' | 'outsideHeight' | 'uncalibrated' | 'capped';
+import { workItemDefinition } from './workTypes';
+export type OpeningReason = 'suggestedDimensions' | 'notApproved' | 'unconfirmedRooms' | 'unassociated' | 'unknownDimensions' | 'unknownQuantity' | 'unknownType' | 'duplicate' | 'invalid' | 'legacyPrecedence' | 'legacyConflict' | 'legacyUnresolved' | 'disabled' | 'notApplicable' | 'outsideHeight' | 'uncalibrated' | 'capped';
 export interface OpeningAudit { openingId: string; reason: OpeningReason | null; incomplete: boolean; areaM2: number; lengthM: number }
 export interface OpeningScheduleRow {
  id: string; source: 'canonical' | 'legacy'; label: string; kind: PlanOpening['kind']; mechanism: PlanOpening['mechanism'];
@@ -36,7 +36,7 @@ function legacyUnresolved(o:PlanOpening,room:Room):boolean {
 }
 export function canonicalOpeningDeduction(plan:Plan,room:Room,item:WorkItem,height:number,o:PlanOpening,duplicates=duplicateOpeningIds(plan)):OpeningAudit {
  const result=(reason:OpeningReason|null,incomplete=false,areaM2=0,lengthM=0):OpeningAudit=>({openingId:o.id,reason,incomplete,areaM2,lengthM});
- const def=workTypeDefinition(item.type);
+ const def=workItemDefinition(item);
  if(!def || !(item.deductOpenings??def.deductsOpenings))return result('disabled');
  const type=openingLegacyType(o);
  if(type!==null&&!def.deductedOpeningTypes.includes(type))return result('notApplicable');
@@ -50,6 +50,7 @@ export function canonicalOpeningDeduction(plan:Plan,room:Room,item:WorkItem,heig
  if(linkedRows(plan,o).some(r=>r.type!==type||r.quantity!==o.quantity||r.widthM!==o.widthM||r.heightM!==o.heightM))return result('legacyConflict',true);
  if(legacyUnresolved(o,room))return result('legacyUnresolved',true);
  if(!validCount(o.quantity))return result('unknownQuantity',true);
+ if(o.suggestedDimensions?.length)return result('suggestedDimensions',true);
  if(!positive(o.widthM)||!positive(o.heightM)||!validBase(o.sillHeightM))return result('unknownDimensions',true);
  if(!(plan.pages[room.pageNumber]?.calibration?.metersPerPixel!>0))return result('uncalibrated',true);
  const overlap=Math.max(0,Math.min(o.sillHeightM+o.heightM,height)-o.sillHeightM);
@@ -67,6 +68,7 @@ export function buildOpeningSchedule(plan:Plan):OpeningScheduleRow[] {
  const rows:OpeningScheduleRow[]=canonical.map(o=>{
    const reasons:OpeningReason[]=[];
    if(o.approval.status!=='approved')reasons.push('notApproved');
+   if(o.suggestedDimensions?.length)reasons.push('suggestedDimensions');
    if(validatePlanOpening(plan,o).errors.length)reasons.push('invalid');
    if(duplicates.has(o.id))reasons.push('duplicate');
    if(!validCount(o.quantity))reasons.push('unknownQuantity');
@@ -85,7 +87,7 @@ export function buildOpeningSchedule(plan:Plan):OpeningScheduleRow[] {
      if(legacy.every(r=>validCount(r.quantity)&&r.quantity===legacy[0].quantity&&r.type===legacy[0].type)&&!duplicates.has(o.id)){
        countedQuantity=legacy[0].quantity;countKind=legacy[0].type;
      }
-   } else if(o.approval.status==='approved'&&validCount(o.quantity)&&o.kind!=='unknown'&&!reasons.some(r=>['duplicate','invalid','legacyUnresolved'].includes(r)))countedQuantity=o.quantity;
+   } else if(o.approval.status==='approved'&&validCount(o.quantity)&&o.kind!=='unknown'&&!reasons.some(r=>['duplicate','invalid','legacyUnresolved','suggestedDimensions'].includes(r)))countedQuantity=o.quantity;
    return {id:o.id,source:'canonical',label:o.label??'',kind:o.kind,mechanism:o.mechanism,pageNumber:o.pageNumber,roomIds:[...o.roomIds],widthM:o.widthM,heightM:o.heightM,baseM:o.sillHeightM,quantity:o.quantity,countedQuantity,countKind,reasons};
  });
  for(const room of plan.rooms)for(const o of room.openings??[])if(!linked.has(refKey(room.id,o.id)))rows.push({id:refKey(room.id,o.id),source:'legacy',label:'',kind:o.type,mechanism:'unknown',pageNumber:room.pageNumber,roomIds:[room.id],widthM:o.widthM,heightM:o.heightM,baseM:null,quantity:o.quantity,countedQuantity:validCount(o.quantity)?o.quantity:null,countKind:o.type,reasons:['legacyPrecedence',...(!validCount(o.quantity)?['unknownQuantity' as const]:[])]});

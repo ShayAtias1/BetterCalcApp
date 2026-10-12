@@ -3,7 +3,8 @@ import type { AiOpeningReview } from '../types/aiOpenings';
 import { buildOpeningSchedule } from '../lib/openingQuantities';
 import { openingClassification, measuredOpeningWidth, openingGeometryPatch, recalibrateOpeningWidths, type OpeningPreset } from '../lib/manualOpenings';
 import { addPlanOpening as addCanonicalOpening, updatePlanOpening as updateCanonicalOpening, removePlanOpening as removeCanonicalOpening, reviewPlanOpening, cloneOpeningsForRooms, withOpeningRoomChanges } from '../lib/planOpenings';
-import type { NewPlanOpening, PlanOpeningPatch } from '../types';
+import type { NewPlanOpening, PlanOpeningPatch, WorkCatalogSnapshot, WorkCategory, WorkSpec } from '../types';
+import { applyCatalogUpdates, withCatalogEntries } from '../lib/workCatalog';
 import { normalizePlanFile, PlanImportError } from '../lib/planFileImport';
 import { planBulkTakeoff, materializeBulkTakeoff, type BulkWorkConfig, type BulkConflictPolicy } from '../lib/bulkTakeoff';
 import { aiWarnings, aiCandidateTypeKey, aiCandidateLabel } from '../lib/localAiReview';
@@ -546,9 +547,19 @@ interface AppState {
   duplicateApartment: (sourceApartmentNumber: string, targetApartmentNumber: string) => number;
   deleteRoom: (id: string) => void;
   deleteRooms: (ids: string[]) => void;
-  applyBulkTakeoff: (expectedPlan: Plan, roomIds: string[], configs: BulkWorkConfig[], policy: BulkConflictPolicy, updateConfirmed: boolean) => 'applied' | 'stale' | 'blocked' | 'no-change';
+  /** `catalog`: entries custom configurations refer to, copied into the plan's snapshot with the change. */
+  applyBulkTakeoff: (expectedPlan: Plan, roomIds: string[], configs: BulkWorkConfig[], policy: BulkConflictPolicy, updateConfirmed: boolean, catalog?: Partial<WorkCatalogSnapshot>) => 'applied' | 'stale' | 'blocked' | 'no-change';
   addWorkItem: (roomId: string, type: WorkType) => void;
-  updateWorkItem: (roomId: string, itemId: string, patch: Partial<WorkItem>) => void;
+  /**
+   * Adds an item of a user-defined category — or, with `spec`, of a work item with its own method
+   * (e.g. "Ceiling paint" under Paint) — copying the entries into the plan's catalog snapshot.
+   * `category` is null for a work item of a built-in category.
+   */
+  addCustomWorkItem: (roomId: string, category: WorkCategory | null, spec?: WorkSpec) => void;
+  /** `catalog`: entries the patch refers to (e.g. a newly chosen work item), copied into the plan's snapshot in the same step. */
+  updateWorkItem: (roomId: string, itemId: string, patch: Partial<WorkItem>, catalog?: Partial<WorkCatalogSnapshot>) => void;
+  /** Explicitly replaces this plan's copies of the given catalog entries with their current versions. */
+  applyPlanCatalogUpdates: (updates: WorkCatalogSnapshot) => void;
   removeWorkItem: (roomId: string, itemId: string) => void;
   /** Phase 1 canonical records: never modify Room.openings or quantities. */
   importAiOpeningReview: (review: AiOpeningReview) => void;
@@ -1960,7 +1971,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ project: { ...updated, updatedAt: now }, selectedRoomId: selectedRoomId && selected.has(selectedRoomId) ? null : selectedRoomId, selectedRoomIds: get().selectedRoomIds.filter(id => !selected.has(id)) });
     scheduleSave(get, set);
   },
-  applyBulkTakeoff: (expectedPlan, roomIds, configs, policy, updateConfirmed) => {
+  applyBulkTakeoff: (expectedPlan, roomIds, configs, policy, updateConfirmed, catalog) => {
     if (!canAuthorTakeoff()) return 'blocked';
     const project = get().project;
     if (!project || project !== expectedPlan) return 'stale';
@@ -1968,7 +1979,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const preview = planBulkTakeoff(project, roomIds, configs, policy);
     if (!preview.changedCount) return 'no-change';
     // Materialize before changing history/state, so errors cannot leave a partial operation.
-    const updated = materializeBulkTakeoff(project, preview, uuid);
+    const updated = materializeBulkTakeoff(project, preview, uuid, catalog);
     historyTracker.push(get, set, project);
     set({ project: updated });
     scheduleSave(get, set);
@@ -1992,17 +2003,49 @@ export const useAppStore = create<AppState>((set, get) => ({
     trackWorkItemsAdded(updated, [item], 'manual');
     scheduleSave(get, set);
   },
-  updateWorkItem: (roomId, itemId, patch) => {
+  addCustomWorkItem: (roomId, category, spec) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    if (!project) return;
+    if (!project.rooms.some((r) => r.id === roomId)) return;
+    const categoryId = spec?.categoryId ?? category?.id;
+    if (!categoryId) return;
+    const withCategory = withCatalogEntries(project, { categories: category ? [category] : [], specs: spec ? [spec] : [] });
+    // The plan's own copies decide the method, so a later catalog edit never changes this item.
+    const ownSpec = spec ? withCategory.workCatalog?.specs.find((s) => s.id === spec.id) : undefined;
+    const ownCategory = withCategory.workCatalog?.categories.find((c) => c.id === categoryId);
+    const method = ownSpec?.method ?? ownCategory?.method ?? category?.method;
+    if (!method) return;
+    historyTracker.push(get, set, project);
+    const item: WorkItem = { id: uuid(), type: 'custom', categoryId, method, ...(ownSpec ? { specId: ownSpec.id } : {}) };
+    const rooms = withCategory.rooms.map((r) => (r.id === roomId ? { ...r, workItems: [...r.workItems, item] } : r));
+    const updated = { ...withCategory, rooms, updatedAt: Date.now() };
+    set({ project: updated });
+    trackWorkItemsAdded(updated, [item], 'manual');
+    scheduleSave(get, set);
+  },
+  updateWorkItem: (roomId, itemId, patch, catalog) => {
     if (!canAuthorTakeoff()) return;
     const { project } = get();
     if (!project) return;
     historyTracker.pushDebounced(get, set, project);
-    const rooms = project.rooms.map((r) => {
+    const base = catalog ? withCatalogEntries(project, catalog) : project;
+    const rooms = base.rooms.map((r) => {
       if (r.id !== roomId) return r;
       const workItems = r.workItems.map((wi) => (wi.id === itemId ? { ...wi, ...patch } : wi));
       return { ...r, workItems };
     });
-    set({ project: { ...project, rooms, updatedAt: Date.now() } });
+    set({ project: { ...base, rooms, updatedAt: Date.now() } });
+    scheduleSave(get, set);
+  },
+  applyPlanCatalogUpdates: (updates) => {
+    if (!canAuthorTakeoff()) return;
+    const { project } = get();
+    if (!project) return;
+    const updated = applyCatalogUpdates(project, updates);
+    if (updated === project) return;
+    historyTracker.push(get, set, project);
+    set({ project: { ...updated, updatedAt: Date.now() } });
     scheduleSave(get, set);
   },
   removeWorkItem: (roomId, itemId) => {

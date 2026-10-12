@@ -7,7 +7,7 @@ import ReviewFields from './ReviewFields';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { useAppStore } from '../store/appStore';
-import type { Opening, OpeningType, Plan, TilingCategory, WorkType } from '../types';
+import type { Opening, OpeningType, Plan, TilingCategory, WorkCatalogSnapshot, WorkCategory, WorkSpec, WorkType } from '../types';
 import {
 } from '../types';
 import {
@@ -19,7 +19,12 @@ import {
   openingAreaM2,
   roomMetrics,
 } from '../lib/quantities';
-import { WORK_TYPE_ORDER, workTypeDefinition } from '../lib/workTypes';
+import { CALCULATION_METHODS, isCalculationMethod, WORK_TYPE_ORDER, workItemDefinition } from '../lib/workTypes';
+import { builtinTypeOf, categoryOptions, itemMethod, itemUnitLabel, ownMethodSpecs, workItemLabel } from '../lib/workCatalog';
+import { primaryQuantity } from '../lib/workAllocation';
+import { useCatalogSeed, useWorkCatalog } from '../store/workCatalogStore';
+import WorkAllocationEditor from './WorkAllocationEditor';
+import WorkCatalogDialog from './WorkCatalogDialog';
 import { ROOM_PROFILES, roomProfileLabel, roomProfileName } from '../lib/roomProfiles';
 import {
   apartmentDuplicationWarnings,
@@ -179,6 +184,7 @@ function RoomsAndAreasPanel({ readOnly = false, part }: { readOnly?: boolean; pa
     selectionPlanId.current = project?.id;
   }, [project?.id, readOnly]);
   const addWorkItem = useAppStore((s) => s.addWorkItem);
+  const addCustomWorkItem = useAppStore((s) => s.addCustomWorkItem);
   const updateWorkItem = useAppStore((s) => s.updateWorkItem);
   const removeWorkItem = useAppStore((s) => s.removeWorkItem);
   const activeApartmentNumber = useAppStore((s) => s.activeApartmentNumber);
@@ -278,7 +284,8 @@ function RoomsAndAreasPanel({ readOnly = false, part }: { readOnly?: boolean; pa
           onRoomTypeChange={(key) => setRoomType(detailRoom.id, key)}
           onApplyTemplate={() => applyRoomTemplate(detailRoom.id)}
           onAddWorkItem={(type) => addWorkItem(detailRoom.id, type)}
-          onUpdateWorkItem={(itemId, patch) => updateWorkItem(detailRoom.id, itemId, patch)}
+          onAddCustomWorkItem={(category, spec) => addCustomWorkItem(detailRoom.id, category, spec)}
+          onUpdateWorkItem={(itemId, patch, catalog) => updateWorkItem(detailRoom.id, itemId, patch, catalog)}
           onRemoveWorkItem={(itemId) => removeWorkItem(detailRoom.id, itemId)}
         /></ReviewFields>
       </div>
@@ -617,6 +624,7 @@ function RoomDetail({
   onRoomTypeChange,
   onApplyTemplate,
   onAddWorkItem,
+  onAddCustomWorkItem,
   onUpdateWorkItem,
   onRemoveWorkItem,
 }: {
@@ -628,7 +636,8 @@ function RoomDetail({
   onRoomTypeChange: (roomType: string | null) => 'created' | 'kept' | 'none';
   onApplyTemplate: () => void;
   onAddWorkItem: (type: WorkType) => void;
-  onUpdateWorkItem: (itemId: string, patch: Partial<import('../types').WorkItem>) => void;
+  onAddCustomWorkItem: (category: WorkCategory | null, spec?: WorkSpec) => void;
+  onUpdateWorkItem: (itemId: string, patch: Partial<import('../types').WorkItem>, catalog?: Partial<WorkCatalogSnapshot>) => void;
   onRemoveWorkItem: (itemId: string) => void;
 }) {
   const t = useT();
@@ -637,6 +646,17 @@ function RoomDetail({
   const noCalibration = !isPageCalibrated(project, room.pageNumber);
   // Shown once after a type change that deliberately left existing work items alone.
   const [typeNotice, setTypeNotice] = useState<string | null>(null);
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  useCatalogSeed();
+  const catalogCategories = useWorkCatalog((s) => s.categories);
+  const catalogSpecs = useWorkCatalog((s) => s.specs);
+  const customCategories = categoryOptions(project, { categories: catalogCategories, specs: catalogSpecs });
+  // Work items that measure differently from their category (e.g. ceiling paint under Paint) are added as their own items.
+  const ownMethodItems = ownMethodSpecs(project, { categories: catalogCategories, specs: catalogSpecs });
+  const categoryName = (categoryId: string) => {
+    const builtin = builtinTypeOf(categoryId);
+    return builtin ? t(`workTypes.${builtin}`) : customCategories.find((c) => c.id === categoryId)?.name || t('workCatalog.unnamedCategory');
+  };
 
   const onSetRoomType = (key: string | null) => {
     const outcome = onRoomTypeChange(key);
@@ -722,9 +742,10 @@ function RoomDetail({
         <span className="detail-section-title">{t('rooms.detail.workTypes')}</span>
         <ul className="work-item-list">
           {room.workItems.map((item) => {
-            const def = workTypeDefinition(item.type);
+            const def = workItemDefinition(item);
+            const custom = item.type === 'custom';
             // A type this build does not know (saved by a newer version) is shown, counted as nothing, and removable.
-            if (!def) {
+            if (!def && !custom) {
               return (
                 <li key={item.id}>
                   <div className="work-item-header">
@@ -736,30 +757,55 @@ function RoomDetail({
                 </li>
               );
             }
+            // A custom item without a usable method is never counted as zero silently: it asks for one.
+            if (!def) {
+              return (
+                <li key={item.id}>
+                  <div className="work-item-header">
+                    <strong dir="auto">{workItemLabel(item, project, t)}</strong>
+                    <button className="icon-btn work-item-remove" title={t('rooms.detail.removeWorkItem')} aria-label={t('rooms.detail.removeWorkItem')} onClick={() => onRemoveWorkItem(item.id)}>
+                      <Icon name="close" size={13} />
+                    </button>
+                  </div>
+                  <p className="wi-allocation-warning" role="alert">{t('workCatalog.invalidMethod')}</p>
+                  <select aria-label={t('workCatalog.method')} value="" onChange={(e) => { if (isCalculationMethod(e.target.value)) onUpdateWorkItem(item.id, { method: e.target.value }); }}>
+                    <option value="">{t('workCatalog.method')}</option>
+                    {CALCULATION_METHODS.map((m) => <option key={m} value={m}>{t(`workCatalog.methods.${m}`)}</option>)}
+                  </select>
+                </li>
+              );
+            }
             const calc = calculateWorkItem(item, room, areaM2, perimeterM, project);
             const waste = effectiveWastePercent(item, project);
             const factor = 1 + waste / 100;
             const canDeduct = def.deductedOpeningTypes.length > 0;
             const deducts = itemDeductsOpenings(item);
-            const linear = calc.lengthM != null;
+            const manual = def.basis === 'manual';
+            const strip = def.basis === 'perimeter';
+            const primary = primaryQuantity(def, calc);
+            const unitText = itemUnitLabel(item, project, t);
+            const method = itemMethod(item);
+            // Typed quantities need no page scale; measured ones do.
+            const unavailable = noCalibration && !manual;
             return (
               <li key={item.id}>
                 {/* Name · net → to order (the ordered figure is the one in bold) · remove. */}
                 <div className="work-item-header">
-                  <strong>{t(`workTypes.${def.id}`)}</strong>
-                  {noCalibration ? (
+                  <strong dir="auto">{workItemLabel(item, project, t)}</strong>
+                  {unavailable ? (
                     <span className="work-item-result cal-missing">{t('rooms.detail.itemNotCalibrated')}</span>
                   ) : (
                     <span className="work-item-result" title={`${t(canDeduct ? 'rooms.detail.netQuantity' : 'rooms.detail.quantity')} → ${t('rooms.detail.order')}`}>
-                      <bdi className="work-item-net">{linear ? resultUnit(calc.lengthM!, 'units.lm') : resultUnit(calc.netM2, 'units.m2')}</bdi>
+                      <bdi className="work-item-net">{round(primary, 2)} {unitText}</bdi>
                       <span className="wi-arrow" aria-hidden="true">→</span>
-                      <bdi><b>{linear ? resultUnit(calc.lengthM! * factor, 'units.lm') : resultUnit(calc.netM2 * factor, 'units.m2')}</b></bdi>
+                      <bdi><b>{round(primary * factor, 2)} {unitText}</b></bdi>
                     </span>
                   )}
                   <button className="icon-btn work-item-remove" title={t('rooms.detail.removeWorkItem')} aria-label={t('rooms.detail.removeWorkItem')} onClick={() => onRemoveWorkItem(item.id)}>
                     <Icon name="close" size={13} />
                   </button>
                 </div>
+                {custom && method && <span className={`wi-method ${manual ? 'manual' : 'auto'}`}>{manual ? t('workCatalog.manualBadge') : t(`workCatalog.methods.${method}`)}</span>}
 
                 <div className="wi-controls">
                   {item.type === 'tiling' && (
@@ -778,10 +824,25 @@ function RoomDetail({
                       ))}
                     </div>
                   )}
+                  {manual && (
+                    <label className="wi-field">
+                      {t('workCatalog.manualQuantity')} ({unitText})
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={item.manualQuantity ?? ''}
+                        onChange={(e) => {
+                          const parsed = parseFloat(e.target.value);
+                          onUpdateWorkItem(item.id, { manualQuantity: Number.isFinite(parsed) ? Math.max(0, parsed) : undefined });
+                        }}
+                      />
+                    </label>
+                  )}
                   {/* The item follows its type's project default height until a height is typed here, which overrides it for this item only. */}
                   {def.height && (
                     <label className="wi-field">
-                      {t(`workTypeHeights.${def.id as Exclude<typeof def.id, 'tiling'>}`)}
+                      {custom ? t('workCatalog.height') : t(`workTypeHeights.${item.type as Exclude<WorkType, 'tiling'>}`)}
                       <input
                         type="number"
                         step="0.01"
@@ -822,14 +883,14 @@ function RoomDetail({
                   )}
                 </div>
 
-                {!noCalibration && <>
-                  {/* Skirting is read twice: running metres above, and its m² here. */}
-                  {linear && <p className="wi-deduction">{t('rooms.detail.area')} <bdi>{resultUnit(calc.netM2, 'units.m2')}</bdi> <span className="wi-arrow" aria-hidden="true">→</span> <bdi>{resultUnit(calc.netM2 * factor, 'units.m2')}</bdi></p>}
+                {!unavailable && <>
+                  {/* Strips are read twice: running metres above, and their m² here. */}
+                  {strip && <p className="wi-deduction">{t('rooms.detail.area')} <bdi>{resultUnit(calc.netM2, 'units.m2')}</bdi> <span className="wi-arrow" aria-hidden="true">→</span> <bdi>{resultUnit(calc.netM2 * factor, 'units.m2')}</bdi></p>}
                   {calc.openingAudit?.filter(a=>a.reason).map((a,i)=><p className="wi-deduction" key={i}>{t(`openingQuantities.${a.reason!}`)}</p>)}
                   {/* Says in words what was taken off, so a net figure is never mistaken for the gross one. */}
                   {deducts && (calc.deductedM2 > 0 || (calc.deductedLengthM ?? 0) > 0 || !!calc.openingAudit?.length) && (
                     <p className="wi-deduction">
-                      {linear && calc.grossLengthM != null && calc.deductedLengthM != null
+                      {strip && calc.grossLengthM != null && calc.deductedLengthM != null
                         ? t('rooms.detail.perimeterDeduction', {
                             gross: round(calc.grossLengthM, 2),
                             deducted: round(calc.deductedLengthM, 2),
@@ -845,21 +906,42 @@ function RoomDetail({
                     </p>
                   )}
                 </>}
+                <WorkAllocationEditor plan={project} room={room} item={item} onChange={(allocations, catalog) => onUpdateWorkItem(item.id, { allocations }, catalog)} />
               </li>
             );
           })}
         </ul>
         {room.workItems.length === 0 && <p className="detail-note">{t('rooms.detail.noWorkItems')}</p>}
-        {/* One dashed picker instead of six buttons; any type can be added, more than once. */}
+        {/* One dashed picker: built-in types, the user's categories, and the catalog manager. Any
+            category can be added, more than once. */}
         <select
           className="work-item-add"
           value=""
           aria-label={t('rooms.detail.addWorkType')}
-          onChange={(e) => { if (e.target.value) onAddWorkItem(e.target.value as WorkType); }}
+          onChange={(e) => {
+            const value = e.target.value;
+            if (!value) return;
+            if (value === '__catalog__') { setCatalogOpen(true); return; }
+            const spec = value.startsWith('spec:') ? ownMethodItems.find((s) => `spec:${s.id}` === value) : undefined;
+            if (spec) { onAddCustomWorkItem(builtinTypeOf(spec.categoryId) ? null : customCategories.find((c) => c.id === spec.categoryId) ?? null, spec); return; }
+            const category = customCategories.find((c) => c.id === value);
+            if (category) onAddCustomWorkItem(category);
+            else if ((WORK_TYPE_ORDER as string[]).includes(value)) onAddWorkItem(value as WorkType);
+          }}
         >
           <option value="">{t('rooms.detail.addWorkType')}</option>
-          {WORK_TYPE_ORDER.map((type) => <option key={type} value={type}>{t(`workTypes.${type}`)}</option>)}
+          <optgroup label={t('workCatalog.addGroupBuiltIn')}>
+            {WORK_TYPE_ORDER.map((type) => <option key={type} value={type}>{t(`workTypes.${type}`)}</option>)}
+          </optgroup>
+          {customCategories.length > 0 && <optgroup label={t('workCatalog.addGroupCustom')}>
+            {customCategories.map((c) => <option key={c.id} value={c.id}>{c.name || t('workCatalog.unnamedCategory')} · {t(`workCatalog.methods.${c.method}`)}</option>)}
+          </optgroup>}
+          {ownMethodItems.length > 0 && <optgroup label={t('workCatalog.addGroupItems')}>
+            {ownMethodItems.map((s) => <option key={s.id} value={`spec:${s.id}`}>{categoryName(s.categoryId)} › {s.name || t('workCatalog.unknownItem')} · {t(`workCatalog.methods.${s.method!}`)}</option>)}
+          </optgroup>}
+          <option value="__catalog__">{t('workCatalog.manage')}</option>
         </select>
+        {catalogOpen && <WorkCatalogDialog plan={project} onClose={() => setCatalogOpen(false)} />}
       </div>
 
       <details className="detail-collapsible" open={!!room.notes}>
