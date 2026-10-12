@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import { borderTableRow } from './excelTableBorders';
 import type { prepareStirrupShape } from './stirrupShape';
 import { columnWidths, type ExportContext } from './exportLanguage';
 import { markLabel } from './structuralMarks';
@@ -41,6 +42,7 @@ function headerRow(sheet: ExcelJS.Worksheet, labels: string[]) {
     c.font = { color: { argb: 'FFFFFFFF' }, bold: true };
     c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
   });
+  borderTableRow(row, labels.length, 'header');
 }
 
 function styleRow(row: ExcelJS.Row, argb: string, bold = false) {
@@ -48,9 +50,9 @@ function styleRow(row: ExcelJS.Row, argb: string, bold = false) {
   row.eachCell({ includeEmpty: true }, (c) => {
     fill(c, argb);
     c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    c.border = { bottom: { style: 'hair', color: { argb: 'FFCBD5E1' } } };
     if (bold) c.font = { bold: true };
   });
+  borderTableRow(row, row.cellCount, bold ? 'total' : 'data');
 }
 
 function filterSection(sheet: ExcelJS.Worksheet, first: number, last: number, headers: string[]) {

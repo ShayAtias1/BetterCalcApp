@@ -14,6 +14,7 @@
  */
 
 import type ExcelJS from 'exceljs';
+import { borderTableRow } from './excelTableBorders';
 import type { Measurement, Plan, Project, ReportColumn, RoomQuantitySummary } from '../types';
 import { columnWidths, type ExportContext } from './exportLanguage';
 import { sheetRef } from './excelSheetRef';
@@ -59,6 +60,7 @@ export function fillRow(row: ExcelJS.Row, argb: string, count: number, bold = fa
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } };
     if (bold) cell.font = { ...(cell.font ?? {}), bold: true };
   }
+  borderTableRow(row, count, argb === XL.category || argb === XL.grand || argb === XL.group && bold ? 'total' : 'data');
 }
 
 export function styleHeader(row: ExcelJS.Row, count: number) {
@@ -69,6 +71,7 @@ export function styleHeader(row: ExcelJS.Row, count: number) {
     cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
     cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
   }
+  borderTableRow(row, count, 'header');
 }
 
 /** A section's heading: bold, larger, with a blank line before it (except at the top of a sheet). */
@@ -449,6 +452,7 @@ export function addOpeningsSheet(workbook: ExcelJS.Workbook, inputs: OpeningsInp
       row.getCell(2).value = reports[i]?.doors ?? reports.reduce((n, r) => n + r.doors, 0);
       row.getCell(3).value = reports[i]?.windows ?? reports.reduce((n, r) => n + r.windows, 0);
       row.getCell(2).numFmt = '#,##0'; row.getCell(3).numFmt = '#,##0';
+      if (i >= reports.length) fillRow(row, XL.grand, 4, true);
     });
   }
   if (schedule) {

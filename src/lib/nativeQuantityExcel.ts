@@ -25,7 +25,6 @@ function rowStyle(row: ExcelJS.Row, width: number, x: ExportContext, color: stri
     const cell = row.getCell(c);
     cell.font = { name: 'Arial', size: 11, bold, color: { argb: 'FF1E293B' } };
     cell.alignment = { vertical: 'middle', horizontal: typeof cell.value === 'number' || typeof cell.value === 'object' && cell.value !== null && 'formula' in cell.value ? 'center' : x.rtl ? 'right' : 'left', wrapText: true };
-    cell.border = { bottom: { style: 'hair', color: { argb: 'FFCBD5E1' } } };
   }
 }
 
