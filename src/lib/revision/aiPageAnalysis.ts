@@ -1,4 +1,5 @@
 import { v4 as uuid } from 'uuid';
+import { normalizeRevisionWallGeometry } from './wallGeometry';
 import type { Point } from '../../types';
 import type { Comparison, LayerTransform } from '../../types/compare';
 import { IDENTITY_TRANSFORM } from '../../types/compare';
@@ -345,7 +346,7 @@ export function buildAiChanges(raw: RawChange[], manifest: RevisionPageManifest,
       status: 'pending',
     });
   }
-  return dedupe(out);
+  return dedupe(out.map(c => normalizeRevisionWallGeometry(c)));
 }
 
 /** Duplicate AI fragments may have disjoint boxes but verify to the same complete wall.

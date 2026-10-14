@@ -467,6 +467,34 @@ function reviewLines(p: ApplicationPreview, max = 5): string {
   return shown.join('\n');
 }
 
+/** Confirmation belongs to the change editor; approved/applied swaps never run silently. */
+export async function swapSelectedChange(pageKey: number, changeId: string): Promise<void> {
+  const store = useCompareStore.getState();
+  const comparison = store.comparison;
+  const revisionId = comparison?.activeRevisionId;
+  const change = comparison?.revisions.find(r => r.id === revisionId)?.analysis?.pages[pageKey]?.changes.find(c => c.id === changeId);
+  if (!comparison || !change || useRevisionUi.getState().applying) return;
+  useRevisionUi.setState({ applying: true });
+  try {
+    const needsConfirmation = change.status === 'approved' || change.status === 'applied';
+    if (needsConfirmation && !await confirmDialog(t(change.status === 'applied'
+      ? 'revisionAi.edit.swapAppliedConfirm' : 'revisionAi.edit.swapApprovedConfirm'), {
+      title: t('revisionAi.edit.swapVersions'), confirmLabel: t('revisionAi.edit.swapVersions'),
+    })) return;
+    // The user may navigate or edit while the confirmation is open.
+    const live = useCompareStore.getState();
+    if (live.comparison !== comparison || live.comparison.activeRevisionId !== revisionId || live.currentPageKey !== pageKey) return;
+    if (!await live.swapRevisionChange(pageKey, changeId, needsConfirmation)) {
+      notify(t('revisionAi.edit.swapUnverified'));
+      return;
+    }
+    useRevisionUi.setState({ editSide: 'both', selectedWallRegions: [], wallMergePreview: null,
+      placingType: null, placingWall: null, openingDrawing: null });
+  } catch {
+    notify(t('revisionAi.edit.swapUnsafe'));
+  } finally { useRevisionUi.setState({ applying: false }); }
+}
+
 export async function applyApprovedChanges(): Promise<void> {
   if (useRevisionUi.getState().applying) return;
   const store = useCompareStore.getState();

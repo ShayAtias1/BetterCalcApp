@@ -70,7 +70,7 @@ export function chainState(plan: Plan, comparison: Comparison, revision: Revisio
   return { allowed: false, headRevisionId: head, reason: 'base-not-applied' };
 }
 
-function pointInPolygon(p: Point, poly: Point[]): boolean {
+export function pointInPolygon(p: Point, poly: Point[]): boolean {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
     const a = poly[i];

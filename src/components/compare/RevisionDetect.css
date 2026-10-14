@@ -16,16 +16,16 @@
 .revision-quality.fair { color: #92400e; }
 .revision-quality.poor { color: #b91c1c; }
 .revision-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.revision-card { border: 1px solid var(--border, #e5e7eb); border-inline-start: 4px solid #d97706; border-radius: 6px; padding: 8px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
-.revision-card.added { border-inline-start-color: var(--revision-after); }
-.revision-card.removed { border-inline-start-color: var(--revision-before); }
+.revision-card { border: 1px solid var(--border, #e5e7eb); border-inline-start: 4px solid var(--text-muted, #64748b); border-radius: 6px; padding: 8px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.revision-card.work-construction { border-inline-start-color: var(--revision-construction); }
+.revision-card.work-demolition { border-inline-start-color: var(--revision-demolition); }
 .revision-card.selected { outline: 2px solid #0f172a; outline-offset: -1px; }
 .revision-card.rejected { opacity: 0.55; }
 .revision-card.applied { background: var(--surface-2, #f8fafc); }
 .revision-card-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.revision-num { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; border-radius: 10px; color: #fff; font-weight: 700; font-size: 11px; background: #d97706; }
-.revision-num.added { background: var(--revision-after); }
-.revision-num.removed { background: var(--revision-before); color: var(--text); }
+.revision-num { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; border-radius: 10px; color: #fff; font-weight: 700; font-size: 11px; background: var(--text-muted, #64748b); }
+.revision-num.work-construction { background: var(--revision-construction); }
+.revision-num.work-demolition { background: var(--revision-demolition); color: var(--text); }
 .revision-badge { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: #e2e8f0; }
 .revision-badge.high { background: #dbeafe; color: #1e3a8a; }
 .revision-badge.low { background: #f1f5f9; color: #64748b; }
@@ -72,8 +72,8 @@
 .revision-compare-row { display: flex; align-items: baseline; gap: 6px; line-height: 1.4; }
 .revision-compare-row > svg { flex: none; align-self: center; }
 .revision-compare-label { flex: none; min-width: 38px; font-weight: 600; color: #475569; }
-.revision-compare-row.removed .revision-compare-label { color: var(--revision-before); }
-.revision-compare-row.added .revision-compare-label { color: var(--revision-after); }
+
+
 .revision-compare-value { min-width: 0; overflow-wrap: anywhere; unicode-bidi: plaintext; font-variant-numeric: tabular-nums; }
 .revision-actions > button { border: 1px solid var(--border, #cbd5e1); }
 
@@ -96,8 +96,9 @@
 .revision-editor select { width: 100%; }
 .revision-editor .segmented-tabs { align-self: flex-start; }
 .revision-edit-elements { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.revision-edit-elements li { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 5px; border-inline-start: 3px solid var(--revision-after); background: var(--bg-surface, #fff); }
-.revision-edit-elements li.removed { border-inline-start-color: var(--revision-before); }
+.revision-edit-elements li { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 5px; border-inline-start: 3px solid var(--text-muted, #64748b); background: var(--bg-surface, #fff); }
+.revision-edit-elements li.work-construction { border-inline-start-color: var(--revision-construction); }
+.revision-edit-elements li.work-demolition { border-inline-start-color: var(--revision-demolition); }
 .revision-edit-side { flex: none; font-size: 11px; font-weight: 600; color: #475569; }
 .revision-edit-label { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; unicode-bidi: plaintext; }
 .revision-edit-height { flex: none; display: inline-flex; align-items: center; gap: 2px; font-size: 11px; }
@@ -113,9 +114,9 @@
 .revision-quantity-preview { display: flex; flex-direction: column; gap: 3px; font-size: 12px; padding: 6px; border-radius: 6px; background: var(--surface-2, #f8fafc); }
 .revision-quantity-preview p { margin: 0; }
 .revision-legend { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 8px 0; font-size: 11px; color: var(--text-muted, #64748b); }
-.revision-legend .removed { color: var(--revision-before); }
-.revision-legend .added { color: var(--revision-after); }
-.revision-legend .removed::before, .revision-legend .added::before { content: ''; display: inline-block; width: 16px; border-top: 1px solid currentColor; margin-inline-end: 4px; vertical-align: middle; }
+.revision-legend .work-demolition { color: var(--revision-demolition); }
+.revision-legend .work-construction { color: var(--revision-construction); }
+.revision-legend .work-demolition::before, .revision-legend .work-construction::before { content: ''; display: inline-block; width: 16px; border-top: 1px solid currentColor; margin-inline-end: 4px; vertical-align: middle; }
 .revision-card:focus-visible { outline: 2px solid var(--accent, #2563eb); }
 .revision-add-row { flex-wrap: wrap; }
 .revision-add-row select { flex-basis: 100%; }
@@ -144,5 +145,9 @@
 .revision-opening-drawing-controls .tool-group, .revision-opening-drawing-controls p { margin: 0; }
 .revision-opening-drawing-controls .tool-label { font-size: 12px; }
 
-.revision-card.added:is(.selected, :focus-visible) { outline-color: var(--revision-after); }
-.revision-card.removed:is(.selected, :focus-visible) { outline-color: var(--revision-before); }
+.revision-card.work-construction:is(.selected, :focus-visible) { outline-color: var(--revision-construction); }
+.revision-card.work-demolition:is(.selected, :focus-visible) { outline-color: var(--revision-demolition); }
+
+.revision-work-labels { display: inline-flex; flex-wrap: wrap; gap: 6px; font-weight: 600; font-size: 11px; }
+.revision-work-labels .work-construction { color: var(--revision-construction); }
+.revision-work-labels .work-demolition { color: var(--revision-demolition); }

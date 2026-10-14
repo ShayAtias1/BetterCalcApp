@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { withComparisonWallGeometry } from '../lib/revision/wallGeometry';
 import { prepareWallRegionMerge, type WallRegionRef, type WallMergeError, type WallGapPreview } from '../lib/revision/wallRegionMerge';
 import { v4 as uuid } from 'uuid';
 import type {
@@ -21,8 +22,8 @@ import type {
   RevisionPageData,
 } from '../types/compare';
 import { DEFAULT_AREA_KIND_COLORS, IDENTITY_TRANSFORM } from '../types/compare';
-import type { Point } from '../types';
-import { saveComparison as dbSaveComparison } from '../db/database';
+import type { Point, Plan } from '../types';
+import { loadPlan, loadPlanVersion, saveComparisonWithLinkedPlan, saveComparison as dbSaveComparison } from '../db/database';
 import { createHistoryTracker } from '../lib/undoHistory';
 import { t } from '../i18n';
 import { noteAlignment, trackChangeMarked, trackError } from '../lib/analytics';
@@ -31,21 +32,79 @@ import type { ComparisonContext, RevisionAiRun, RevisionChange, RevisionEditType
 import { sameChange } from '../lib/revision/changeMatch';
 import { changeItems, recomputeMeasurement } from '../lib/revision/changeItems';
 import { isOpeningDifference, openingImpactReady } from '../lib/revision/openingImpact';
-import { openingGeometryNeedsVerification } from '../lib/revision/changeEdit';
+import { openingGeometryNeedsVerification, isAiWallChange } from '../lib/revision/changeEdit';
 import { familyOf, openingFromFootprint } from '../lib/revision/changeEdit';
 import { detectionThresholds, matchRelocation } from '../lib/revision/vectorDiff';
 import { elementOfItem, finalizeEditedChange, hasUnplacedLines, retypeChange, setElementLine, setOpeningHeight, setWallFootprint, setWallHeight, sidesOf, wallFromFootprint } from '../lib/revision/changeEdit';
 import { analysisInputKey, baseRevisionOf } from '../lib/revision/detect';
 import type { RevisionWall } from '../types/revisionAnalysis';
 
+import { swapChangeVersions } from '../lib/revision/swapVersions';
+import { elementWorkKind } from '../lib/revision/workClassification';
+import { swapAppliedQuantities } from '../lib/revision/swapAppliedQuantities';
+import { notify } from '../lib/appDialogs';
+
 const historyTracker = createHistoryTracker<Comparison>();
 /**
- * Bumped at every commit point — an application to (or revert of) the linked plan, and the start
+ * Invalidates captured gestures at every commit point (and synchronized linked-plan swap) — an application to (or revert of) the linked plan, and the start
  * and arrival of a paid AI analysis. Undo history never reaches back across one: those states live
  * outside this document (the plan's ledger, the AI service), so restoring an older snapshot would
  * contradict them or discard a paid result.
  */
 let commitEpoch = 0;
+
+interface LinkedSwapHistory { before: Plan; after: Plan; expectedUpdatedAt: number; }
+const linkedSwapUndo = new WeakMap<Comparison, LinkedSwapHistory>();
+const linkedSwapRedo = new WeakMap<Comparison, LinkedSwapHistory>();
+let linkedSwapBusy = false;
+const linkedPlanHistoryTimes = new Map<string, number>();
+
+async function linkedPlanUi(plan: Plan) {
+  const { useAppStore } = await import('./appStore');
+  if (useAppStore.getState().project?.id === plan.id) useAppStore.setState({ project: plan, dirty: false, history: [], future: [] });
+  await useAppStore.getState().refreshProjectPlans().catch(() => undefined);
+  const { useRevisionUi } = await import('../lib/revision/revisionWorkflow');
+  useRevisionUi.setState(s => ({ planTick: s.planTick + 1 }));
+}
+
+async function ensureLinkedPlanIdle(planId: string) {
+  const { useAppStore } = await import('./appStore');
+  const idle = () => {
+    const state = useAppStore.getState();
+    return state.project?.id !== planId || (!state.dirty && !state.saving);
+  };
+  if (!idle()) throw new Error('revision-swap-stale');
+  return idle;
+}
+
+async function restoreLinkedSwap(edge: LinkedSwapHistory, forward: boolean, current: Comparison, target: Comparison,
+  get: () => CompareState, set: (patch: Partial<CompareState>) => void) {
+  if (linkedSwapBusy) return;
+  linkedSwapBusy = true;
+  try {
+    await get().persist();
+    if (get().saveError || get().comparison !== current) throw new Error('revision-swap-stale');
+    const planIdle = await ensureLinkedPlanIdle(edge.before.id);
+    const plan = { ...(forward ? edge.after : edge.before), updatedAt: Math.max(Date.now(), (linkedPlanHistoryTimes.get(edge.before.id) ?? edge.expectedUpdatedAt) + 1) };
+    const restored = touch(withCurrentAiRuns(target, current));
+    await saveComparisonWithLinkedPlan(restored, plan, linkedPlanHistoryTimes.get(plan.id) ?? edge.expectedUpdatedAt, current.updatedAt, () => get().comparison === current && planIdle());
+    commitEpoch++;
+    edge.expectedUpdatedAt = plan.updatedAt;
+    linkedPlanHistoryTimes.set(plan.id, plan.updatedAt);
+    const { history, future } = get();
+    if (forward) {
+      linkedSwapUndo.set(current, edge);
+      set({ comparison: restored, history: [...history, current], future: future.slice(1), dirty: false });
+    } else {
+      linkedSwapRedo.set(current, edge);
+      set({ comparison: restored, history: history.slice(0, -1), future: [current, ...future], dirty: false });
+    }
+    set({ selectedMarkupId: null, selectedMeasurementId: null });
+    await linkedPlanUi(plan);
+  } catch {
+    notify(t('revisionAi.edit.swapUnsafe'));
+  } finally { linkedSwapBusy = false; }
+}
 
 const REVISION_COLOR_PALETTE = ['#ef4444', '#2563eb', '#9333ea', '#f59e0b', '#16a34a', '#0891b2'];
 
@@ -183,8 +242,8 @@ interface CompareState {
   future: Comparison[];
   captureEditSnapshot: () => CompareEditSnapshot;
   cancelEditSnapshot: (before: CompareEditSnapshot) => void;
-  undo: () => void;
-  redo: () => void;
+  undo: () => void | Promise<void>;
+  redo: () => void | Promise<void>;
 
   setComparison: (c: Comparison | null) => void;
   setCurrentPageKey: (n: number) => void;
@@ -306,6 +365,7 @@ interface CompareState {
    * becomes user-authoritative; an approved change's demolition/construction items are rebuilt from
    * it. `quiet` is for every move of a drag burst (one undo step, saved by finishRevisionChangeEdit).
    */
+  swapRevisionChange: (pageKey: number, changeId: string, confirmed?: boolean) => Promise<boolean>;
   editRevisionChange: (pageKey: number, changeId: string, edit: (c: RevisionChange) => RevisionChange, quiet?: boolean) => void;
   /** Saves after a quiet edit burst (drag end). */
   finishRevisionChangeEdit: () => void;
@@ -493,7 +553,7 @@ function rebuildApprovedItems(comparison: Comparison, include: (c: RevisionChang
       changes: page.changes.map((c) => {
         if (c.status !== 'approved' || !include(c)) return c;
         touched = true;
-        const old = new Set(c.measurementIds ?? []);
+        const old = new Set([...(c.measurementIds ?? []), ...measurements.filter(m => m.revisionChangeId === c.id).map(m => m.id)]);
         const created = approvalItems(comparison, c, r.id, measurements.filter((m) => old.has(m.id)));
         measurements = [...measurements.filter((m) => !old.has(m.id)), ...created];
         return { ...c, measurementIds: created.map((m) => m.id) };
@@ -572,8 +632,9 @@ export const useCompareStore = create<CompareState>((set, get) => ({
 
   setComparison: (c) => {
     historyTracker.discard();
-    // Lazily replace legacy full-opening items; review decisions and applied documents stay intact.
-    const rebuilt = c ? rebuildApprovedItems(c, isOpeningDifference) : null;
+    // Restore supported wall footprints and rebuild unapplied items with the existing engine.
+    const normalized = c ? withComparisonWallGeometry(c) : null;
+    const rebuilt = normalized ? rebuildApprovedItems(normalized, change => isOpeningDifference(change) || isAiWallChange(change)) : null;
     const loaded = c && rebuilt && JSON.stringify(c.revisions) !== JSON.stringify(rebuilt.revisions) ? rebuilt : c;
     set({
       comparison: loaded,
@@ -603,10 +664,14 @@ export const useCompareStore = create<CompareState>((set, get) => ({
     set(snapshot);
   },
   undo: () => {
+    if (linkedSwapBusy) return;
     historyTracker.flush(get, set);
     const { comparison, history, future } = get();
     if (!comparison || history.length === 0) return;
-    const previous = withCurrentAiRuns(history[history.length - 1], comparison);
+    const target = history[history.length - 1];
+    const edge = linkedSwapUndo.get(target);
+    if (edge) return restoreLinkedSwap(edge, false, comparison, target, get, set);
+    const previous = withCurrentAiRuns(target, comparison);
     set({
       comparison: previous,
       history: history.slice(0, -1),
@@ -617,11 +682,14 @@ export const useCompareStore = create<CompareState>((set, get) => ({
     scheduleSave(get, set);
   },
   redo: () => {
+    if (linkedSwapBusy) return;
     // Consistent with undo: a mutation still inside the history debounce is recorded first,
     // otherwise redo would restore a future snapshot on top of an un-snapshotted change.
     historyTracker.flush(get, set);
     const { comparison, history, future } = get();
     if (!comparison || future.length === 0) return;
+    const edge = linkedSwapRedo.get(future[0]);
+    if (edge) return restoreLinkedSwap(edge, true, comparison, future[0], get, set);
     const next = withCurrentAiRuns(future[0], comparison);
     set({
       comparison: next,
@@ -1339,7 +1407,73 @@ export const useCompareStore = create<CompareState>((set, get) => ({
     set({ comparison: touch({ ...comparison, revisions }) });
     scheduleSave(get, set);
   },
+  swapRevisionChange: async (pageKey, changeId, confirmed = false) => {
+    if (linkedSwapBusy) return false;
+    historyTracker.flush(get, set);
+    const { comparison } = get();
+    const revision = comparison?.revisions.find(r => r.id === comparison.activeRevisionId);
+    const page = revision?.analysis?.pages[pageKey];
+    const change = page?.changes.find(c => c.id === changeId);
+    if (!comparison || !revision || !page || !change ||
+        ((change.status === 'approved' || change.status === 'applied') && !confirmed)) return false;
+    let updated = swapChangeVersions(change);
+    const linkedIds = new Set(change.measurementIds ?? []);
+    // Legacy documents may link by measurementIds only. Explicit ownership of another change wins.
+    const previous = revision.measurements.filter(m => m.revisionChangeId === changeId || (!m.revisionChangeId && linkedIds.has(m.id)));
+    const oldIds = new Set(previous.map(m => m.id));
+    let measurements = revision.measurements;
+    if (change.status === 'approved' || change.status === 'applied') {
+      if (hasUnplacedLines(updated) || !openingImpactReady(updated) || openingGeometryNeedsVerification(updated)) return false;
+      const created = approvalItems(comparison, updated, revision.id, measurements.filter(m => oldIds.has(m.id)));
+      measurements = [...measurements.filter(m => !oldIds.has(m.id)), ...created];
+      updated = { ...updated, measurementIds: created.map(m => m.id), reviewedAt: Date.now() };
+    } else if (previous.length) {
+      // Table rows are persisted quantities, not marker colors. Pending/rejected saved rows must
+      // reverse their actual work classification too, without creating quantities or approving them.
+      measurements = measurements.map(m => {
+        if (!oldIds.has(m.id) || m.tool !== 'area' || !m.areaKind) return m;
+        const ref = elementOfItem(change, m);
+        const element = ref && updated[ref.list][ref.index];
+        const areaKind = element && ref ? elementWorkKind(ref.list, element.side)
+          : m.areaKind === 'construction' ? 'demolition' : 'construction';
+        return { ...m, areaKind, revisionChangeId: changeId, revisionElement: ref ?? m.revisionElement };
+      });
+      updated = { ...updated, measurementIds: previous.map(m => m.id) };
+    }
+    const next = { ...comparison, updatedAt: Math.max(Date.now(), comparison.updatedAt + 1), revisions: comparison.revisions.map(r => r.id !== revision.id ? r : {
+      ...r, measurements, analysis: { pages: { ...r.analysis!.pages, [pageKey]: {
+        ...page, changes: page.changes.map(c => c.id === changeId ? updated : c),
+      } } },
+    }) };
+    if (change.status !== 'applied') {
+      historyTracker.push(get, set, comparison);
+      set({ comparison: next });
+      scheduleSave(get, set);
+      return true;
+    }
+    if (!comparison.linkedPlanId) throw new Error('revision-swap-stale');
+    linkedSwapBusy = true;
+    try {
+      await get().persist();
+      if (get().saveError || get().comparison !== comparison) throw new Error('revision-swap-stale');
+      const planIdle = await ensureLinkedPlanIdle(comparison.linkedPlanId);
+      const plan = await loadPlan(comparison.linkedPlanId);
+      if (!plan || get().comparison !== comparison) throw new Error('revision-swap-stale');
+      const app = plan.revisionApplications?.filter(a => a.status === 'applied').at(-1);
+      const version = app && await loadPlanVersion(app.versionId);
+      const nextPlan = swapAppliedQuantities(plan, comparison, revision.id, change, updated, version?.plan as Plan | undefined);
+      await saveComparisonWithLinkedPlan(next, nextPlan, plan.updatedAt, comparison.updatedAt, () => get().comparison === comparison && planIdle());
+      commitEpoch++;
+      linkedPlanHistoryTimes.set(plan.id, nextPlan.updatedAt);
+      historyTracker.push(get, set, comparison);
+      linkedSwapUndo.set(comparison, { before: plan, after: nextPlan, expectedUpdatedAt: nextPlan.updatedAt });
+      set({ comparison: next, dirty: false });
+      await linkedPlanUi(nextPlan);
+      return true;
+    } finally { linkedSwapBusy = false; }
+  },
   editRevisionChange: (pageKey, changeId, edit, quiet = false) => {
+    if (linkedSwapBusy) return;
     const { comparison } = get();
     if (!comparison) return;
     const revision = comparison.revisions.find((r) => r.id === comparison.activeRevisionId);

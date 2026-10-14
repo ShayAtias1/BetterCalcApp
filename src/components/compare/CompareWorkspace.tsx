@@ -181,8 +181,8 @@ export default function CompareWorkspace() {
   return (
     <div className="workspace compare-workspace" style={{
       ...(expanded ? panelGridStyle : {}),
-      '--revision-before': (comparison?.areaKindColors ?? DEFAULT_AREA_KIND_COLORS).demolition,
-      '--revision-after': (comparison?.areaKindColors ?? DEFAULT_AREA_KIND_COLORS).construction,
+      '--revision-demolition': (comparison?.areaKindColors ?? DEFAULT_AREA_KIND_COLORS).demolition,
+      '--revision-construction': (comparison?.areaKindColors ?? DEFAULT_AREA_KIND_COLORS).construction,
     } as CSSProperties}>
       {expanded ? <CompareTopBar onExport={runExport} exporting={exporting} onDetectChanges={() => {
         setTab('detect');

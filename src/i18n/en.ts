@@ -2085,15 +2085,26 @@ export const en: Dictionary = {
   },
 
   revisionAi: {
+    work: { construction: 'Construction', demolition: 'Demolition' },
     edit: {
+      designWallAdded: 'Wall Added',
+      designWallRemoved: 'Wall Removed',
       wallDimensions: 'Length {length} m · Mean thickness {thickness} cm',
+      swapButton: 'Swap Before / After',
+      swapVersions: 'Swap Before / After',
+      swapApprovedConfirm: 'Swap Before and After for this approved change? Its linked quantities will be recalculated.',
+      swapAppliedConfirm: 'Swap Before and After for this applied change? Its linked plan quantities will be synchronized. Undo restores both.',
+      swapUnsafe: 'Cannot safely synchronize the linked plan. Save any open plan edits and check that this is the latest application and its linked items have not been changed. Revert the application first if necessary.',
+      swapUnverified: 'Verify the geometry and dimensions before swapping an approved or applied change.',
+      verifyWall: 'Verify wall footprint',
+      verifyWallRequired: 'Wall thickness or footprint is missing. Draw and verify the actual wall with Rectangle or Polygon before approving quantities.',
       wallPlanHint: 'Drag a corner to reshape the wall or its footprint to move it. Click + to add a vertex, or Alt-click a corner to remove it. Choose Original or Revised to edit each version separately.',
       drawWallHint: 'Draw a rectangle with two opposite corners, or close a polygon. Draw both versions for a relocated wall. Back removes a vertex; Esc cancels.',
       drawWallStep: '{side} · Vertex {corner}',
       selectRegion: 'Select wall region for merging',
       mergeRegions: 'Merge Regions',
       gapPreviewTitle: 'Preview wall gap fill',
-      gapPreview: '{count} connecting areas are shown in orange. Largest gap: {gapCm} cm. Review the exact merged outline before confirming. The added area will count as wall geometry; never fill an actual opening.',
+      gapPreview: '{count} connecting areas are highlighted in their work color. Largest gap: {gapCm} cm. Review the exact merged outline before confirming. The added area will count as wall geometry; never fill an actual opening.',
       confirmGapFill: 'Fill gap and merge',
       mergeHint: 'Shift-click wall regions to select more than one, or use the geometry checkboxes. Only regions of the same version and approval status can be merged.',
       mergeErrors: {

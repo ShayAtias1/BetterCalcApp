@@ -1,3 +1,4 @@
+import { elementWorkKind, elementWorkKinds, revisionWorkKinds } from '../../lib/revision/workClassification';
 import { useEffect, useMemo, useState } from 'react';
 import type { PanelPart } from '../PanelPart';
 import { compareScaleFor, useCompareStore } from '../../store/compareStore';
@@ -11,9 +12,10 @@ import { analysisInputKey } from '../../lib/revision/detect';
 import { checkPlanLink, latestApplication, pendingApplication, type LinkStatus } from '../../lib/revision/apply';
 import { changeItems, relocationQuantities } from '../../lib/revision/changeItems';
 import { isOpeningDifference, openingImpact, openingImpactReady, openingWallThicknessPx } from '../../lib/revision/openingImpact';
-import { openingGeometryNeedsVerification, openingFootprint, setOpeningThickness, EDIT_TYPES, editTypeOf, familyOf, hasUnplacedLines, removeElement, retypeChange, setOpeningHeight, sidesOf } from '../../lib/revision/changeEdit';
+import { openingGeometryNeedsVerification, openingFootprint, setOpeningThickness, EDIT_TYPES, editTypeOf, familyOf, hasUnplacedLines, removeElement, retypeChange, setOpeningHeight, sidesOf, isAiWallChange, wallGeometryNeedsVerification, wallHasFootprint } from '../../lib/revision/changeEdit';
 import {
   applyApprovedChanges,
+  swapSelectedChange,
   focusChange,
   revertRevisionApplication,
   runAiPageAnalysis,
@@ -25,6 +27,7 @@ import {
 import Icon from '../Icon';
 import AreaShapePicker from '../AreaShapePicker';
 import { OPENING_DEFAULT_SIZES } from '../../config/measurementDefaults';
+import { revisionTypeLabelKey } from './revisionTerminology';
 import './RevisionDetect.css';
 
 function useActiveAnalysis(): { analysis: RevisionPageAnalysis | undefined; stale: boolean } {
@@ -42,6 +45,12 @@ function useActiveAnalysis(): { analysis: RevisionPageAnalysis | undefined; stal
 /** Wraps user/plan text (room names, numbers, English) so it keeps its own direction inside a Hebrew sentence. */
 const isolate = (text: string) => `\u2068${text}\u2069`;
 
+function WorkLabels({ kinds }: { kinds: ('demolition' | 'construction')[] }) {
+  const t = useT();
+  return <span className="revision-work-labels">{kinds.map(kind =>
+    <span key={kind} className={`work-${kind}`} data-revision-work={kind}>{t(`revisionAi.work.${kind}`)}</span>)}</span>;
+}
+
 function ChangeCard({ change, number, readOnly }: { change: RevisionChange; number: number; readOnly: boolean }) {
   const t = useT();
   const comparison = useCompareStore((s) => s.comparison);
@@ -52,7 +61,9 @@ function ChangeCard({ change, number, readOnly }: { change: RevisionChange; numb
   const editingId = useRevisionUi((s) => s.editingChangeId);
   const expandedId = useRevisionUi((s) => s.expandedChangeId);
   // Card text follows the UI direction; AI/plan text inside it is isolated (see `isolate`).
-  const dir = LANGUAGES[useLanguage()].dir;
+  const language = useLanguage();
+  const dir = LANGUAGES[language].dir;
+  const typeLabel = (type: RevisionEditType) => t(revisionTypeLabelKey(type, comparison?.context, language));
   const scale = compareScaleFor(comparison, change.pageNumber);
   const mpp = scale.state === 'calibrated' ? scale.metersPerPixel : 0;
   const m = (px: number) => round(px * mpp, 2);
@@ -61,8 +72,8 @@ function ChangeCard({ change, number, readOnly }: { change: RevisionChange; numb
   const doorWidth = (d: RevisionChange['doors'][number]) => m(Math.hypot(d.jamb.x - d.hinge.x, d.jamb.y - d.hinge.y));
   // One compact line per shape: a removed + added pair collapses into "before ← after" without labels.
   const rows: { icon: 'wall' | 'door'; text: string }[] = [];
-  const removedWalls = change.walls.filter((w) => w.side === 'removed');
-  const addedWalls = change.walls.filter((w) => w.side === 'added');
+  const removedWalls = change.walls.filter((w) => w.side === 'removed' && (!isAiWallChange(change) || wallHasFootprint(w)));
+  const addedWalls = change.walls.filter((w) => w.side === 'added' && (!isAiWallChange(change) || wallHasFootprint(w)));
   const wallLine = (w: RevisionChange['walls'][number]) => !mpp
     ? t('revisionAi.wallUncalibrated')
     : w.thicknessPx > 0
@@ -100,11 +111,13 @@ function ChangeCard({ change, number, readOnly }: { change: RevisionChange; numb
   const editing = editingId === change.id && !locked;
   const unplaced = hasUnplacedLines(change) || !openingImpactReady(change) || openingGeometryNeedsVerification(change);
   const title = change.userType
-    ? t(`revisionAi.edit.types.${change.userType}`)
+    ? typeLabel(change.userType)
     : change.relocation
     ? t('revisionAi.relocatedTitle')
     : change.aiProposal
-    ? t(`revisionAi.edit.types.${editTypeOf(change)}`)
+    ? typeLabel(editTypeOf(change))
+    : language === 'he' && change.category === 'wall' && (change.kind === 'added' || change.kind === 'removed')
+    ? typeLabel(change.kind === 'added' ? 'wall-added' : 'wall-removed')
     : change.category === 'unknown'
     ? t('revisionAi.categories.unknown')
     : t(`revisionAi.cardTitle.${change.kind}`, { category: t(`revisionAi.categories.${change.category}`) });
@@ -120,6 +133,8 @@ function ChangeCard({ change, number, readOnly }: { change: RevisionChange; numb
     focusChange(change);
     if (done) useRevisionUi.setState({ expandedChangeId: collapsed ? change.id : null });
   };
+  const work = revisionWorkKinds(change);
+  const workClass = work.length === 1 ? `work-${work[0]}` : 'work-mixed';
   const summary = items.length
     ? (['demolition', 'construction'] as const).filter((k) => areaOf(k) > 0).map((k) => `${t(`areaKinds.${k}`)} ${areaOf(k)} ${t('units.m2')}`).join(' · ')
     : rows[0]?.text ?? '';
@@ -127,9 +142,9 @@ function ChangeCard({ change, number, readOnly }: { change: RevisionChange; numb
   return (
     <li tabIndex={0} dir={dir} aria-label={`${number}. ${title}`} aria-current={selectedId === change.id ? 'true' : undefined} aria-expanded={done ? !collapsed : undefined}
       onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle(); } }}
-      className={`revision-card ${change.kind} ${change.status} ${selectedId === change.id ? 'selected' : ''} ${collapsed ? 'collapsed' : ''}`} onClick={toggle}>
+      className={`revision-card ${workClass} ${change.kind} ${change.status} ${selectedId === change.id ? 'selected' : ''} ${collapsed ? 'collapsed' : ''}`} onClick={toggle}>
       <div className="revision-card-head">
-        <span className={`revision-num ${change.kind}`}>{number}</span>
+        <span className={`revision-num ${workClass}`}>{number}</span>
         <strong className="revision-title">{title}</strong>
         <span className="revision-flags">
           {change.status === 'pending' && verification && <span className={`revision-verify ${verification}`}>{t(`revisionAi.verifyChip.${verification}`)}</span>}
@@ -138,6 +153,7 @@ function ChangeCard({ change, number, readOnly }: { change: RevisionChange; numb
           {done && <Icon name={collapsed ? 'chevron-down' : 'chevron-up'} size={12} />}
         </span>
       </div>
+      <WorkLabels kinds={work} />
       {collapsed ? (summary && <div className="revision-fact muted revision-summary"><span>{summary}</span></div>) : <>
         {(rows.length > 0 || change.textChanges) && (
           <div className="revision-facts">
@@ -154,7 +170,7 @@ function ChangeCard({ change, number, readOnly }: { change: RevisionChange; numb
             )}
           </div>
         )}
-        {unplaced && <div className="revision-fact revision-unverified">{t(change.category === 'opening' ? 'compare.openingImpact.required' : 'revisionAi.unplaced')}</div>}
+        {unplaced && <div className="revision-fact revision-unverified">{t(wallGeometryNeedsVerification(change) ? 'revisionAi.edit.verifyWallRequired' : change.category === 'opening' ? 'compare.openingImpact.required' : 'revisionAi.unplaced')}</div>}
 
         {/* Explanations are secondary: open on demand, and never repeated on an approved change's summary. */}
         <details className="revision-more" onClick={(e) => e.stopPropagation()}>
@@ -210,7 +226,12 @@ function ChangeCard({ change, number, readOnly }: { change: RevisionChange; numb
               }}>
               <Icon name={editing ? 'check' : 'edit'} size={12} /> {editing ? t('revisionAi.edit.done') : t('revisionAi.edit.edit')}
             </button>
-            {change.status === 'pending' && !!change.wallCandidates?.length && (
+            {wallGeometryNeedsVerification(change) && <button className="btn-secondary small" onClick={() => {
+              const side = sidesOf(editTypeOf(change)).find(side => !change.walls.some(w => w.side === side && wallHasFootprint(w)))
+                ?? change.walls.find(w => !wallHasFootprint(w))?.side ?? sidesOf(editTypeOf(change))[0];
+              startManualChangeDrawing(editTypeOf(change), { changeId: change.id, side });
+            }}>{t('revisionAi.edit.verifyWall')}</button>}
+            {change.status === 'pending' && !!change.wallCandidates?.length && !isAiWallChange(change) && (
               <button className="btn-ghost small" title={t('revisionAi.confirmWallHint')} onClick={() => confirmAsWall(change.pageNumber, change.id)}>
                 <Icon name="wall" size={12} /> {t('revisionAi.confirmWall')}
               </button>
@@ -241,8 +262,17 @@ function ChangeCard({ change, number, readOnly }: { change: RevisionChange; numb
  * Manual correction of one change: its classification, which side's geometry the plan handles
  * show, and its lines (add / delete / opening height). Lines are moved on the plan itself.
  */
+function SwapVersionsButton({ change }: { change: RevisionChange }) {
+  const t = useT();
+  const busy = useRevisionUi(s => s.applying);
+  return <button className="btn btn-secondary" disabled={busy} onClick={e => {
+    e.stopPropagation(); void swapSelectedChange(change.pageNumber, change.id);
+  }}>{t('revisionAi.edit.swapButton')}</button>;
+}
+
 export function ChangeEditor({ change }: { change: RevisionChange }) {
   const t = useT();
+  const language = useLanguage();
   const comparison = useCompareStore((s) => s.comparison);
   const edit = useCompareStore((s) => s.editRevisionChange);
   const finishEdit = useCompareStore((s) => s.finishRevisionChangeEdit);
@@ -259,12 +289,13 @@ export function ChangeEditor({ change }: { change: RevisionChange }) {
     return mpp ? t('revisionAi.edit.lengthM', { value: round(px * mpp, 2) }) : t('revisionAi.edit.lengthPx', { value: Math.round(px) });
   };
   const elements = [
-    ...change.walls.map((w, index) => ({ key: `w${index}`, list: 'walls' as const, index, side: w.side, label: t('revisionAi.edit.wall'), a: w.centerline[0], b: w.centerline[1], heightM: undefined as number | undefined, opening: undefined as 'door' | 'window' | undefined })),
+    ...change.walls.flatMap((w, index) => isAiWallChange(change) && !wallHasFootprint(w) ? [] : [{ key: `w${index}`, list: 'walls' as const, index, side: w.side, label: t('revisionAi.edit.wall'), a: w.centerline[0], b: w.centerline[1], heightM: undefined as number | undefined, opening: undefined as 'door' | 'window' | undefined }]),
     ...change.doors.map((d, index) => ({ key: `d${index}`, list: 'doors' as const, index, side: d.side, label: t(d.opening === 'window' ? 'revisionAi.edit.window' : 'revisionAi.edit.door'), a: d.hinge, b: d.jamb, heightM: d.heightM, opening: d.opening ?? 'door' })),
   ].filter((el) => editSide === 'both' || el.side === editSide);
 
   return (
     <div className="revision-editor" onClick={(e) => e.stopPropagation()}>
+      <SwapVersionsButton change={change} />
       <label className="field-label" title={t(family === 'other' ? 'revisionAi.edit.otherHint' : family === 'wall' ? 'revisionAi.edit.wallPlanHint' : 'revisionAi.edit.planHint')}>{t('revisionAi.edit.type')}</label>
       <select value={type} onChange={(e) => {
         const nextType = e.target.value as RevisionEditType;
@@ -274,7 +305,7 @@ export function ChangeEditor({ change }: { change: RevisionChange }) {
         const missingSide = sidesOf(nextType).find(side => !updated.walls.some(w => w.side === side));
         if (familyOf(nextType) === 'wall' && missingSide) startManualChangeDrawing(nextType, { changeId: change.id, side: missingSide });
       }}>
-        {EDIT_TYPES.map((x) => <option key={x} value={x}>{t(`revisionAi.edit.types.${x}`)}</option>)}
+        {EDIT_TYPES.map((x) => <option key={x} value={x}>{t(revisionTypeLabelKey(x, comparison?.context, language))}</option>)}
       </select>
       {sides.length === 2 && (
         <div className="segmented-tabs small">
@@ -288,10 +319,11 @@ export function ChangeEditor({ change }: { change: RevisionChange }) {
       {family !== 'other' && (
         <ul className="revision-edit-elements">
           {elements.map((el) => (
-            <li key={el.key} className={el.side}>
+            <li key={el.key} className={elementWorkKinds(change, el.list, el.index).map(kind => `work-${kind}`).join(' ')}>
               {el.list === 'walls' && <input type="checkbox" aria-label={t('revisionAi.edit.selectRegion')}
                 checked={selectedWalls.some(ref => ref.changeId === change.id && ref.index === el.index)}
                 onChange={() => useRevisionUi.getState().selectWallRegion(change.id, el.index, true)} />}
+              <WorkLabels kinds={elementWorkKinds(change, el.list, el.index)} />
               <span className="revision-edit-side">{t(el.side === 'removed' ? 'revisionAi.before' : 'revisionAi.after')}</span>
               <span className="revision-edit-label" dir="auto">{el.list === 'walls' && mpp
                 ? t('revisionAi.edit.wallDimensions', { length: round(change.walls[el.index].lengthPx * mpp, 2), thickness: round(change.walls[el.index].thicknessPx * mpp * 100, 1) })
@@ -321,7 +353,7 @@ export function ChangeEditor({ change }: { change: RevisionChange }) {
         <div className="revision-actions">
           {sides.map((side) => (
             <button key={side} className="btn-ghost small" onClick={() => startManualChangeDrawing(type, { changeId: change.id, side })}>
-              <Icon name="plus" size={12} /> {t('compare.openingImpact.drawWall')} · {t(side === 'removed' ? 'revisionAi.before' : 'revisionAi.after')}
+              <Icon name="plus" size={12} /> {t('compare.openingImpact.drawWall')} · {t(`revisionAi.work.${elementWorkKind('walls', side)}`)} · {t(side === 'removed' ? 'revisionAi.before' : 'revisionAi.after')}
             </button>
           ))}
         </div>
@@ -330,7 +362,7 @@ export function ChangeEditor({ change }: { change: RevisionChange }) {
         {sides.filter(side => !change.doors.some(d => d.side === side && openingFootprint(d))).map(side =>
           <button key={side} className="btn-secondary small" title={t('compare.openingImpact.drawOpeningHint')}
             onClick={() => startManualChangeDrawing(type, { changeId: change.id, side })}>
-            <Icon name="rectangle" size={12} /> {t('compare.openingImpact.drawOpening')} · {t(side === 'removed' ? 'revisionAi.before' : 'revisionAi.after')}
+            <Icon name="rectangle" size={12} /> {t('compare.openingImpact.drawOpening')} · {t(`revisionAi.work.${elementWorkKind('doors', side)}`)} · {t(side === 'removed' ? 'revisionAi.before' : 'revisionAi.after')}
           </button>)}
       </div>}
       {(isOpeningDifference(change) || change.doors.some(d => d.footprint)) && change.doors.map((d, index) => <div key={`impact-${index}`} className="revision-section">
@@ -368,6 +400,8 @@ export function ChangeEditor({ change }: { change: RevisionChange }) {
 /** Selecting a manual classification arms its drawing tool. */
 function AddMissedChange() {
   const t = useT();
+  const language = useLanguage();
+  const context = useCompareStore(s => s.comparison?.context);
   const placingType = useRevisionUi((s) => s.placingType);
   const [type, setType] = useState<RevisionEditType>('wall-added');
   return (
@@ -378,7 +412,7 @@ function AddMissedChange() {
           setType(nextType);
           startManualChangeDrawing(nextType);
         }} aria-label={t('revisionAi.edit.type')}>
-          {EDIT_TYPES.map((x) => <option key={x} value={x}>{t(`revisionAi.edit.types.${x}`)}</option>)}
+          {EDIT_TYPES.map((x) => <option key={x} value={x}>{t(revisionTypeLabelKey(x, context, language))}</option>)}
         </select>
         <button className={placingType ? 'btn-primary small' : 'btn-secondary small'} aria-pressed={!!placingType}
           onClick={() => placingType ? useRevisionUi.setState({ placingType: null, placingWall: null }) : startManualChangeDrawing(type)}>
@@ -615,7 +649,8 @@ function OpeningDrawingControls() {
         className={draft?.side === side ? 'tool-btn active' : 'tool-btn'}
         aria-pressed={draft?.side === side} disabled={!draft?.sides.includes(side)}
         onClick={() => draft?.selectSide(side)}>
-        {t(side === 'removed' ? 'revisionAi.before' : 'revisionAi.after')}
+        <WorkLabels kinds={[elementWorkKind(familyOf(type) === 'wall' ? 'walls' : 'doors', side)]} />
+        <span className="revision-edit-side">{t(side === 'removed' ? 'revisionAi.before' : 'revisionAi.after')}</span>
       </button>)}
     </div>
     <p className={draft?.error ? 'cal-hint-warning revision-warning' : 'tool-hint'}>
@@ -701,6 +736,7 @@ export default function RevisionDetectPanel({ part, readOnly = false }: { part: 
     {selected && <section className="revision-selection-detail">
       <strong>{t('revisionAi.edit.selected', { number: (analysis?.changes.indexOf(selected) ?? 0) + 1 })}</strong>
       {!locked && editingId === selected.id && <ChangeEditor change={selected} />}
+      {!readOnly && (selected.status === 'applied' || (!locked && editingId !== selected.id)) && <SwapVersionsButton change={selected} />}
       <div className="revision-quantity-preview">
         <strong title={selected.status !== 'approved' && selected.status !== 'applied' ? t('revisionAi.edit.previewHint') : undefined}>{t('revisionAi.edit.quantityPreview')}</strong>
         {selected && isOpeningDifference(selected) && !openingImpactReady(selected) ? <p className="revision-warning cal-hint-warning">{t('compare.openingImpact.required')}</p>
@@ -710,7 +746,7 @@ export default function RevisionDetectPanel({ part, readOnly = false }: { part: 
           : <p className="muted small-text">{t('revisionAi.edit.noPreviewItems')}</p>}
       </div>
     </section>}
-    <div className="revision-legend" title={t('revisionAi.edit.legend')}><span className="removed">{t('revisionAi.before')}</span><span className="added">{t('revisionAi.after')}</span></div>
+    <div className="revision-legend" title={t('revisionAi.edit.legend')}><WorkLabels kinds={['construction', 'demolition']} /></div>
     <DetectTools readOnly={readOnly} />
   </>;
 }

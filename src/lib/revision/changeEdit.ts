@@ -147,9 +147,30 @@ function openingFromLine(side: EditSide, a: Point, b: Point, opening: 'door' | '
 
 /** True while any line of the change is still a starting line the user has not placed on the drawing. */
 export function hasUnplacedLines(c: RevisionChange): boolean {
-  return c.walls.some((w) => w.placeholder) || c.doors.some((d) => d.placeholder)
+  return wallGeometryNeedsVerification(c) || c.walls.some((w) => w.placeholder) || c.doors.some((d) => d.placeholder)
     || (!!c.aiProposal && c.category === 'opening' && sidesOf(editTypeOf(c)).some(side => !c.doors.some(d => d.side === side)))
     || (!!c.userType && familyOf(c.userType) === 'wall' && sidesOf(c.userType).some(side => !c.walls.some(w => w.side === side)));
+}
+
+export function isAiWallChange(c: RevisionChange): boolean {
+  return familyOf(editTypeOf(c)) === 'wall' && (!!c.aiProposal?.changeType.startsWith('wall')
+    || (c.category === 'wall' && (!!c.ai || (c.evidence ?? []).includes('ai-detected'))));
+}
+
+/** Location lines and legacy one-pixel strips do not verify a wall's thickness. */
+export function wallHasFootprint(w: RevisionWall): boolean {
+  return !w.placeholder && Number.isFinite(w.thicknessPx) && w.thicknessPx > 0
+    && Array.isArray(w.footprint) && w.footprint.every(p => p && Number.isFinite(p.x) && Number.isFinite(p.y)) && isValidAreaPolygon(w.footprint)
+    && Array.isArray(w.centerline) && w.centerline.length === 2
+    && w.centerline.every(p => p && Number.isFinite(p.x) && Number.isFinite(p.y))
+    && distancePx(w.centerline[0], w.centerline[1]) > 0;
+}
+
+export function wallGeometryNeedsVerification(c: RevisionChange): boolean {
+  if (!isAiWallChange(c)) return false;
+  const walls = c.walls ?? [];
+  return !!c.wallCandidates?.length || walls.some(w => !wallHasFootprint(w))
+    || sidesOf(editTypeOf(c)).some(side => !walls.some(w => w.side === side && wallHasFootprint(w)));
 }
 
 /** A short horizontal placeholder centred on `at`, sized like the element it stands for (px when uncalibrated). */

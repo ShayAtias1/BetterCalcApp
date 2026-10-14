@@ -128,6 +128,31 @@ export async function savePlanWithVersion(plan: Plan, version: PlanVersion): Pro
   await tx.done;
 }
 
+/** Commit a selected applied-change edit and its linked quantities as one local transaction. */
+export async function saveComparisonWithLinkedPlan(comparison: Comparison, plan: Plan,
+  expectedPlanUpdatedAt: number, expectedComparisonUpdatedAt: number, isCurrent: () => boolean = () => true): Promise<void> {
+  const db = await getDb();
+  const tx = db.transaction(['projects', 'comparisons'], 'readwrite');
+  const plans = tx.objectStore('projects');
+  const comparisons = tx.objectStore('comparisons');
+  const currentPlan = await plans.get(plan.id);
+  const currentComparison = await comparisons.get(comparison.id);
+  if (!isCurrent() || !currentPlan || currentPlan.updatedAt !== expectedPlanUpdatedAt ||
+      !currentComparison || currentComparison.updatedAt !== expectedComparisonUpdatedAt) {
+    tx.abort();
+    await tx.done.catch(() => undefined);
+    throw new Error('revision-swap-stale');
+  }
+  await plans.put(plan);
+  await comparisons.put(comparison);
+  if (!isCurrent()) {
+    tx.abort();
+    await tx.done.catch(() => undefined);
+    throw new Error('revision-swap-stale');
+  }
+  await tx.done;
+}
+
 export async function loadPlanVersion(id: string): Promise<PlanVersion | undefined> {
   return (await getDb()).get('planVersions', id);
 }

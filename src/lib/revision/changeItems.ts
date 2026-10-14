@@ -3,7 +3,7 @@ import type { AreaKind } from '../../types/compare';
 import type { ComparisonContext, RevisionChange } from '../../types/revisionAnalysis';
 import { OPENING_DEFAULT_SIZES } from '../../config/measurementDefaults';
 import { longestEdgePx, polygonAreaM2, polygonPerimeterPx, pxToMeters, round, distancePx } from '../geometry';
-import { sidesOf, openingGeometryNeedsVerification } from './changeEdit';
+import { sidesOf, openingGeometryNeedsVerification, wallGeometryNeedsVerification } from './changeEdit';
 import { isOpeningDifference, openingImpact } from './openingImpact';
 
 /**
@@ -35,7 +35,7 @@ export interface ChangeItem {
  */
 export function relocationQuantities(change: RevisionChange, metersPerPixel: number, wallHeightM: number) {
   const r = change.relocation;
-  if (!r || !(metersPerPixel > 0) || change.wallCandidates?.length || change.walls.some((w) => w.placeholder)) return null;
+  if (!r || !(metersPerPixel > 0) || wallGeometryNeedsVerification(change) || change.wallCandidates?.length || change.walls.some((w) => w.placeholder)) return null;
   const before = round(pxToMeters(r.beforeLengthPx, metersPerPixel), 2);
   const after = round(pxToMeters(r.afterLengthPx, metersPerPixel), 2);
   return {
@@ -78,6 +78,7 @@ function strip(a: Point, b: Point, halfWidth: number): Point[] {
 
 export function changeItems(change: RevisionChange, context: ComparisonContext, metersPerPixel: number, wallHeightM: number): ChangeItem[] {
   if (!(metersPerPixel > 0)) return [];
+  if (wallGeometryNeedsVerification(change)) return [];
   if (isOpeningDifference(change)) return context === 'construction' && !openingGeometryNeedsVerification(change)
     ? openingImpact(change, metersPerPixel).portions.map(p => ({ ...p, source: 'door' as const })) : [];
   if (change.userType?.startsWith('wall') && sidesOf(change.userType).some(side => !change.walls.some(w => w.side === side))) return [];
