@@ -411,3 +411,52 @@ function matchRoomName(polygon: Point[], textItems: PlanTextItem[]): { name: str
   }
   return null;
 }
+
+/**
+ * Re-traces one room on an already rendered page image: the enclosed region containing the first
+ * usable seed point. Used by AI Revision Compare to propose a room's boundary on the revised plan
+ * (rendered into the original page's coordinates). `scale` is image px per native px.
+ *
+ * Returns null when no seed lands in an enclosed region (open to the page edge, or every seed on a
+ * wall) — the caller then leaves the room for manual review instead of guessing.
+ */
+export function traceRoomAtSeeds(image: ImageData, scale: number, seeds: Point[], options: Pick<DetectionOptions, 'luminanceThreshold' | 'wallDilation' | 'simplifyTolerance'> = {}): Point[] | null {
+  const opts = { ...DEFAULTS, ...options };
+  const { width: w, height: h } = image;
+  const wall = buildWallMask(image, opts.luminanceThreshold);
+  dilate(wall, w, h, opts.wallDilation);
+  for (const seed of seeds) {
+    const sx = Math.round(seed.x * scale);
+    const sy = Math.round(seed.y * scale);
+    if (sx < 1 || sy < 1 || sx >= w - 1 || sy >= h - 1 || wall[sy * w + sx]) continue;
+    // Flood only the seed's component, so a page-sized background never costs a full labelling.
+    const labels = new Int32Array(w * h);
+    const stack = [sy * w + sx];
+    labels[sy * w + sx] = 1;
+    let touchesBorder = false;
+    let minX = sx, minY = sy, maxX = sx, maxY = sy;
+    while (stack.length) {
+      const idx = stack.pop()!;
+      const x = idx % w;
+      const y = (idx - x) / w;
+      if (x === 0 || y === 0 || x === w - 1 || y === h - 1) touchesBorder = true;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+      for (const n of [x > 0 ? idx - 1 : -1, x < w - 1 ? idx + 1 : -1, y > 0 ? idx - w : -1, y < h - 1 ? idx + w : -1]) {
+        if (n >= 0 && !wall[n] && labels[n] === 0) {
+          labels[n] = 1;
+          stack.push(n);
+        }
+      }
+    }
+    if (touchesBorder) return null;
+    const contour = traceContour(labels, 1, { minX, minY, maxX, maxY }, w, h);
+    if (contour.length < 3) return null;
+    const simplified = simplifyPolygon(contour, opts.simplifyTolerance);
+    if (simplified.length < 3) return null;
+    return simplified.map((p) => ({ x: p.x / scale, y: p.y / scale }));
+  }
+  return null;
+}

@@ -1,5 +1,6 @@
+import AreaShapePicker from './AreaShapePicker';
 import { useAppStore } from '../store/appStore';
-import type { AreaCalcMode, AreaKind, AreaShape } from '../types';
+import type { AreaCalcMode, AreaKind } from '../types';
 import { MEASUREMENT_DEFAULTS } from '../config/measurementDefaults';
 import { round } from '../lib/geometry';
 import { measurementLabel } from '../lib/measurementValues';
@@ -11,10 +12,6 @@ import { MEASURE_ICONS, MEASURE_TOOLS } from './toolLists';
 import { useT } from '../i18n';
 
 // Labels: `measure.shapes.<shape>` and `measure.calcModes.<mode>`.
-const AREA_SHAPES: { shape: AreaShape; icon: IconName }[] = [
-  { shape: 'polygon', icon: 'polygon' },
-  { shape: 'rectangle', icon: 'rectangle' },
-];
 const AREA_CALC_MODES: { mode: AreaCalcMode; icon: IconName }[] = [
   { mode: 'footprint', icon: 'square' },
   { mode: 'wall', icon: 'dimension' },
@@ -227,7 +224,7 @@ export function MeasureToolOptions({ bar = false }: { bar?: boolean } = {}) {
           <div className="tool-group">
             <span className="section-label">{t('measure.calcMode')}</span>
             <div className="segmented">
-              {AREA_CALC_MODES.map(({ mode, icon }) => (
+              {AREA_CALC_MODES.filter(({ mode }) => areaShape !== 'line' || mode === 'wall').map(({ mode, icon }) => (
                 <button
                   key={mode}
                   className={`tool-btn ${areaCalcMode === mode ? 'active' : ''}`}
@@ -240,22 +237,7 @@ export function MeasureToolOptions({ bar = false }: { bar?: boolean } = {}) {
               ))}
             </div>
           </div>
-          <div className="tool-group">
-            <span className="section-label">{t('measure.shape')}</span>
-            <div className="segmented">
-              {AREA_SHAPES.map(({ shape, icon }) => (
-                <button
-                  key={shape}
-                  className={`tool-btn ${areaShape === shape ? 'active' : ''}`}
-                  onClick={() => setAreaShape(shape)}
-                  aria-pressed={areaShape === shape}
-                >
-                  <Icon name={icon} />
-                  <span className="tool-label">{t(`measure.shapes.${shape}`)}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          <AreaShapePicker value={areaShape} onChange={setAreaShape} />
           {areaCalcMode === 'wall' && (
             <div className="form-row">
               <label>{t('measure.wallHeightDefault')}</label>
@@ -292,7 +274,7 @@ export function MeasureToolOptions({ bar = false }: { bar?: boolean } = {}) {
       )}
 
       {toolMode === 'measure' &&
-        (measureTool === 'distance' || measureTool === 'perimeter' || (measureTool === 'area' && areaShape === 'polygon')) && (
+        (measureTool === 'distance' || measureTool === 'perimeter' || (measureTool === 'area' && areaShape !== 'rectangle')) && (
           <label className="source-color-toggle">
             <input type="checkbox" checked={orthoSnap} onChange={(e) => setOrthoSnap(e.target.checked)} />
             {t('measure.orthoOnly')}

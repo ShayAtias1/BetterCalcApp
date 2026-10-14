@@ -77,12 +77,9 @@ export default function CompareContextBar() {
 
       {/* The scale state and calibration actions live in the top bar (CompareHeaderCalibration). */}
       {/* Alignment belongs to this page/revision pair, and says so. */}
-      <div className="compare-context-line">
+      <div className="compare-context-line" title={t('compare.context.scope', { page: currentPageKey, revision: activeRevision?.label ?? '-' })}>
         <span className="muted">{t('compare.context.alignmentLabel')}</span>
         <span className={`status-chip ${alignmentStatus}`}>{t(`compare.context.alignment.${alignmentStatus}`)}</span>
-        <span className="muted compare-context-scope">
-          {t('compare.context.scope', { page: currentPageKey, revision: activeRevision?.label ?? '-' })}
-        </span>
       </div>
     </div>
   );

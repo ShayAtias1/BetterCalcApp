@@ -47,6 +47,7 @@ export type IconName =
   | 'square'
   | 'circle'
   | 'wall'
+  | 'hammer'
   | 'cloud'
   | 'arrow'
   | 'text'
@@ -114,6 +115,7 @@ const PATHS: Record<IconName, string> = {
   square: 'M4 4h16v16H4z',
   circle: 'M12 3.5a8.5 8.5 0 100 17 8.5 8.5 0 000-17z',
   wall: 'M3.5 4.5h17v15h-17zM3.5 9.5h17M3.5 14.5h17M9 4.5v5M15 9.5v5M9 14.5v5',
+  hammer: 'M14 3l7 7-3 3-7-7zM13 8L3 18l3 3L16 11',
   cloud: 'M6.5 18a4 4 0 01-.5-8 5.5 5.5 0 0110.4-1.6A3.8 3.8 0 0117.5 18z',
   arrow: 'M4.5 19.5l15-15M19.5 4.5h-8M19.5 4.5v8',
   text: 'M4.5 5.5h15M12 5.5v14M8.5 19.5h7',

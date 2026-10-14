@@ -11,11 +11,11 @@ import type { CanvasView } from '../../hooks/useCanvasTransform';
 import type { PdfMatrix } from '../../lib/pdfium/protocol';
 import { loadComparePdfBlob } from '../../db/database';
 import { noteAlignment, trackError } from '../../lib/analytics';
-import { useCompareStore } from '../../store/compareStore';
+import { itemEditable, useCompareStore, type CompareEditSnapshot } from '../../store/compareStore';
 import { useCanvasTransform } from '../../hooks/useCanvasTransform';
 import { IDENTITY_TRANSFORM } from '../../types/compare';
 import type { Point } from '../../types';
-import type { AreaKind, ExportRegion, Markup } from '../../types/compare';
+import type { AreaKind, ExportRegion, Markup, Measurement } from '../../types/compare';
 import { applyAlignment, invertAlignment, solveAlignment } from '../../lib/alignment';
 import { polygonAreaM2, polygonPerimeterM, longestEdgePx, distancePx, pxToMeters, round, cloudPath, snapOrtho, projectOntoLine, polygonCentroid, tickMarkEndpoints, arrowHeadPoints } from '../../lib/geometry';
 import { measurementLabel } from '../../lib/measurementValues';
@@ -32,6 +32,14 @@ import TextNoteDialog from '../TextNoteDialog';
 import { useLanguage, useT, type Language } from '../../i18n';
 import { exportContext } from '../../lib/exportLanguage';
 import { labelDirection } from '../../lib/textDirection';
+import RevisionChangeOverlay from './RevisionChangeOverlay';
+import AreaGeometryHandles from '../AreaGeometryHandles';
+import AreaGeometryEdges from '../AreaGeometryEdges';
+import { closesPolygon, rectanglePoints, reshapeArea, translateArea, insertPolygonVertex, wallFootprintGeometry } from '../../lib/areaGeometryEditing';
+import { useRevisionUi } from '../../lib/revision/revisionWorkflow';
+import GridLayer from '../GridLayer';
+import { computeGrid } from '../../lib/grid';
+import { useGridStore } from '../../store/gridStore';
 
 /** New masks start opaque white, the colour of the paper they hide. */
 const MASK_COLOR = '#ffffff';
@@ -251,6 +259,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
   const setSelectedMarkupId = useCompareStore((s) => s.setSelectedMarkupId);
   const selectedMeasurementId = useCompareStore((s) => s.selectedMeasurementId);
   const setSelectedMeasurementId = useCompareStore((s) => s.setSelectedMeasurementId);
+  const updateMeasurement = useCompareStore((s) => s.updateMeasurement);
   const deleteMeasurement = useCompareStore((s) => s.deleteMeasurement);
   const duplicateMarkup = useCompareStore((s) => s.duplicateMarkup);
   const undo = useCompareStore((s) => s.undo);
@@ -288,6 +297,8 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
   const markupDrag = useRef<{ id: string; startClientX: number; startClientY: number; startPoints: Point[]; startOffset: number } | null>(
     null,
   );
+  const measurementDrag = useRef<{ id: string; index: number | null; start: Point; points: Point[]; centerline?: Point[]; moved?: boolean } | null>(null);
+  const revisionDragging = useRef(false);
   const handleDrag = useRef<{ id: string; index: number } | null>(null);
   /** Cursor position (snapped onto the run) previewing the next stop of a dimension chain. */
   const [dimensionHover, setDimensionHover] = useState<Point | null>(null);
@@ -301,6 +312,10 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
   const [renderedOriginalKey, setRenderedOriginalKey] = useState('');
   const activeRevisionId = comparison?.activeRevisionId ?? '';
   const activeRevision = comparison?.revisions.find((r) => r.id === activeRevisionId);
+  const revisionMarkersVisible = useRevisionUi((s) => s.markersVisible);
+  const analysis = activeRevision?.analysis?.pages[currentPageKey];
+  const drawnChangeIds = new Set(revisionMarkersVisible
+    ? (analysis?.changes ?? []).map(c => c.id) : []);
   // Everything drawn on the canvas belongs to a source page: page 2 must never show page 1's work.
   const pageMeasurements = useMemo(
     () => (activeRevision?.measurements ?? []).filter((m) => m.pageNumber === currentPageKey),
@@ -330,6 +345,10 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
   // cannot be produced safely (uncalibrated, or a legacy revised calibration we can't interpret).
   const scale = resolveCompareScale(page, revisionPage);
   const metersPerPixel = scale.metersPerPixel;
+  // The takeoff measurement grid: same preferences, same spacing rule, shown only on a calibrated sheet.
+  const gridEnabled = useGridStore((s) => s.enabled);
+  const gridSpacingM = useGridStore((s) => s.spacingM);
+  const gridOpacity = useGridStore((s) => s.opacity);
 
   // Reuse the exact existing alignment for density/crop selection only; CSS and saved data stay unchanged.
   const revisedNativeToPage = useMemo<PdfMatrix>(() => {
@@ -356,6 +375,32 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
     fitToContainer(pageSize.width, pageSize.height);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageSize]);
+
+  // A detected change picked in the review list is brought into view (viewport only, nothing saved).
+  useEffect(() => {
+    const ui = useRevisionUi.getState();
+    const current = useCompareStore.getState().comparison;
+    const revision = current?.revisions.find((r) => r.id === activeRevisionId);
+    if (!revision?.analysis?.pages[currentPageKey]?.changes.some((c) => c.id === ui.selectedChangeId)) ui.selectChange(null);
+  }, [comparison?.id, activeRevisionId, currentPageKey]);
+  useEffect(() => {
+    if (selectedMarkupId || selectedMeasurementId) useRevisionUi.getState().selectChange(null);
+  }, [selectedMarkupId, selectedMeasurementId]);
+
+  const focusRequest = useRevisionUi((s) => s.focus);
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!focusRequest || focusRequest.pageKey !== currentPageKey || !pageSize.width || !container) return;
+    const rect = container.getBoundingClientRect();
+    const { bbox } = focusRequest;
+    const nextZoom = Math.min(4, Math.max(0.2, Math.min(rect.width / (bbox.width * 3), rect.height / (bbox.height * 3))));
+    transform.setView({
+      zoom: nextZoom,
+      pan: { x: rect.width / 2 - (bbox.x + bbox.width / 2) * nextZoom, y: rect.height / 2 - (bbox.y + bbox.height / 2) * nextZoom },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRequest, currentPageKey, pageSize.width, pageSize.height]);
+
 
   // Once both alignment point pairs are picked, solve for the transform automatically.
   useEffect(() => {
@@ -476,6 +521,17 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
         deleteMeasurement(selectedMeasurementId!);
         return;
       }
+      const selectedChangeId = useRevisionUi.getState().selectedChangeId;
+      if (shouldDeleteSelection(e.key, e.target, !!selectedChangeId)) {
+        e.preventDefault();
+        const store = useCompareStore.getState();
+        const change = store.comparison?.revisions.find(r => r.id === store.comparison?.activeRevisionId)
+          ?.analysis?.pages[store.currentPageKey]?.changes.find(c => c.id === selectedChangeId);
+        const before = store.comparison;
+        if (change) store.deleteRevisionChange(change.pageNumber, change.id);
+        if (useCompareStore.getState().comparison !== before) useRevisionUi.getState().selectChange(null);
+        return;
+      }
       if (!isEditingField && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         if (e.shiftKey) redo();
@@ -488,7 +544,12 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
   }, [reviewOnly, measureTool, measurePoints, markupTool, markupPoints, selectedMarkupId, selectedMeasurementId, deleteMeasurement, undo, redo]);
 
   const handleMouseDown = (e: MouseEvent) => {
-    if (reviewOnly) return;
+    if (reviewOnly || (e.button !== 0 && e.button !== 1)) return;
+    if (toolMode === 'pan' || e.button === 1) {
+      isPanning.current = true;
+      beginPanDrag(e.clientX, e.clientY);
+      return;
+    }
     if (toolMode === 'select') {
       const handleTarget = (e.target as Element).closest?.('[data-handle-markup-id]');
       if (handleTarget) {
@@ -501,6 +562,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
       const id = bodyTarget?.getAttribute('data-markup-id');
       const markup = id ? pageMarkups.find((m) => m.id === id) : undefined;
       if (markup) {
+        useRevisionUi.getState().selectChange(null);
         setSelectedMarkupId(markup.id);
         markupDrag.current = {
           id: markup.id,
@@ -514,17 +576,21 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
       const measurementTarget = (e.target as Element).closest?.('[data-measurement-id]');
       const measurementId = measurementTarget?.getAttribute('data-measurement-id');
       if (measurementId) {
-        setSelectedMeasurementId(measurementId === selectedMeasurementId ? null : measurementId);
-        if (selectedMarkupId) setSelectedMarkupId(null);
+        const m = pageMeasurements.find((m) => m.id === measurementId);
+        if (m) {
+          // An approved change's wall is selected and edited like any other item; its AI details stay
+          // on its change card. Applied items can be selected but not moved.
+          useRevisionUi.getState().selectChange(null);
+          setSelectedMeasurementId(measurementId);
+          if (itemEditable(comparison, m)) {
+            measurementDrag.current = { id: m.id, index: null, start: screenToNative(e.clientX, e.clientY), points: m.points, centerline: m.centerline };
+          }
+        }
         return;
       }
+      useRevisionUi.getState().selectChange(null);
       if (selectedMarkupId) setSelectedMarkupId(null);
       if (selectedMeasurementId) setSelectedMeasurementId(null);
-    }
-    if (toolMode === 'pan' || e.button === 1) {
-      isPanning.current = true;
-      beginPanDrag(e.clientX, e.clientY);
-      return;
     }
     if (toolMode === 'align' && !pickingAlignmentPoints) {
       alignDrag.current = { startX: e.clientX, startY: e.clientY, startOffsetX: alignment.offsetX, startOffsetY: alignment.offsetY };
@@ -540,6 +606,27 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
     if (reviewOnly) return;
     if (isPanning.current) {
       updatePanDrag(e.clientX, e.clientY);
+      return;
+    }
+    if (measurementDrag.current) {
+      const drag = measurementDrag.current;
+      const native = screenToNative(e.clientX, e.clientY);
+      if (!drag.moved && distancePx(native, drag.start) * zoom < 2) return;
+      drag.moved = true;
+      const m = pageMeasurements.find((m) => m.id === drag.id);
+      if (m) {
+        const offset = { x: native.x - drag.start.x, y: native.y - drag.start.y };
+        const points = drag.index === null ? translateArea(drag.points, offset)
+          : drag.points.length < 3 ? drag.points.map((p, i) => i === drag.index ? native : p)
+          : reshapeArea(drag.points, drag.index, native);
+        if (!points) return;
+        const patch: Partial<Measurement> = { points };
+        if (drag.centerline) {
+          const geometry = wallFootprintGeometry(points, drag.centerline);
+          patch.centerline = drag.index === null ? translateArea(drag.centerline, offset) : geometry?.centerline;
+        }
+        updateMeasurement(drag.id, patch, true);
+      }
       return;
     }
     if (handleDrag.current) {
@@ -596,10 +683,18 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
       setDimensionHover(nextDimensionPoint(markupPoints, screenToNative(e.clientX, e.clientY)));
     }
   };
-  const handleMouseUp = () => {
+  const handleMouseUp = (e?: MouseEvent) => {
+    if (e?.type === 'mouseup' || !revisionDragging.current) {
+      desktopStart.current = null;
+      revisionDragging.current = false;
+    }
     isPanning.current = false;
     endPanDrag();
     swipeDrag.current = false;
+    if (measurementDrag.current) {
+      if (measurementDrag.current.moved) updateMeasurement(measurementDrag.current.id, {});
+      measurementDrag.current = null;
+    }
     if (handleDrag.current) {
       // Reshaping a dimension changes what it measures, so its labels are recomputed.
       const markup = pageMarkups.find((m) => m.id === handleDrag.current!.id);
@@ -667,8 +762,8 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
     }
 
     if (toolMode === 'measure' && measureTool) {
-      if (measureTool === 'distance') {
-        addMeasurePoint(native);
+      if (measureTool === 'distance' || (measureTool === 'area' && areaShape === 'line')) {
+        addMeasurePoint(measureTool === 'area' && orthoSnap && measurePoints.length > 0 ? snapOrtho(measurePoints[0], native) : native);
         return;
       }
       if (measureTool === 'area' && areaShape === 'rectangle') {
@@ -677,22 +772,13 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
           return;
         }
         const a = measurePoints[0];
-        finishOpenMeasurement([
-          { x: a.x, y: a.y },
-          { x: native.x, y: a.y },
-          { x: native.x, y: native.y },
-          { x: a.x, y: native.y },
-        ]);
+        finishOpenMeasurement(rectanglePoints(a, native));
         return;
       }
       const point = orthoSnap && measurePoints.length > 0 ? snapOrtho(measurePoints[measurePoints.length - 1], native) : native;
-      if (measurePoints.length >= 3) {
-        const first = measurePoints[0];
-        const distScreen = Math.hypot(point.x - first.x, point.y - first.y) * zoom;
-        if (distScreen < 10) {
-          finishOpenMeasurement();
-          return;
-        }
+      if (closesPolygon(measurePoints, point, zoom)) {
+        finishOpenMeasurement();
+        return;
       }
       addMeasurePoint(point);
       return;
@@ -736,11 +822,11 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
 
   // Auto-finish distance measurement once 2 points are placed.
   useEffect(() => {
-    if (measureTool === 'distance' && measurePoints.length === 2) {
+    if ((measureTool === 'distance' || (measureTool === 'area' && areaShape === 'line')) && measurePoints.length === 2) {
       finishOpenMeasurement();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [measurePoints, measureTool]);
+  }, [measurePoints, measureTool, areaShape]);
 
   // Auto-finish 2-point markup tools once both points are placed. Dimensions are excluded — they
   // stay open so more stops can be continued along the same line (AutoCAD DIMCONTINUE style).
@@ -844,6 +930,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
               label.setAttribute('direction', labelDirection(text, exportLanguage));
             }
           }
+          overlay.querySelectorAll('.revision-change-edit, .revision-change-placing, [data-handle-markup-id], [data-handle-measurement-id]').forEach((el) => el.remove());
           overlay.style.fontFamily = getComputedStyle(svgRef.current).fontFamily;
           const svgString = new XMLSerializer().serializeToString(overlay);
           const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`;
@@ -947,25 +1034,28 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
     ]
   );
 
-  const desktopStart = useRef<Pick<ReturnType<typeof useCompareStore.getState>, 'comparison' | 'history' | 'future' | 'dirty'> | null>(null);
+  const desktopStart = useRef<CompareEditSnapshot | null>(null);
   const navigation = usePlanNavigation({
     transform, reviewOnly, contextKey: `${comparison?.id}:${activeRevisionId}:${currentPageKey}`,
     onDesktopStart: () => {
-      const { comparison, history, future, dirty } = useCompareStore.getState();
-      desktopStart.current = { comparison, history, future, dirty };
+      desktopStart.current = useCompareStore.getState().captureEditSnapshot();
     },
     onDesktopCancel: () => {
       const before = desktopStart.current;
-      if (before && before.comparison?.id === useCompareStore.getState().comparison?.id && (handleDrag.current || markupDrag.current || alignDrag.current)) {
-        useCompareStore.setState(before);
+      if (before && before.comparison?.id === useCompareStore.getState().comparison?.id && (handleDrag.current || markupDrag.current || measurementDrag.current || alignDrag.current || revisionDragging.current)) {
+        useCompareStore.getState().cancelEditSnapshot(before);
         void useCompareStore.getState().persist();
       }
       desktopStart.current = null;
-      handleDrag.current = null; markupDrag.current = null; alignDrag.current = null; swipeDrag.current = false;
+      revisionDragging.current = false;
+      handleDrag.current = null; markupDrag.current = null; measurementDrag.current = null; alignDrag.current = null; swipeDrag.current = false;
       isPanning.current = false; endPanDrag(); regionDragStart.current = null; setRegionDraft(null);
     },
     onTap: (_x, _y, target) => {
       const element = target instanceof Element ? target : null;
+      const changeId = element?.closest('[data-revision-change-id]')?.getAttribute('data-revision-change-id');
+      if (changeId) { useRevisionUi.getState().selectChange(changeId); return; }
+      useRevisionUi.getState().selectChange(null);
       const markupId = element?.closest('[data-markup-id]')?.getAttribute('data-markup-id');
       const measurementId = element?.closest('[data-measurement-id]')?.getAttribute('data-measurement-id');
       setSelectedMarkupId(annotationsVisible && markupId ? markupId : null);
@@ -977,6 +1067,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
 
   const strokeW = 2 / zoom;
   const vertexR = 5 / zoom;
+  const grid = computeGrid(metersPerPixel, gridSpacingM, zoom);
 
   const revisedVisible = activeRevision?.visible ?? false;
   const revisedBaseOpacity = activeRevision?.opacity ?? 0.75;
@@ -991,7 +1082,11 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
     originalOpacity = comparison.originalVisible ? 1 : 0;
     revisedOpacity = revisedVisible ? 1 : 0;
     originalClip = `inset(0 ${(1 - swipePosition) * 100}% 0 0)`;
-    revisedClip = `inset(0 0 0 ${swipePosition * 100}%)`;
+    // Applied by an untransformed wrapper in the source page frame (see below), so the boundary
+    // stays on the divider whatever the revision's offset, rotation or scale. Unbounded on the
+    // other three sides: an aligned revision may extend past the source page.
+    const x = swipePosition * 100;
+    revisedClip = `polygon(${x}% -1000%, 1000% -1000%, 1000% 1000%, ${x}% 1000%)`;
   }
   // The mapped revised page does not exist in this revision: its canvas still holds the raster of
   // whatever page was shown last, and leaving that on screen contradicts the warning and invites
@@ -1008,6 +1103,10 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
       ref={containerRef}
       className={`pdf-viewport tool-${toolMode}`}
       {...navigation}
+      onMouseDownCapture={(e) => {
+        navigation.onMouseDownCapture(e);
+        if (!e.defaultPrevented) revisionDragging.current = e.button === 0 && !!(e.target as Element).closest?.('[data-plan-child-interaction="revision-edit"]');
+      }}
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
@@ -1031,13 +1130,14 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
             style={{ position: 'absolute', top: 0, left: 0, width: pageSize.width, height: pageSize.height,
               overflow: 'hidden', pointerEvents: 'none' }} />
         </div>
+        <div style={{ position: 'absolute', top: 0, left: 0, width: pageSize.width, height: pageSize.height, clipPath: revisedClip }}>
         <div
           style={{
             position: 'absolute', top: 0, left: 0,
             width: revisedPageSize.width, height: revisedPageSize.height,
             transformOrigin: '50% 50%',
             transform: `translate(${alignment.offsetX}px, ${alignment.offsetY}px) rotate(${alignment.rotationDeg}deg) scale(${alignment.scale})`,
-            clipPath: revisedClip, opacity: revisedOpacity,
+            opacity: revisedOpacity,
             visibility: revisedRaster.ready ? 'visible' : 'hidden',
           }}
         >
@@ -1048,10 +1148,13 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
             style={{ position: 'absolute', top: 0, left: 0, width: revisedPageSize.width, height: revisedPageSize.height,
               overflow: 'hidden', pointerEvents: 'none' }} />
         </div>
+        </div>
 
         {pageSize.width > 0 && (
           // Pinned to RTL rather than inherited from the page — see the takeoff viewer's overlay.
           <svg ref={svgRef} className="overlay-svg" width={pageSize.width} height={pageSize.height} viewBox={`0 0 ${pageSize.width} ${pageSize.height}`} direction="rtl">
+            {/* Measurement grid first, so every overlay draws over it (as in the takeoff viewer). */}
+            {gridEnabled && grid && <GridLayer grid={grid} width={pageSize.width} height={pageSize.height} zoom={zoom} opacity={gridOpacity} />}
             {/* Alignment point pairs */}
             {alignmentPairs.map((pair, i) => (
               <g key={i}>
@@ -1103,15 +1206,17 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
 
             {/* Finished measurements — AutoCAD-style: distance line has its value rotated to follow the line and sits above it; perimeter/area vertices get a small dot. */}
             {measurementsVisible && pageMeasurements.map((m) => {
+              // Draw source evidence once; approved quantity records remain unchanged.
+              if (m.revisionChangeId && drawnChangeIds.has(m.revisionChangeId)) return null;
               const color = m.areaKind ? comparison.areaKindColors[m.areaKind] : '#0ea5e9';
               const vertexDotR = 3 / zoom;
               const tickLen = 14 / zoom;
-              const isDistance = m.tool === 'distance';
+              const isDistance = m.tool === 'distance' || (m.tool === 'area' && m.points.length === 2);
               const selected = m.id === selectedMeasurementId;
               // Change items are pickable on the plan with the select tool, the same way markups
               // are — the Changes panel and the drawing select each other.
               const pickProps =
-                (toolMode === 'select' || reviewOnly) && m.areaKind
+                (toolMode === 'select' || reviewOnly)
                   ? { 'data-measurement-id': m.id, style: { pointerEvents: 'auto' as const, cursor: 'pointer' as const } }
                   : {};
               let labelX = 0;
@@ -1142,20 +1247,9 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
               }
               return (
                 <g key={m.id} className={selected ? 'measurement-selected' : undefined}>
-                  {/* The selected change item gets a halo around its own outline, so a row click in
-                      the Changes panel points at an unmistakable shape on the plan. */}
-                  {selected && !isDistance && (
-                    <polygon
-                      points={m.points.map((p) => `${p.x},${p.y}`).join(' ')}
-                      fill="none"
-                      stroke="#0f172a"
-                      strokeWidth={strokeW * 2.4}
-                      strokeOpacity={0.85}
-                      strokeDasharray={`${8 / zoom} ${5 / zoom}`}
-                    />
-                  )}
                   {isDistance ? (
                     <>
+                      <line x1={m.points[0].x} y1={m.points[0].y} x2={m.points[1].x} y2={m.points[1].y} stroke="transparent" strokeWidth={12 / zoom} {...pickProps} />
                       <line x1={m.points[0].x} y1={m.points[0].y} x2={m.points[1].x} y2={m.points[1].y} stroke={color} strokeWidth={strokeW} />
                       {(() => {
                         const [a1, b1] = tickMarkEndpoints(m.points[0], m.points[1], tickLen);
@@ -1173,9 +1267,10 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
                       <polygon
                         points={m.points.map((p) => `${p.x},${p.y}`).join(' ')}
                         fill={color}
-                        fillOpacity={m.areaKind ? (selected ? 0.42 : 0.28) : 0.12}
+                        fillOpacity={m.areaKind ? (selected ? 0.08 : 0.03) : 0.12}
                         stroke={color}
-                        strokeWidth={m.tool === 'area' ? strokeW * 0.4 : strokeW}
+                        strokeWidth={m.tool === 'area' ? 1 / zoom : strokeW}
+                        strokeDasharray={selected && m.areaKind ? `${4 / zoom} ${4 / zoom}` : undefined}
                         {...pickProps}
                       />
                       {m.tool !== 'area' &&
@@ -1206,6 +1301,15 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
                 </g>
               );
             })}
+
+            {/* Detected revision changes awaiting review */}
+            <RevisionChangeOverlay strokeW={strokeW} zoom={zoom} interactive={toolMode === 'select' || reviewOnly} editable={!reviewOnly && toolMode === 'select'} screenToNative={screenToNative}
+              noteBounds={{
+                left: Math.max(0, -pan.x / zoom),
+                top: Math.max(0, -pan.y / zoom),
+                right: Math.min(pageSize.width, ((containerRef.current?.clientWidth ?? pageSize.width * zoom) - pan.x) / zoom),
+                bottom: Math.min(pageSize.height, ((containerRef.current?.clientHeight ?? pageSize.height * zoom) - 90 - pan.y) / zoom),
+              }} />
 
             {/* Dimension run in progress — live preview of the chain, including the segment under the cursor */}
             {markupPoints.length > 0 && markupTool === 'dimension' && (() => {
@@ -1251,8 +1355,30 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
                 <MarkupShape key={m.id} markup={m} strokeW={strokeW} draggable={toolMode === 'select' || reviewOnly} />
               ))}
 
+            {!reviewOnly && measurementsVisible && toolMode === 'select' && selectedMeasurementId && (() => {
+              const m = pageMeasurements.find((m) => m.id === selectedMeasurementId);
+              if (!m || !itemEditable(comparison, m)) return null;
+              const color = m.areaKind ? comparison.areaKindColors[m.areaKind] : '#2563eb';
+              return <g data-handle-measurement-id={m.id} onClick={e => e.stopPropagation()}>
+                {m.points.length >= 3 && <AreaGeometryEdges points={m.points} color={color} zoom={zoom} onInsert={(index, e, midpoint) => {
+                  if (e.button !== 0) return;
+                  e.stopPropagation();
+                  e.preventDefault();
+                  const a = m.points[index], b = m.points[(index + 1) % m.points.length];
+                  const points = insertPolygonVertex(m.points, index, midpoint ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : screenToNative(e.clientX, e.clientY));
+                  if (points) updateMeasurement(m.id, { points });
+                }} />}
+                <AreaGeometryHandles points={m.points} color={color} zoom={zoom} onHandleMouseDown={(index, e) => {
+                  if (e.button !== 0) return;
+                  e.stopPropagation();
+                  e.preventDefault();
+                  measurementDrag.current = { id: m.id, index, start: screenToNative(e.clientX, e.clientY), points: m.points, centerline: m.centerline };
+                }} />
+              </g>;
+            })()}
+
             {/* Resize/reshape handles for the selected markup (select tool only) */}
-            {toolMode === 'select' &&
+            {!reviewOnly && annotationsVisible && toolMode === 'select' &&
               selectedMarkupId &&
               (() => {
                 const selected = pageMarkups.find((m) => m.id === selectedMarkupId);

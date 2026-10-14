@@ -1,6 +1,7 @@
 import { useWorkspaceLayout } from '../../hooks/useWorkspaceLayout';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useCompareStore } from '../../store/compareStore';
+import { useRevisionUi } from '../../lib/revision/revisionWorkflow';
+import { itemEditable, useCompareStore } from '../../store/compareStore';
 import type { AreaKind } from '../../types/compare';
 import { CHANGE_KINDS, changeMeasurements, changeNumbering, changeTotals } from '../../lib/changeMeasurements';
 import { round } from '../../lib/geometry';
@@ -41,6 +42,7 @@ export default function ChangesPanel({ mobileOpen = false, onMobileClose }: { mo
   const toggleMaximized = useCompareStore((s) => s.toggleChangesMaximized);
   const scope = useCompareStore((s) => s.changesScope);
   const setScope = useCompareStore((s) => s.setChangesScope);
+  const selectedChangeId = useRevisionUi((s) => s.selectedChangeId);
   const selectedMeasurementId = useCompareStore((s) => s.selectedMeasurementId);
   const focusMeasurement = useCompareStore((s) => s.focusMeasurement);
   const setMeasurementKind = useCompareStore((s) => s.setMeasurementKind);
@@ -218,10 +220,13 @@ export default function ChangesPanel({ mobileOpen = false, onMobileClose }: { mo
               <tbody>
                 {rows.map((m) => {
                   const isWall = m.calcMode === 'wall';
+                  const change = m.revisionChangeId ? activeRevision?.analysis?.pages[m.pageNumber]?.changes.find((c) => c.id === m.revisionChangeId) : undefined;
+                  const deleteLocked = !!m.revisionChangeId && (!change || change.status === 'applied');
                   return (
                     <tr
                       key={m.id}
-                      className={m.id === selectedMeasurementId ? 'selected' : ''}
+                      className={m.id === selectedMeasurementId || (m.revisionChangeId && m.revisionChangeId === selectedChangeId) ? 'selected' : ''}
+                      // The row is the item itself (an approved change's wall too); the AI card stays separate.
                       onClick={() => focusMeasurement(m.id)}
                       title={m.pageNumber === currentPageKey ? t('compare.changes.selectMark') : t('compare.changes.goToMark', { page: m.pageNumber })}
                     >
@@ -231,12 +236,12 @@ export default function ChangesPanel({ mobileOpen = false, onMobileClose }: { mo
                         <span className="changes-kind-cell">
                           <span className="color-dot" style={{ background: comparison.areaKindColors[m.areaKind!] }} />
                           <select
-                            disabled={readOnly}
+                            disabled={readOnly || !!m.revisionChangeId}
                             className="changes-kind-select"
                             value={m.areaKind}
                             onClick={(e) => e.stopPropagation()}
                             onChange={(e) => setMeasurementKind(m.id, e.target.value as AreaKind)}
-                            title={t('compare.changes.reclassify')}
+                            title={t(m.revisionChangeId ? 'revisionAi.edit.sourceHint' : 'compare.changes.reclassify')}
                           >
                             {CHANGE_KINDS.map((k) => (
                               <option key={k} value={k}>
@@ -255,7 +260,7 @@ export default function ChangesPanel({ mobileOpen = false, onMobileClose }: { mo
                             type="number"
                             step="0.05"
                             min="0.1"
-                            disabled={readOnly}
+                            disabled={readOnly || !itemEditable(comparison, m)}
                             className="inline-number"
                             value={m.wallHeightM ?? comparison.wallHeightDefaultM}
                             onClick={(e) => e.stopPropagation()}
@@ -273,11 +278,19 @@ export default function ChangesPanel({ mobileOpen = false, onMobileClose }: { mo
                       <td className="row-actions">
                         <button
                           hidden={readOnly}
+                          disabled={deleteLocked}
                           className="icon-btn danger"
-                          title={t('compare.changes.delete')}
+                          title={t(deleteLocked ? 'revisionAi.edit.sourceHint' : 'compare.changes.delete')}
                           onClick={(e) => {
                             e.stopPropagation();
                             deleteMeasurement(m.id);
+                            if (change && useCompareStore.getState().comparison !== comparison) {
+                              const ui = useRevisionUi.getState();
+                              useRevisionUi.setState({
+                                ...(ui.editingChangeId === change.id ? { editingChangeId: null } : {}),
+                                ...(ui.selectedChangeId === change.id ? { selectedChangeId: null, focus: null } : {}),
+                              });
+                            }
                           }}
                         >
                           <Icon name="trash" />

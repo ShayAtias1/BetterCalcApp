@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { prepareWallRegionMerge, type WallRegionRef, type WallMergeError } from '../lib/revision/wallRegionMerge';
 import { v4 as uuid } from 'uuid';
 import type {
   AlignmentPointPair,
@@ -26,8 +27,25 @@ import { createHistoryTracker } from '../lib/undoHistory';
 import { t } from '../i18n';
 import { noteAlignment, trackChangeMarked, trackError } from '../lib/analytics';
 import { resolveAlignmentStatus, resolveCompareScale, type AlignmentStatus, type ResolvedScale } from '../lib/compareScale';
+import type { ComparisonContext, RevisionAiRun, RevisionChange, RevisionEditType, RevisionPageAnalysis } from '../types/revisionAnalysis';
+import { sameChange } from '../lib/revision/changeMatch';
+import { changeItems, recomputeMeasurement } from '../lib/revision/changeItems';
+import { isOpeningDifference, openingImpactReady } from '../lib/revision/openingImpact';
+import { openingGeometryNeedsVerification } from '../lib/revision/changeEdit';
+import { familyOf, openingFromFootprint } from '../lib/revision/changeEdit';
+import { detectionThresholds, matchRelocation } from '../lib/revision/vectorDiff';
+import { elementOfItem, finalizeEditedChange, hasUnplacedLines, retypeChange, setElementLine, setOpeningHeight, setWallFootprint, setWallHeight, sidesOf, wallFromFootprint } from '../lib/revision/changeEdit';
+import { analysisInputKey, baseRevisionOf } from '../lib/revision/detect';
+import type { RevisionWall } from '../types/revisionAnalysis';
 
 const historyTracker = createHistoryTracker<Comparison>();
+/**
+ * Bumped at every commit point — an application to (or revert of) the linked plan, and the start
+ * and arrival of a paid AI analysis. Undo history never reaches back across one: those states live
+ * outside this document (the plan's ledger, the AI service), so restoring an older snapshot would
+ * contradict them or discard a paid result.
+ */
+let commitEpoch = 0;
 
 const REVISION_COLOR_PALETTE = ['#ef4444', '#2563eb', '#9333ea', '#f59e0b', '#16a34a', '#0891b2'];
 
@@ -89,6 +107,15 @@ function emptyRevisionPageData(revisedPageNumber: number): RevisionPageData {
     alignment: IDENTITY_TRANSFORM,
     alignmentPoints: [],
   };
+}
+
+export interface CompareEditSnapshot {
+  comparison: Comparison | null;
+  history: Comparison[];
+  future: Comparison[];
+  dirty: boolean;
+  /** Commit point the snapshot was taken in; a snapshot from before a later commit is never restored. */
+  epoch?: number;
 }
 
 interface CompareState {
@@ -154,6 +181,8 @@ interface CompareState {
   /** Undo/redo stacks of past/future comparison snapshots. Not persisted — reset whenever the comparison changes. */
   history: Comparison[];
   future: Comparison[];
+  captureEditSnapshot: () => CompareEditSnapshot;
+  cancelEditSnapshot: (before: CompareEditSnapshot) => void;
   undo: () => void;
   redo: () => void;
 
@@ -196,8 +225,11 @@ interface CompareState {
   clearCalibration: () => void;
   applyCalibration: (realDistanceMeters: number) => void;
 
-  /** `method` records how the transform was produced; it defaults to a manual adjustment. */
-  setAlignmentTransform: (pageKey: number, transform: LayerTransform, method?: 'points' | 'manual') => void;
+  /**
+   * `method` records how the transform was produced; it defaults to a manual adjustment. `discrete`
+   * records its own undo step at once (auto align) instead of coalescing a slider/drag burst.
+   */
+  setAlignmentTransform: (pageKey: number, transform: LayerTransform, method?: 'points' | 'manual', discrete?: boolean) => void;
   /** Maps the given source page to a page of the active revision's PDF. */
   setRevisedPageNumber: (pageKey: number, revisedPageNumber: number) => void;
   beginAlignmentPointPick: () => void;
@@ -221,7 +253,7 @@ interface CompareState {
   clearMeasurePoints: () => void;
   /** Page ownership is assigned by the store from the page on screen, not by the caller. */
   finishMeasurement: (measurement: Omit<Measurement, 'pageNumber'>) => void;
-  updateMeasurement: (id: string, patch: Partial<Measurement>) => void;
+  updateMeasurement: (id: string, patch: Partial<Measurement>, quiet?: boolean) => void;
   deleteMeasurement: (id: string) => void;
 
   setMarkupTool: (t: MarkupTool | null) => void;
@@ -244,6 +276,46 @@ interface CompareState {
   setAreaKindColor: (kind: AreaKind, color: string) => void;
 
   updateComparisonMeta: (patch: Partial<Pick<Comparison, 'name' | 'apartmentNumber' | 'notes' | 'wallHeightDefaultM'>>) => void;
+
+  // ---------- AI Revision Compare ----------
+  setComparisonContext: (context: ComparisonContext) => void;
+  setLinkedPlanId: (planId: string | undefined) => void;
+  /** What a revision is compared against: null = the original, or an earlier revision (sequential chain). */
+  setRevisionBase: (revisionId: string, baseRevisionId: string | null) => void;
+  /** Stores a page's detection result; a refined alignment is written to the page in the same undo step. */
+  saveRevisionAnalysis: (revisionId: string, analysis: RevisionPageAnalysis, refinedAlignment: LayerTransform | null) => void;
+  /** Bookkeeping updates (AI run status/labels): saved, but not an undo step. */
+  updateRevisionAnalysis: (revisionId: string, pageKey: number, updater: (a: RevisionPageAnalysis) => RevisionPageAnalysis) => void;
+  /** Approve / reject / reset a proposal of the active revision. Approval creates its demolition/construction items. */
+  reviewRevisionChange: (pageKey: number, changeId: string, status: 'approved' | 'rejected' | 'pending') => void;
+  /**
+   * Manual confirmation for a change whose wall geometry could not be verified: its measured
+   * unpaired face lines become wall runs (thickness unknown). Nothing is drawn or sized by guess.
+   */
+  confirmChangeAsWall: (pageKey: number, changeId: string) => void;
+  /**
+   * Starts a full-plan AI analysis on a page: records its alignment check and request, and stores a
+   * refined alignment (one undo step). Approved/applied proposals are kept; open proposals from an
+   * analysis of different inputs (other alignment/base/scale) are dropped as stale.
+   */
+  beginRevisionAiAnalysis: (revisionId: string, meta: Omit<RevisionPageAnalysis, 'changes' | 'filteredCount' | 'ai'>, refinedAlignment: LayerTransform | null, run: RevisionAiRun) => void;
+  /** Adds the AI's proposals to the page, skipping ones that duplicate an existing proposal, and closes the run. */
+  mergeRevisionAiChanges: (revisionId: string, pageKey: number, requestId: string, changes: RevisionChange[]) => void;
+  /**
+   * Manual correction of a proposal of the active revision (geometry or classification). The result
+   * becomes user-authoritative; an approved change's demolition/construction items are rebuilt from
+   * it. `quiet` is for every move of a drag burst (one undo step, saved by finishRevisionChangeEdit).
+   */
+  editRevisionChange: (pageKey: number, changeId: string, edit: (c: RevisionChange) => RevisionChange, quiet?: boolean) => void;
+  /** Saves after a quiet edit burst (drag end). */
+  finishRevisionChangeEdit: () => void;
+  /** Adds a change the detection missed, as a pending proposal with placeholder geometry at `at`; returns its id. */
+  addManualRevisionChange: (pageKey: number, type: RevisionEditType, at: Point, footprints?: Point[][], openingShapes?: ('rectangle' | 'polygon')[]) => string | null;
+  /** Deletes a detected or manual change and its pending items. Applied changes must be reverted first. */
+  deleteRevisionChange: (pageKey: number, changeId: string) => void;
+  mergeWallRegions: (pageKey: number, selection: WallRegionRef[]) => { changeId: string } | { error: WallMergeError };
+  /** Marks changes applied to (or, after a revert, returned from) the linked takeoff plan. */
+  setRevisionChangesStatus: (revisionId: string, changeIds: string[], status: 'applied' | 'approved') => void;
 
   persist: () => Promise<void>;
 }
@@ -293,6 +365,18 @@ export function compareScaleFor(comparison: Comparison | null, pageKey: number):
   return resolveCompareScale(comparison?.pages[pageKey], revisionPageOf(comparison, pageKey));
 }
 
+/**
+ * Whether a demolition/construction item can be edited directly. Manual items always can; an item
+ * created by an approved revision change can while the change is approved (its edits go to the
+ * change's line) — not once applied to the plan, nor when its line cannot be identified.
+ */
+export function itemEditable(comparison: Comparison | null, m: Measurement): boolean {
+  if (!m.revisionChangeId) return true;
+  const revision = comparison?.revisions.find((r) => r.id === comparison.activeRevisionId);
+  const change = revision?.analysis?.pages[m.pageNumber]?.changes.find((c) => c.id === m.revisionChangeId);
+  return change?.status === 'approved' && !!elementOfItem(change, m);
+}
+
 /** Alignment state of a page/active-revision pair. */
 export function alignmentStatusFor(comparison: Comparison | null, pageKey: number): AlignmentStatus {
   return resolveAlignmentStatus(revisionPageOf(comparison, pageKey));
@@ -300,6 +384,144 @@ export function alignmentStatusFor(comparison: Comparison | null, pageKey: numbe
 
 function touch(comparison: Comparison): Comparison {
   return { ...comparison, updatedAt: Date.now() };
+}
+
+/** The demolition/construction items an approved change creates, in the comparison's current context and scale. */
+/**
+ * `previous` are the change's items being replaced: an item standing for the same line keeps its id,
+ * so a selected wall stays selected (and a drag keeps its target) while its geometry is edited.
+ */
+function approvalItems(comparison: Comparison, change: RevisionChange, revisionId = comparison.activeRevisionId, previous: Measurement[] = []): Measurement[] {
+  const page = comparison.pages[change.pageNumber];
+  const scale = resolveCompareScale(page, page?.revisions[revisionId]);
+  if (scale.state !== 'calibrated') return [];
+  const idFor = (element: { list: 'walls' | 'doors'; index: number; part?: number }) => previous.find((m) => {
+    const ref = elementOfItem(change, m);
+    return ref?.list === element.list && ref.index === element.index && (ref.part ?? 0) === (element.part ?? 0);
+  })?.id ?? uuid();
+  return changeItems(change, comparison.context ?? 'design', scale.metersPerPixel, comparison.wallHeightDefaultM).map((item) => ({
+    id: idFor(item.element),
+    revisionElement: item.element,
+    pageNumber: change.pageNumber,
+    tool: 'area' as const,
+    points: item.points,
+    areaKind: item.areaKind,
+    areaM2: item.areaM2,
+    calcMode: 'wall' as const,
+    wallLengthM: item.wallLengthM,
+    wallHeightM: item.wallHeightM,
+    centerline: item.centerline,
+    revisionChangeId: change.id,
+  }));
+}
+
+function bboxIou(a: RevisionChange['bbox'], b: RevisionChange['bbox']): number {
+  const w = Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x));
+  const h = Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+  const union = a.width * a.height + b.width * b.height - w * h;
+  return union > 0 ? (w * h) / union : 0;
+}
+
+/**
+ * Recalculates every stored quantity on a source page from geometry and the scale now in force —
+ * calibration and (for a revised-layer calibration) alignment changes never leave stale values.
+ */
+function recomputePage(comparison: Comparison, pageKey: number): Comparison {
+  const page = comparison.pages[pageKey];
+  let changed = false;
+  const revisions = comparison.revisions.map((r) => {
+    const scale = resolveCompareScale(page, page?.revisions[r.id]);
+    if (scale.state !== 'calibrated') return r;
+    let touched = false;
+    const measurements = r.measurements.map((m) => {
+      if (m.pageNumber !== pageKey) return m;
+      const next = recomputeMeasurement(m, scale.metersPerPixel);
+      if (next.areaM2 !== m.areaM2 || next.lengthM !== m.lengthM || next.wallLengthM !== m.wallLengthM) touched = true;
+      return next;
+    });
+    if (!touched) return r;
+    changed = true;
+    return { ...r, measurements };
+  });
+  return changed ? { ...comparison, revisions } : comparison;
+}
+
+/** Ends undo/redo at a commit point (see commitEpoch). */
+function commitPoint(set: (patch: Partial<CompareState>) => void) {
+  historyTracker.discard();
+  commitEpoch++;
+  set({ history: [], future: [] });
+}
+
+/**
+ * Keeps the AI run records of the current document when undo/redo restores a snapshot: a request
+ * in flight (or its outcome) belongs to the AI service, not to the user's edit history.
+ */
+function withCurrentAiRuns(restored: Comparison, current: Comparison): Comparison {
+  if (restored.id !== current.id) return restored;
+  let changed = false;
+  const revisions = restored.revisions.map((r) => {
+    const live = current.revisions.find((x) => x.id === r.id)?.analysis?.pages;
+    if (!live || !r.analysis) return r;
+    let touched = false;
+    const pages = Object.fromEntries(Object.entries(r.analysis.pages).map(([key, page]) => {
+      const ai = live[Number(key)]?.ai;
+      if (!ai || ai === page.ai) return [key, page];
+      touched = true;
+      return [key, { ...page, ai }];
+    }));
+    if (!touched) return r;
+    changed = true;
+    return { ...r, analysis: { pages } };
+  });
+  return changed ? { ...restored, revisions } : restored;
+}
+
+/**
+ * Replaces the items of approved (not yet applied) changes with ones built from the comparison as it
+ * is now — context, calibration and default wall height — so previews, the Changes table, exports
+ * and a later apply all agree. A change approved before its sheet was calibrated gains its items here.
+ */
+function rebuildApprovedItems(comparison: Comparison, include: (c: RevisionChange) => boolean): Comparison {
+  let changed = false;
+  const revisions = comparison.revisions.map((r) => {
+    if (!r.analysis) return r;
+    let measurements = r.measurements;
+    let touched = false;
+    const pages = Object.fromEntries(Object.entries(r.analysis.pages).map(([key, page]) => [key, {
+      ...page,
+      changes: page.changes.map((c) => {
+        if (c.status !== 'approved' || !include(c)) return c;
+        touched = true;
+        const old = new Set(c.measurementIds ?? []);
+        const created = approvalItems(comparison, c, r.id, measurements.filter((m) => old.has(m.id)));
+        measurements = [...measurements.filter((m) => !old.has(m.id)), ...created];
+        return { ...c, measurementIds: created.map((m) => m.id) };
+      }),
+    }]));
+    if (!touched) return r;
+    changed = true;
+    return { ...r, measurements, analysis: { pages } };
+  });
+  return changed ? { ...comparison, revisions } : comparison;
+}
+
+/**
+ * A full-plan AI result locates changes in source-page px: a new calibration or a detection mask
+ * does not move them. When such an edit is all that changed, the result stays current (its input
+ * key follows the edit) instead of locking the paid proposals as stale.
+ */
+function keepAiResultsCurrent(before: Comparison, after: Comparison, pageKey: number): Comparison {
+  let changed = false;
+  const revisions = after.revisions.map((r) => {
+    const page = r.analysis?.pages[pageKey];
+    if (!page || page.manualOnly || page.ai?.task !== 'page' || page.inputKey !== analysisInputKey(before, r.id, pageKey)) return r;
+    const inputKey = analysisInputKey(after, r.id, pageKey);
+    if (inputKey === page.inputKey) return r;
+    changed = true;
+    return { ...r, analysis: { pages: { ...r.analysis!.pages, [pageKey]: { ...page, inputKey } } } };
+  });
+  return changed ? { ...after, revisions } : after;
 }
 
 export const useCompareStore = create<CompareState>((set, get) => ({
@@ -350,11 +572,14 @@ export const useCompareStore = create<CompareState>((set, get) => ({
 
   setComparison: (c) => {
     historyTracker.discard();
+    // Lazily replace legacy full-opening items; review decisions and applied documents stay intact.
+    const rebuilt = c ? rebuildApprovedItems(c, isOpeningDifference) : null;
+    const loaded = c && rebuilt && JSON.stringify(c.revisions) !== JSON.stringify(rebuilt.revisions) ? rebuilt : c;
     set({
-      comparison: c,
+      comparison: loaded,
       currentPageKey: 1,
       exportRegions: {},
-      dirty: false,
+      dirty: loaded !== c,
       saveError: null,
       annotationsVisible: true,
       measurementsVisible: true,
@@ -363,12 +588,25 @@ export const useCompareStore = create<CompareState>((set, get) => ({
       history: [],
       future: [],
     });
+    if (loaded !== c) scheduleSave(get, set);
+  },
+  captureEditSnapshot: () => {
+    historyTracker.flush(get, set);
+    const { comparison, history, future, dirty } = get();
+    return { comparison, history, future, dirty, epoch: commitEpoch };
+  },
+  cancelEditSnapshot: (before) => {
+    historyTracker.discard();
+    // A commit point happened during the gesture: the snapshot predates it and must not come back.
+    if (before.epoch !== undefined && before.epoch !== commitEpoch) return;
+    const { epoch: _epoch, ...snapshot } = before;
+    set(snapshot);
   },
   undo: () => {
     historyTracker.flush(get, set);
     const { comparison, history, future } = get();
     if (!comparison || history.length === 0) return;
-    const previous = history[history.length - 1];
+    const previous = withCurrentAiRuns(history[history.length - 1], comparison);
     set({
       comparison: previous,
       history: history.slice(0, -1),
@@ -384,7 +622,7 @@ export const useCompareStore = create<CompareState>((set, get) => ({
     historyTracker.flush(get, set);
     const { comparison, history, future } = get();
     if (!comparison || future.length === 0) return;
-    const next = future[0];
+    const next = withCurrentAiRuns(future[0], comparison);
     set({
       comparison: next,
       history: [...history, comparison],
@@ -658,13 +896,21 @@ export const useCompareStore = create<CompareState>((set, get) => ({
       };
       get().updateActiveRevisionPage(currentPageKey, { revisedCalibration: calibration });
     }
+    const recalculated = get().comparison;
+    if (recalculated) {
+      const rebuilt = rebuildApprovedItems(recomputePage(recalculated, currentPageKey), (c) => c.pageNumber === currentPageKey);
+      set({ comparison: keepAiResultsCurrent(comparison, rebuilt, currentPageKey) });
+    }
     set({ calibrationPoints: [], calibrationLayer: null, toolMode: 'select' });
   },
 
-  setAlignmentTransform: (pageKey, transform, method = 'manual') => {
+  setAlignmentTransform: (pageKey, transform, method = 'manual', discrete = false) => {
     const { comparison } = get();
-    if (comparison) historyTracker.pushDebounced(get, set, comparison);
+    if (comparison) (discrete ? historyTracker.push : historyTracker.pushDebounced)(get, set, comparison);
     get().updateActiveRevisionPage(pageKey, { alignment: transform, alignmentMethod: method });
+    // A revised-layer calibration follows the alignment scale: keep stored quantities in step.
+    const aligned = get().comparison;
+    if (aligned && compareScaleFor(aligned, pageKey).source === 'revised') set({ comparison: recomputePage(aligned, pageKey) });
     // Point pairs count at once; slider bursts only once they settle (see noteAlignment).
     const updated = get().comparison;
     if (updated) noteAlignment(updated, pageKey, method);
@@ -704,10 +950,11 @@ export const useCompareStore = create<CompareState>((set, get) => ({
 
   setMeasureTool: (t) => set({ toolMode: t ? 'measure' : 'select', measureTool: t, measurePoints: [], pendingAreaKind: null }),
   setPendingAreaKind: (k) => set({ pendingAreaKind: k }),
-  startChangeMeasurement: (kind) => set({ toolMode: 'measure', measureTool: 'area', pendingAreaKind: kind, measurePoints: [] }),
+  startChangeMeasurement: (kind) => set({ toolMode: 'measure', measureTool: 'area', pendingAreaKind: kind, measurePoints: [], selectedMeasurementId: null, selectedMarkupId: null, markupPoints: [] }),
   setMeasurementKind: (id, kind) => {
     const { comparison } = get();
     if (!comparison) return;
+    if (comparison.revisions.find((r) => r.id === comparison.activeRevisionId)?.measurements.find((m) => m.id === id)?.revisionChangeId) return;
     historyTracker.push(get, set, comparison);
     const revisions = updateActiveRevision(comparison, (r) => ({
       ...r,
@@ -716,7 +963,7 @@ export const useCompareStore = create<CompareState>((set, get) => ({
     set({ comparison: touch({ ...comparison, revisions }) });
     scheduleSave(get, set);
   },
-  setSelectedMeasurementId: (id) => set({ selectedMeasurementId: id }),
+  setSelectedMeasurementId: (id) => set({ selectedMeasurementId: id, ...(id ? { toolMode: 'select', selectedMarkupId: null, measurePoints: [], markupPoints: [] } : {}) }),
   focusMeasurement: (id) => {
     const { comparison, currentPageKey } = get();
     if (!comparison) return;
@@ -725,10 +972,10 @@ export const useCompareStore = create<CompareState>((set, get) => ({
     if (!target) return;
     // Changing page clears in-progress state and the selection, so select afterwards.
     if (target.pageNumber !== currentPageKey) get().setCurrentPageKey(target.pageNumber);
-    set({ selectedMeasurementId: id });
+    get().setSelectedMeasurementId(id);
   },
-  setAreaShape: (s) => set({ areaShape: s, measurePoints: [] }),
-  setAreaCalcMode: (m) => set({ areaCalcMode: m, measurePoints: [] }),
+  setAreaShape: (s) => set({ areaShape: s, measurePoints: [], ...(s === 'line' ? { areaCalcMode: 'wall' } : {}) }),
+  setAreaCalcMode: (m) => set({ areaCalcMode: m, measurePoints: [], ...(m === 'footprint' && get().areaShape === 'line' ? { areaShape: 'polygon' } : {}) }),
   setOrthoSnap: (v) => set({ orthoSnap: v }),
   addMeasurePoint: (p) => set({ measurePoints: [...get().measurePoints, p] }),
   clearMeasurePoints: () => set({ measurePoints: [] }),
@@ -743,20 +990,69 @@ export const useCompareStore = create<CompareState>((set, get) => ({
     trackChangeMarked(comparison.id, owned, get().areaShape);
     scheduleSave(get, set);
   },
-  updateMeasurement: (id, patch) => {
+  updateMeasurement: (id, patch, quiet = false) => {
     const { comparison } = get();
     if (!comparison) return;
+    const active = comparison.revisions.find((r) => r.id === comparison.activeRevisionId);
+    const target = active?.measurements.find((m) => m.id === id);
+    if (!target) return;
+    if (target.revisionChangeId) {
+      // An approved change's item is an ordinary editable wall/opening: its edits are written to the
+      // change's own line, and the change rebuilds its items (same ids) — so quantities, approval and
+      // a later apply all follow the edited geometry. Applied items stay locked.
+      const change = active?.analysis?.pages[target.pageNumber]?.changes.find((c) => c.id === target.revisionChangeId);
+      const ref = change ? elementOfItem(change, target) : null;
+      if (!ref || !change || change.status !== 'approved') return;
+      if (Object.keys(patch).length === 0) {
+        get().finishRevisionChangeEdit();
+        return;
+      }
+      // Only geometry and height are editable; derived quantities are never overwritten directly.
+      if (!patch.points && !patch.centerline && patch.wallHeightM === undefined) return;
+      const edit = (c: RevisionChange): RevisionChange => {
+        let next = c;
+        if (ref.list === 'walls' && patch.points) next = setWallFootprint(next, ref.index, patch.points);
+        if (ref.list === 'doors' && patch.centerline && patch.centerline.length >= 2) {
+          next = setElementLine(next, ref, patch.centerline[0], patch.centerline[patch.centerline.length - 1]);
+        }
+        if (patch.wallHeightM !== undefined) {
+          const h = patch.wallHeightM > 0 ? patch.wallHeightM : undefined;
+          next = ref.list === 'walls' ? setWallHeight(next, ref.index, h) : setOpeningHeight(next, ref.index, h);
+        }
+        return next;
+      };
+      get().editRevisionChange(target.pageNumber, change.id, edit, quiet);
+      return;
+    }
     historyTracker.pushDebounced(get, set, comparison);
     const revisions = updateActiveRevision(comparison, (r) => ({
       ...r,
-      measurements: r.measurements.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+      measurements: r.measurements.map((m) => {
+        if (m.id !== id) return m;
+        const next = { ...m, ...patch };
+        const scale = compareScaleFor(comparison, m.pageNumber);
+        if (!patch.points && !patch.centerline) return next;
+        return scale.state === 'calibrated' ? recomputeMeasurement(next, scale.metersPerPixel)
+          : { ...next, ...(next.tool === 'area' ? { areaM2: 0, wallLengthM: 0 } : { lengthM: 0 }) };
+      }),
     }));
-    set({ comparison: touch({ ...comparison, revisions }) });
-    scheduleSave(get, set);
+    if (quiet) {
+      set({ comparison: { ...comparison, revisions } });
+      markDirty(set);
+    } else {
+      set({ comparison: touch({ ...comparison, revisions }) });
+      scheduleSave(get, set);
+    }
   },
   deleteMeasurement: (id) => {
     const { comparison } = get();
     if (!comparison) return;
+    const target = comparison.revisions.find((r) => r.id === comparison.activeRevisionId)?.measurements.find((m) => m.id === id);
+    if (!target) return;
+    if (target.revisionChangeId) {
+      get().deleteRevisionChange(target.pageNumber, target.revisionChangeId);
+      return;
+    }
     historyTracker.push(get, set, comparison);
     const revisions = updateActiveRevision(comparison, (r) => ({ ...r, measurements: r.measurements.filter((m) => m.id !== id) }));
     set({
@@ -778,7 +1074,7 @@ export const useCompareStore = create<CompareState>((set, get) => ({
     historyTracker.push(get, set, comparison);
     const owned: Markup = { ...markup, pageNumber: currentPageKey };
     const revisions = updateActiveRevision(comparison, (r) => ({ ...r, markups: [...r.markups, owned] }));
-    set({ comparison: touch({ ...comparison, revisions }), markupPoints: [] });
+    set({ comparison: touch(keepAiResultsCurrent(comparison, { ...comparison, revisions }, currentPageKey)), markupPoints: [] });
     scheduleSave(get, set);
   },
   updateMarkup: (id, patch) => {
@@ -792,7 +1088,7 @@ export const useCompareStore = create<CompareState>((set, get) => ({
       ...r,
       markups: r.markups.map((m) => (m.id === id ? { ...m, ...patch } : m)),
     }));
-    set({ comparison: touch({ ...comparison, revisions }) });
+    set({ comparison: touch(keepAiResultsCurrent(comparison, { ...comparison, revisions }, get().currentPageKey)) });
     scheduleSave(get, set);
   },
   updateMarkupQuiet: (id, patch) => {
@@ -803,7 +1099,7 @@ export const useCompareStore = create<CompareState>((set, get) => ({
       ...r,
       markups: r.markups.map((m) => (m.id === id ? { ...m, ...patch } : m)),
     }));
-    set({ comparison: { ...comparison, revisions } });
+    set({ comparison: keepAiResultsCurrent(comparison, { ...comparison, revisions }, get().currentPageKey) });
     markDirty(set);
   },
   deleteMarkup: (id) => {
@@ -811,7 +1107,7 @@ export const useCompareStore = create<CompareState>((set, get) => ({
     if (!comparison) return;
     historyTracker.push(get, set, comparison);
     const revisions = updateActiveRevision(comparison, (r) => ({ ...r, markups: r.markups.filter((m) => m.id !== id) }));
-    set({ comparison: touch({ ...comparison, revisions }), selectedMarkupId: get().selectedMarkupId === id ? null : get().selectedMarkupId });
+    set({ comparison: touch(keepAiResultsCurrent(comparison, { ...comparison, revisions }, get().currentPageKey)), selectedMarkupId: get().selectedMarkupId === id ? null : get().selectedMarkupId });
     scheduleSave(get, set);
   },
   duplicateMarkup: (id) => {
@@ -829,10 +1125,10 @@ export const useCompareStore = create<CompareState>((set, get) => ({
       createdAt: Date.now(),
     };
     const revisions = updateActiveRevision(comparison, (r) => ({ ...r, markups: [...r.markups, copy] }));
-    set({ comparison: touch({ ...comparison, revisions }), selectedMarkupId: copy.id });
+    set({ comparison: touch(keepAiResultsCurrent(comparison, { ...comparison, revisions }, copy.pageNumber)), selectedMarkupId: copy.id });
     scheduleSave(get, set);
   },
-  setSelectedMarkupId: (id) => set({ selectedMarkupId: id }),
+  setSelectedMarkupId: (id) => set({ selectedMarkupId: id, ...(id ? { toolMode: 'select', selectedMeasurementId: null, measurePoints: [], markupPoints: [] } : {}) }),
 
   setAreaKindColor: (kind, color) => {
     const { comparison } = get();
@@ -846,7 +1142,362 @@ export const useCompareStore = create<CompareState>((set, get) => ({
     const { comparison } = get();
     if (!comparison) return;
     historyTracker.pushDebounced(get, set, comparison);
-    set({ comparison: touch({ ...comparison, ...patch }) });
+    const next: Comparison = { ...comparison, ...patch };
+    // Generated wall items follow the default height they were created from (their own height is not editable).
+    const heightChanged = patch.wallHeightDefaultM !== undefined && patch.wallHeightDefaultM !== comparison.wallHeightDefaultM;
+    set({ comparison: touch(heightChanged ? rebuildApprovedItems(next, () => true) : next) });
+    scheduleSave(get, set);
+  },
+
+  setComparisonContext: (context) => {
+    const { comparison } = get();
+    if (!comparison || (comparison.context ?? 'design') === context) return;
+    historyTracker.push(get, set, comparison);
+    // Approved (not yet applied) changes stand for different items in each context: rebuild them so
+    // the Changes table, exports and a later apply all use the context now in force. Applied changes
+    // keep theirs — they are already in the plan's ledger under the context they were applied with.
+    set({ comparison: touch(rebuildApprovedItems({ ...comparison, context }, () => true)) });
+    scheduleSave(get, set);
+  },
+  setLinkedPlanId: (planId) => {
+    const { comparison } = get();
+    if (!comparison) return;
+    historyTracker.push(get, set, comparison);
+    set({ comparison: touch({ ...comparison, linkedPlanId: planId }) });
+    scheduleSave(get, set);
+  },
+  setRevisionBase: (revisionId, baseRevisionId) => {
+    const { comparison } = get();
+    if (!comparison) return;
+    historyTracker.push(get, set, comparison);
+    const revisions = comparison.revisions.map((r) => (r.id === revisionId ? { ...r, baseRevisionId } : r));
+    set({ comparison: touch({ ...comparison, revisions }) });
+    scheduleSave(get, set);
+  },
+  saveRevisionAnalysis: (revisionId, analysis, refinedAlignment) => {
+    const { comparison } = get();
+    if (!comparison) return;
+    historyTracker.push(get, set, comparison);
+    let next: Comparison = {
+      ...comparison,
+      revisions: comparison.revisions.map((r) => {
+        if (r.id !== revisionId) return r;
+        // A rerun replaces the page's proposals; approved items of the old run stay as measurements
+        // only when already applied — unapplied ones are withdrawn with their proposals.
+        const previous = r.analysis?.pages[analysis.pageNumber];
+        // Manual corrections and manually added changes are the user's work and survive a rerun.
+        const userOwned = (c: RevisionChange) => c.status === 'applied' || !!c.manual || !!c.edited;
+        const withdrawn = new Set(
+          (previous?.changes ?? []).filter((c) => c.status === 'approved' && !userOwned(c)).flatMap((c) => c.measurementIds ?? [])
+        );
+        const kept = (previous?.changes ?? []).filter(userOwned);
+        // A change already applied to the plan is found again by a rerun: keep the applied record only.
+        const fresh = analysis.changes.filter((c) => !kept.some((k) => k.kind === c.kind && k.category === c.category && bboxIou(k.bbox, c.bbox) >= 0.5));
+        return {
+          ...r,
+          measurements: r.measurements.filter((m) => !withdrawn.has(m.id)),
+          analysis: { pages: { ...(r.analysis?.pages ?? {}), [analysis.pageNumber]: { ...analysis, changes: [...kept, ...fresh] } } },
+        };
+      }),
+    };
+    if (refinedAlignment) {
+      const page = next.pages[analysis.pageNumber] ?? emptyPage(analysis.pageNumber);
+      const rp = page.revisions[revisionId] ?? emptyRevisionPageData(analysis.pageNumber);
+      next = { ...next, pages: { ...next.pages, [analysis.pageNumber]: { ...page, revisions: { ...page.revisions, [revisionId]: { ...rp, alignment: refinedAlignment } } } } };
+      next = recomputePage(next, analysis.pageNumber);
+    }
+    set({ comparison: touch(next) });
+    scheduleSave(get, set);
+  },
+  updateRevisionAnalysis: (revisionId, pageKey, updater) => {
+    const { comparison } = get();
+    if (!comparison) return;
+    const revisions = comparison.revisions.map((r) => {
+      const current = r.analysis?.pages[pageKey];
+      if (r.id !== revisionId || !current) return r;
+      return { ...r, analysis: { pages: { ...r.analysis!.pages, [pageKey]: updater(current) } } };
+    });
+    set({ comparison: touch({ ...comparison, revisions }) });
+    scheduleSave(get, set);
+  },
+  reviewRevisionChange: (pageKey, changeId, status) => {
+    const { comparison } = get();
+    if (!comparison) return;
+    const revision = comparison.revisions.find((r) => r.id === comparison.activeRevisionId);
+    const change = revision?.analysis?.pages[pageKey]?.changes.find((c) => c.id === changeId);
+    if (!revision || !change || change.status === 'applied' || change.status === status) return;
+    // Lines still at their starting position have not been measured: they cannot be approved.
+    if (status === 'approved' && hasUnplacedLines(change)) return;
+    if (status === 'approved' && openingGeometryNeedsVerification(change)) return;
+    if (status === 'approved' && isOpeningDifference(change) && (!openingImpactReady(change) || compareScaleFor(comparison, pageKey).state !== 'calibrated')) return;
+    historyTracker.push(get, set, comparison);
+    let measurements = revision.measurements.filter((m) => !(change.measurementIds ?? []).includes(m.id));
+    let updated: RevisionChange = { ...change, status, measurementIds: undefined, reviewedAt: Date.now() };
+    if (status === 'approved') {
+      const created = approvalItems(comparison, change);
+      measurements = [...measurements, ...created];
+      updated = { ...updated, measurementIds: created.map((m) => m.id) };
+    }
+    const revisions = comparison.revisions.map((r) => {
+      if (r.id !== revision.id) return r;
+      const pageAnalysis = r.analysis!.pages[pageKey];
+      return {
+        ...r,
+        measurements,
+        analysis: { pages: { ...r.analysis!.pages, [pageKey]: { ...pageAnalysis, changes: pageAnalysis.changes.map((c) => (c.id === changeId ? updated : c)) } } },
+      };
+    });
+    set({ comparison: touch({ ...comparison, revisions }) });
+    scheduleSave(get, set);
+  },
+  confirmChangeAsWall: (pageKey, changeId) => {
+    const { comparison } = get();
+    if (!comparison) return;
+    const revision = comparison.revisions.find((r) => r.id === comparison.activeRevisionId);
+    const change = revision?.analysis?.pages[pageKey]?.changes.find((c) => c.id === changeId);
+    if (!revision || !change || change.status !== 'pending' || !change.wallCandidates?.length) return;
+    historyTracker.push(get, set, comparison);
+    const confirmed: RevisionWall[] = change.wallCandidates.flatMap((candidate) => candidate.pieces.map(([a, b]) => {
+      const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      // Display strip only (1 px each side); the quantity is the measured run length.
+      const nx = -(b.y - a.y) / len;
+      const ny = (b.x - a.x) / len;
+      return {
+        side: candidate.side,
+        centerline: [a, b] as [Point, Point],
+        footprint: [{ x: a.x + nx, y: a.y + ny }, { x: b.x + nx, y: b.y + ny }, { x: b.x - nx, y: b.y - ny }, { x: a.x - nx, y: a.y - ny }],
+        lengthPx: len,
+        thicknessPx: 0,
+        manual: true,
+      };
+    }));
+    // Verified walls stay; confirmed lines are added to them, then the relocation match is redone.
+    const walls = [...change.walls, ...confirmed];
+    const thresholds = detectionThresholds(compareScaleFor(comparison, change.pageNumber).metersPerPixel);
+    const relocation = matchRelocation(walls, thresholds.tolerancePx, thresholds.relocationMaxShift);
+    const updated: RevisionChange = {
+      ...change,
+      category: 'wall',
+      walls,
+      wallCandidates: undefined,
+      relocation,
+      ...(relocation ? { kind: 'modified' as const } : {}),
+      evidence: [...change.evidence, 'manual-wall', ...(relocation ? ['relocated'] : [])],
+    };
+    const revisions = comparison.revisions.map((r) => {
+      if (r.id !== revision.id) return r;
+      const pageAnalysis = r.analysis!.pages[pageKey];
+      return { ...r, analysis: { pages: { ...r.analysis!.pages, [pageKey]: { ...pageAnalysis, changes: pageAnalysis.changes.map((c) => (c.id === changeId ? updated : c)) } } } };
+    });
+    set({ comparison: touch({ ...comparison, revisions }) });
+    scheduleSave(get, set);
+  },
+  beginRevisionAiAnalysis: (revisionId, meta, refinedAlignment, run) => {
+    const { comparison } = get();
+    if (!comparison) return;
+    commitPoint(set);
+    let next: Comparison = {
+      ...comparison,
+      revisions: comparison.revisions.map((r) => {
+        if (r.id !== revisionId) return r;
+        const previous = r.analysis?.pages[meta.pageNumber];
+        // A run that failed before anything was sent (the free alignment check) reports why, and
+        // leaves the page's existing proposals — possibly paid for — exactly as they were.
+        if (run.status === 'FAILED' && previous) {
+          return { ...r, analysis: { pages: { ...r.analysis!.pages, [meta.pageNumber]: { ...previous, alignment: meta.alignment, ai: run } } } };
+        }
+        const sameInputs = previous?.inputKey === meta.inputKey;
+        const kept = (previous?.changes ?? []).filter((c) => sameInputs || c.status === 'approved' || c.status === 'applied' || c.manual || c.edited);
+        const page: RevisionPageAnalysis = { ...meta, changes: kept, filteredCount: sameInputs ? previous?.filteredCount ?? 0 : 0, ai: run };
+        return { ...r, analysis: { pages: { ...(r.analysis?.pages ?? {}), [meta.pageNumber]: page } } };
+      }),
+    };
+    if (refinedAlignment) {
+      const page = next.pages[meta.pageNumber] ?? emptyPage(meta.pageNumber);
+      const rp = page.revisions[revisionId] ?? emptyRevisionPageData(meta.pageNumber);
+      next = { ...next, pages: { ...next.pages, [meta.pageNumber]: { ...page, revisions: { ...page.revisions, [revisionId]: { ...rp, alignment: refinedAlignment } } } } };
+      next = recomputePage(next, meta.pageNumber);
+    }
+    set({ comparison: touch(next) });
+    scheduleSave(get, set);
+  },
+  mergeRevisionAiChanges: (revisionId, pageKey, requestId, changes) => {
+    const { comparison } = get();
+    if (!comparison) return;
+    const revisions = comparison.revisions.map((r) => {
+      const page = r.analysis?.pages[pageKey];
+      if (r.id !== revisionId || !page || page.ai?.requestId !== requestId) return r;
+      // An existing proposal for the same physical change wins (it may already be approved/applied).
+      const fresh = changes.filter((c) => !page.changes.some((existing) => sameChange(existing, c)));
+      return { ...r, analysis: { pages: { ...r.analysis!.pages, [pageKey]: {
+        ...page,
+        changes: [...page.changes, ...fresh].sort((a, b) => b.score - a.score),
+        ai: { ...page.ai!, status: 'COMPLETED' as const, updatedAt: Date.now() },
+      } } } };
+    });
+    commitPoint(set);
+    set({ comparison: touch({ ...comparison, revisions }) });
+    scheduleSave(get, set);
+  },
+  editRevisionChange: (pageKey, changeId, edit, quiet = false) => {
+    const { comparison } = get();
+    if (!comparison) return;
+    const revision = comparison.revisions.find((r) => r.id === comparison.activeRevisionId);
+    const change = revision?.analysis?.pages[pageKey]?.changes.find((c) => c.id === changeId);
+    if (!revision || !change || change.status === 'applied') return;
+    if (quiet) historyTracker.pushDebounced(get, set, comparison);
+    else historyTracker.push(get, set, comparison);
+    let updated = finalizeEditedChange(edit(change));
+    let measurements = revision.measurements;
+    if (change.status === 'approved' && (hasUnplacedLines(updated) || !openingImpactReady(updated) || openingGeometryNeedsVerification(updated))) {
+      // A new line still has to be placed: the approval no longer stands for measured geometry.
+      measurements = measurements.filter((m) => !(change.measurementIds ?? []).includes(m.id));
+      updated = { ...updated, status: 'pending', measurementIds: undefined };
+    } else if (change.status === 'approved') {
+      // Approval stands; its quantities follow the corrected geometry (same items, same ids).
+      // Resolve each old item's line on the change as it was, so an item saved without one keeps its id too.
+      const previous = measurements.filter((m) => (change.measurementIds ?? []).includes(m.id))
+        .map((m) => ({ ...m, revisionElement: elementOfItem(change, m) ?? undefined }));
+      const created = approvalItems(comparison, updated, revision.id, previous);
+      measurements = [...measurements.filter((m) => !(change.measurementIds ?? []).includes(m.id)), ...created];
+      updated = { ...updated, measurementIds: created.map((m) => m.id) };
+    }
+    const revisions = comparison.revisions.map((r) => {
+      if (r.id !== revision.id) return r;
+      const pageAnalysis = r.analysis!.pages[pageKey];
+      return { ...r, measurements, analysis: { pages: { ...r.analysis!.pages, [pageKey]: { ...pageAnalysis, changes: pageAnalysis.changes.map((c) => (c.id === changeId ? updated : c)) } } } };
+    });
+    if (quiet) {
+      set({ comparison: { ...comparison, revisions } });
+      markDirty(set);
+    } else {
+      set({ comparison: touch({ ...comparison, revisions }) });
+      scheduleSave(get, set);
+    }
+  },
+  finishRevisionChangeEdit: () => {
+    historyTracker.flush(get, set);
+    const { comparison } = get();
+    if (!comparison) return;
+    set({ comparison: touch(comparison) });
+    scheduleSave(get, set);
+  },
+  addManualRevisionChange: (pageKey, type, at, footprints, openingShapes) => {
+    const { comparison } = get();
+    if (!comparison) return null;
+    const revision = comparison.revisions.find((r) => r.id === comparison.activeRevisionId);
+    if (!revision) return null;
+    const sides = sidesOf(type);
+    const walls = type.startsWith('wall') ? (footprints ?? []).map((points, index) => wallFromFootprint(sides[index], points)) : [];
+    if (type.startsWith('wall') && (walls.length !== sides.length || walls.some(w => !w))) return null;
+    const openings = familyOf(type) === 'opening' ? (footprints ?? []).map((points, index) => openingFromFootprint(sides[index], points,
+      type.startsWith('window') ? 'window' : type.startsWith('door') ? 'door' : undefined, openingShapes?.[index])) : [];
+    if (familyOf(type) === 'opening' && (openings.length !== sides.length || openings.some(d => !d))) return null;
+    const scale = compareScaleFor(comparison, pageKey);
+    const draft: RevisionChange = {
+      id: uuid(),
+      pageNumber: pageKey,
+      kind: 'added',
+      category: 'other',
+      significance: 'high',
+      score: 1,
+      evidence: ['manual-change'],
+      bbox: { x: at.x - 20, y: at.y - 20, width: 40, height: 40 },
+      addedSegments: [],
+      removedSegments: [],
+      walls: walls.filter((w): w is RevisionWall => !!w),
+      doors: openings.filter((d): d is NonNullable<typeof d> => !!d),
+      addedLengthPx: 0,
+      removedLengthPx: 0,
+      status: 'pending',
+      manual: true,
+    };
+    const change = finalizeEditedChange(retypeChange(draft, type, scale.state === 'calibrated' ? scale.metersPerPixel : 0));
+    historyTracker.push(get, set, comparison);
+    const revisions = comparison.revisions.map((r) => {
+      if (r.id !== revision.id) return r;
+      // A page nobody ran detection on gets a manual-only record: it holds the user's changes, and
+      // its alignment fields are placeholders the UI does not present as a quality check.
+      const existing = r.analysis?.pages[pageKey];
+      const page: RevisionPageAnalysis = existing ?? {
+        pageNumber: pageKey,
+        inputKey: analysisInputKey(comparison, r.id, pageKey),
+        method: 'vector',
+        baseRevisionId: baseRevisionOf(comparison, r)?.id ?? null,
+        createdAt: Date.now(),
+        alignment: { status: 'fair', residualPx: 0, residualMm: null, inlierRatio: 0, tolerancePx: 0, correction: { dx: 0, dy: 0, rotationDeg: 0 } },
+        usedAlignment: comparison.pages[pageKey]?.revisions[r.id]?.alignment ?? IDENTITY_TRANSFORM,
+        manualOnly: true,
+        changes: [],
+        filteredCount: 0,
+      };
+      return { ...r, analysis: { pages: { ...(r.analysis?.pages ?? {}), [pageKey]: { ...page, changes: [...page.changes, change] } } } };
+    });
+    set({ comparison: touch({ ...comparison, revisions }) });
+    scheduleSave(get, set);
+    return change.id;
+  },
+  mergeWallRegions: (pageKey, selection) => {
+    const { comparison } = get();
+    const revision = comparison?.revisions.find(r => r.id === comparison.activeRevisionId);
+    const page = revision?.analysis?.pages[pageKey];
+    if (!comparison || !revision || !page) return { error: 'incompatible' };
+    const result = prepareWallRegionMerge(page.changes, selection);
+    if (!result.ok) return { error: result.error };
+    const ids = new Set(result.changeIds);
+    const itemIds = new Set(page.changes.filter(c => ids.has(c.id)).flatMap(c => c.measurementIds ?? []));
+    let merged = result.change;
+    const created = merged.status === 'approved' ? approvalItems(comparison, merged, revision.id) : [];
+    merged = { ...merged, measurementIds: created.length ? created.map(m => m.id) : undefined };
+    historyTracker.push(get, set, comparison);
+    const revisions = comparison.revisions.map(r => r.id !== revision.id ? r : {
+      ...r,
+      measurements: [...r.measurements.filter(m => !ids.has(m.revisionChangeId ?? '') && !itemIds.has(m.id)), ...created],
+      analysis: { pages: { ...r.analysis!.pages, [pageKey]: { ...page,
+        changes: page.changes.flatMap(c => c.id === merged.id ? [merged] : ids.has(c.id) ? [] : [c]),
+      } } },
+    });
+    set({ comparison: touch({ ...comparison, revisions }), selectedMeasurementId: null });
+    scheduleSave(get, set);
+    return { changeId: merged.id };
+  },
+  deleteRevisionChange: (pageKey, changeId) => {
+    const { comparison } = get();
+    if (!comparison) return;
+    const revision = comparison.revisions.find((r) => r.id === comparison.activeRevisionId);
+    const change = revision?.analysis?.pages[pageKey]?.changes.find((c) => c.id === changeId);
+    if (!revision || !change || change.status === 'applied') return;
+    historyTracker.push(get, set, comparison);
+    const revisions = comparison.revisions.map((r) => {
+      if (r.id !== revision.id) return r;
+      const pageAnalysis = r.analysis!.pages[pageKey];
+      return {
+        ...r,
+        measurements: r.measurements.filter((m) => m.revisionChangeId !== changeId && !(change.measurementIds ?? []).includes(m.id)),
+        analysis: { pages: { ...r.analysis!.pages, [pageKey]: { ...pageAnalysis, changes: pageAnalysis.changes.filter((c) => c.id !== changeId) } } },
+      };
+    });
+    const selectedMeasurementId = get().selectedMeasurementId;
+    const removedSelection = revision.measurements.some((m) => m.id === selectedMeasurementId
+      && (m.revisionChangeId === changeId || (change.measurementIds ?? []).includes(m.id)));
+    set({ comparison: touch({ ...comparison, revisions }), selectedMeasurementId: removedSelection ? null : selectedMeasurementId });
+    scheduleSave(get, set);
+  },
+  setRevisionChangesStatus: (revisionId, changeIds, status) => {
+    const { comparison } = get();
+    if (!comparison) return;
+    const ids = new Set(changeIds);
+    const revisions = comparison.revisions.map((r) => {
+      if (r.id !== revisionId || !r.analysis) return r;
+      const pages = Object.fromEntries(Object.entries(r.analysis.pages).map(([key, p]) => [
+        key,
+        { ...p, changes: p.changes.map((c) => (ids.has(c.id) ? { ...c, status } : c)) },
+      ]));
+      return { ...r, analysis: { pages } };
+    });
+    // The plan's ledger now says what is applied: no undo step may bring back an older status.
+    commitPoint(set);
+    set({ comparison: touch({ ...comparison, revisions }) });
     scheduleSave(get, set);
   },
 

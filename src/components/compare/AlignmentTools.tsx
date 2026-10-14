@@ -3,6 +3,7 @@ import { alignmentStatusFor, useCompareStore } from '../../store/compareStore';
 import { IDENTITY_TRANSFORM } from '../../types/compare';
 import Icon from '../Icon';
 import { useT } from '../../i18n';
+import { runAutoAlign, useAutoAlignUi } from '../../lib/autoAlign';
 
 /** A numeric alignment value that can be half-typed ("-0.") without fighting the stored transform. */
 function AlignmentNumber({ value, step, precision, unit, disabled, label, valid, onChange }: {
@@ -58,6 +59,7 @@ export default function AlignmentTools() {
   const clearAlignmentPoints = useCompareStore((s) => s.clearAlignmentPoints);
   const pickingAlignmentPoints = useCompareStore((s) => s.pickingAlignmentPoints);
   const alignmentPendingOriginal = useCompareStore((s) => s.alignmentPendingOriginal);
+  const autoAligning = useAutoAlignUi((s) => s.running);
 
   if (!comparison) return null;
   const alignment = comparison.pages[currentPageKey]?.revisions[comparison.activeRevisionId]?.alignment ?? IDENTITY_TRANSFORM;
@@ -122,6 +124,17 @@ export default function AlignmentTools() {
           {t('compare.alignment.resetShort')}
         </button>
       </div>
+      {/* Same action as the dock's align menu; runs only on click. */}
+      <button
+        className="btn-secondary small full-width"
+        onClick={() => void runAutoAlign()}
+        disabled={!hasRevision || autoAligning}
+        aria-busy={autoAligning}
+        title={t('compare.autoAlign.hint')}
+      >
+        <Icon name="scan" />
+        {autoAligning ? t('compare.autoAlign.running') : t('compare.autoAlign.button')}
+      </button>
       {pickingAlignmentPoints && (
         <p className="tool-hint">
           <Icon name="alert" size={13} />

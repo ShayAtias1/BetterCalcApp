@@ -1,0 +1,641 @@
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { compareScaleFor, useCompareStore } from '../../store/compareStore';
+import { useRevisionUi } from '../../lib/revision/revisionWorkflow';
+import { changeNoteKey, elementLine, setElementLine, setWallFootprint, setOpeningFootprint, openingFootprint, openingFromFootprint, familyOf, retypeChange, editTypeOf, sidesOf, wallFromFootprint, type EditElementRef } from '../../lib/revision/changeEdit';
+import { LANGUAGES, useLanguage, useT } from '../../i18n';
+import { distancePx, round, snapOrtho } from '../../lib/geometry';
+import AreaGeometryHandles from '../AreaGeometryHandles';
+import AreaGeometryEdges from '../AreaGeometryEdges';
+import { insertPolygonVertex, removePolygonVertex, reshapeArea, translateArea, rectanglePoints, closesPolygon } from '../../lib/areaGeometryEditing';
+import { DEFAULT_AREA_KIND_COLORS, type Point } from '../../types';
+import { analysisInputKey } from '../../lib/revision/detect';
+import { PLAN_NAVIGATION_CANCEL } from '../../lib/interactionTargets';
+import type { RevisionChange } from '../../types/revisionAnalysis';
+import { isOpeningDifference, openingImpact, openingImpactReady } from '../../lib/revision/openingImpact';
+import type { OpeningPortion } from '../../lib/revision/openingImpact';
+import { editOpeningImpactFootprint } from '../../lib/revision/openingImpactEditing';
+import type { RevisionLayer } from '../../types/compare';
+import { openingWallFootprints } from '../../lib/revision/openingGeometry';
+
+function openingPortions(change: RevisionChange, revision: RevisionLayer | undefined, mpp: number): (OpeningPortion & { preview?: boolean; verified?: boolean })[] {
+  const calculated = openingImpact(change, mpp).portions;
+  if (calculated.length) return calculated;
+  // A persisted approved quantity already carries the exact calculated footprint. Rendering it
+  // must not depend on re-running a verification gate or the current page calibration.
+  const saved = (revision?.measurements ?? []).flatMap(m => m.revisionChangeId === change.id && m.revisionElement?.list === 'doors'
+    && m.revisionElement.part != null && m.areaKind && m.points.length >= 3 && m.centerline?.length === 2
+    ? [{ areaKind: m.areaKind, points: m.points, centerline: m.centerline, wallLengthM: m.wallLengthM ?? 0,
+      wallHeightM: m.wallHeightM ?? 0, areaM2: m.areaM2 ?? 0,
+      element: { list: 'doors' as const, index: m.revisionElement.index, part: m.revisionElement.part } }] : []);
+  if (saved.length) return saved;
+  return openingWallFootprints(change).map(p => ({ ...p, preview: true,
+    centerline: [change.doors[p.index].hinge, change.doors[p.index].jamb],
+    wallLengthM: 0, wallHeightM: 0, areaM2: 0, element: { list: 'doors' as const, index: p.index, part: p.part } }));
+}
+
+function useRevisionColors(): Record<RevisionChange['kind'], string> {
+  const colors = useCompareStore(s => s.comparison?.areaKindColors) ?? DEFAULT_AREA_KIND_COLORS;
+  return { added: colors.construction, removed: colors.demolition, modified: '#d97706' };
+}
+
+/**
+ * Detected revision changes drawn directly on the plan, in source-page native px (the overlay svg's
+ * own space): removed lines in the demolition color, added lines in the construction color, measured wall footprints filled, each region
+ * boxed and numbered like its row in the review list. Clicking a region selects it.
+ */
+export default function RevisionChangeOverlay({ strokeW, zoom, interactive, editable, screenToNative, noteBounds }: {
+  strokeW: number;
+  zoom: number;
+  interactive: boolean;
+  /** Manual correction (edit handles, placing a missed change) is available. */
+  editable: boolean;
+  screenToNative: (clientX: number, clientY: number) => Point;
+  noteBounds: { left: number; top: number; right: number; bottom: number };
+}) {
+  const comparison = useCompareStore((s) => s.comparison);
+  const currentPageKey = useCompareStore((s) => s.currentPageKey);
+  const markersVisible = useRevisionUi((s) => s.markersVisible);
+  const editingId = useRevisionUi((s) => s.editingChangeId);
+  const selectedId = useRevisionUi((s) => s.selectedChangeId);
+  const placingType = useRevisionUi((s) => s.placingType);
+  const placingWall = useRevisionUi((s) => s.placingWall);
+  const revision = comparison?.revisions.find((r) => r.id === comparison.activeRevisionId);
+  const [selectedPortion, setSelectedPortion] = useState<{ changeId: string; index: number; part: number } | null>(null);
+  useEffect(() => setSelectedPortion(null), [comparison?.id, revision?.id, currentPageKey]);
+  useEffect(() => { if (placingType) setSelectedPortion(null); }, [placingType]);
+  const analysis = revision?.analysis?.pages[currentPageKey];
+  const wallTopology = analysis?.changes.map(c => `${c.id}:${c.walls.length}`).join('|');
+  useEffect(() => { useRevisionUi.setState({ selectedWallRegions: [] }); }, [comparison?.id, revision?.id, currentPageKey, wallTopology]);
+  const stale = !!analysis && !analysis.manualOnly && !!comparison && analysis.inputKey !== analysisInputKey(comparison, revision!.id, currentPageKey);
+  const editing = editable && markersVisible && editingId === selectedId ? analysis?.changes.find((c) => c.id === editingId && c.status !== 'applied' && (!stale || c.manual || c.edited)) : undefined;
+  return (
+    <>
+      {analysis && markersVisible && <ChangeMarkers key={`${comparison?.id}:${revision?.id}:${currentPageKey}`} changes={analysis.changes} strokeW={strokeW} zoom={zoom} interactive={interactive} noteBounds={noteBounds} onSelectPortion={setSelectedPortion} />}
+      {editing && <ChangeEditLayer change={editing} zoom={zoom} screenToNative={screenToNative}
+        selectedPortion={selectedPortion?.changeId === editing.id ? selectedPortion : null} />}
+      {editable && placingType && <PlacingLayer key={`${comparison?.id}:${revision?.id}:${currentPageKey}:${placingType}:${placingWall?.changeId}:${placingWall?.side}`}
+        pageKey={currentPageKey} zoom={zoom} screenToNative={screenToNative} />}
+    </>
+  );
+}
+
+/**
+ * A subtle architectural callout: a short note set off the change's corner with a thin leader and
+ * arrowhead pointing at it. Sized in screen px (÷ zoom) inside the native-px overlay, so it follows
+ * pan and zoom and never grows over the drawing when zooming in.
+ */
+function changeAnchor(change: RevisionChange): Point {
+  const { x, y, width } = change.bbox;
+  // Anchor the leader to an available element vertex/endpoint, never a made-up footprint.
+  const points = [
+    ...change.walls.filter(w => !w.placeholder).flatMap(w => w.footprint),
+    ...change.doors.filter(d => !d.placeholder).flatMap(d => [d.hinge, d.jamb]),
+    ...change.addedSegments.flatMap(s => [{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }]),
+    ...change.removedSegments.flatMap(s => [{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }]),
+    ...(change.aiProposal?.after ?? change.aiProposal?.before ?? []),
+  ];
+  return points.reduce((best, p) => p.x > best.x || (p.x === best.x && p.y < best.y) ? p : best, points[0] ?? { x: x + width, y });
+}
+
+/** Wrap every word instead of truncating descriptions or hiding annotation content. */
+function noteLines(text: string, limit: number): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (line && line.length + word.length + 1 > limit) { lines.push(line); line = ''; }
+    line += (line ? ' ' : '') + word;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+let noteMeasureContext: CanvasRenderingContext2D | null | undefined;
+function noteTextWidth(text: string, size: number, bold = false): number {
+  noteMeasureContext ??= document.createElement('canvas').getContext('2d');
+  if (!noteMeasureContext) return text.length * size * 0.6;
+  noteMeasureContext.font = `${bold ? '700' : '400'} ${size}px system-ui, sans-serif`;
+  return noteMeasureContext.measureText(text).width;
+}
+
+function ChangeNote({ change, type, lines, at, tip, width, height, number, selected, expanded, zoom, rtl, onToggle }: {
+  change: RevisionChange; type: string; lines: string[]; at: Point; tip: Point;
+  width: number; height: number; number: number; selected: boolean; expanded: boolean; zoom: number; rtl: boolean;
+  onToggle?: () => void;
+}) {
+  const colors = useRevisionColors();
+  const t = useT();
+  const before = change.walls.some(w => w.side === 'removed') || change.doors.some(d => d.side === 'removed') || change.removedSegments.length > 0 || !!change.aiProposal?.before;
+  const after = change.walls.some(w => w.side === 'added') || change.doors.some(d => d.side === 'added') || change.addedSegments.length > 0 || !!change.aiProposal?.after;
+  const box = { x: at.x + 5 / zoom, y: at.y - 9 / zoom };
+  const center = { x: box.x + width / 2, y: box.y + height / 2 };
+  const dx = tip.x - center.x, dy = tip.y - center.y;
+  const edge = Math.min(width / (2 * Math.abs(dx || 1e-9)), height / (2 * Math.abs(dy || 1e-9)));
+  const start = { x: center.x + dx * edge, y: center.y + dy * edge };
+  const len = Math.hypot(tip.x - start.x, tip.y - start.y) || 1;
+  const ux = (tip.x - start.x) / len, uy = (tip.y - start.y) / len;
+  const head = Math.min(4 / zoom, len / 2);
+  const arrow = [
+    tip,
+    { x: tip.x - ux * head - uy * head * 0.5, y: tip.y - uy * head + ux * head * 0.5 },
+    { x: tip.x - ux * head + uy * head * 0.5, y: tip.y - uy * head - ux * head * 0.5 },
+  ];
+  const textX = rtl ? box.x + width - 6 / zoom : box.x + 6 / zoom;
+  const textDirection = { direction: rtl ? 'rtl' as const : 'ltr' as const, unicodeBidi: 'plaintext' as const };
+  const ink = '#1e293b';
+  return (
+    <g className="revision-change-note">
+      <line x1={start.x} y1={start.y} x2={tip.x - ux * head} y2={tip.y - uy * head}
+        stroke={ink} strokeWidth={(selected ? 1.2 : 1) / zoom} pointerEvents="none" />
+      <polygon points={arrow.map((p) => `${p.x},${p.y}`).join(' ')} fill={ink} pointerEvents="none" />
+    <g className="revision-change-balloon" pointerEvents={onToggle ? 'auto' : 'none'}
+      role={onToggle ? 'button' : undefined} tabIndex={onToggle ? 0 : undefined} aria-expanded={expanded} aria-label={`#${number} ${type}`}
+      onClick={e => { e.stopPropagation(); onToggle?.(); }}
+      onKeyDown={e => { if (onToggle && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.stopPropagation(); onToggle(); } }}
+      onMouseDown={onToggle ? e => { e.stopPropagation(); e.preventDefault(); } : undefined}
+      style={{ cursor: onToggle ? 'pointer' : undefined, outline: 'none', WebkitTapHighlightColor: 'transparent' }}>
+      <title>{type}</title>
+      <rect x={at.x + 5 / zoom} y={at.y - 9 / zoom} width={width} height={height}
+        rx={(expanded ? 3 : 10) / zoom} fill="#fff" fillOpacity={0.96} stroke="#64748b" strokeWidth={1 / zoom} />
+
+      {expanded ? <>
+      <text x={textX} y={at.y} direction={rtl ? 'rtl' : 'ltr'} textAnchor="start" style={textDirection}
+        fontSize={10.5 / zoom} fontWeight={700} fontFamily="system-ui, sans-serif" fill={ink} stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke" strokeLinejoin="round">
+        #{number} {type}
+      </text>
+      <text x={textX} y={at.y + 13 / zoom} direction={rtl ? 'rtl' : 'ltr'} textAnchor="start" style={textDirection}
+        fontSize={10 / zoom} fontFamily="system-ui, sans-serif" fill={ink} stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke" strokeLinejoin="round">
+        {lines.map((line, i) => <tspan key={i} x={textX} dy={i ? 12 / zoom : 0}>{line}</tspan>)}
+      </text>
+      <text x={textX} y={at.y + (15 + lines.length * 12) / zoom} direction={rtl ? 'rtl' : 'ltr'} textAnchor="start" style={textDirection}
+        fontSize={10 / zoom} fontWeight={700} fontFamily="system-ui, sans-serif" stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke">
+        {before && <tspan fill={colors.removed}>{t('revisionAi.before')}</tspan>}
+        {before && after && <tspan fill={ink}> · </tspan>}
+        {after && <tspan fill={colors.added}>{t('revisionAi.after')}</tspan>}
+      </text>
+      </> : <text x={at.x + 5 / zoom + width / 2} y={at.y + 2 / zoom} textAnchor="middle" dominantBaseline="central"
+        fontSize={11 / zoom} fontWeight={700} fontFamily="system-ui, sans-serif" fill={ink} direction="ltr">
+        #{number}
+      </text>}
+      </g>
+    </g>
+  );
+}
+
+function ChangeMarkers({ changes, strokeW, zoom, interactive, noteBounds, onSelectPortion }: { changes: RevisionChange[]; strokeW: number; zoom: number; interactive: boolean; noteBounds: { left: number; top: number; right: number; bottom: number }; onSelectPortion: (ref: { changeId: string; index: number; part: number } | null) => void }) {
+  const colors = useRevisionColors();
+  const t = useT();
+  const comparison = useCompareStore(s => s.comparison);
+  const currentPageKey = useCompareStore(s => s.currentPageKey);
+  const scale = compareScaleFor(comparison, currentPageKey);
+  const revision = comparison?.revisions.find(r => r.id === comparison.activeRevisionId);
+  const rtl = LANGUAGES[useLanguage()].dir === 'rtl';
+  // Note keys are built from the change type (all present in both dictionaries).
+  const note = t as unknown as (key: string) => string;
+  const selectedId = useRevisionUi((s) => s.selectedChangeId);
+  const selectChange = useRevisionUi((s) => s.selectChange);
+  const selectedWalls = useRevisionUi(s => s.selectedWallRegions);
+  const selectWallRegion = useRevisionUi(s => s.selectWallRegion);
+  const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
+  const analysis = { changes };
+  const numbers = new Map(analysis.changes.map((c, i) => [c.id, i + 1]));
+  // The review-list filter never hides annotations on the drawing.
+  const shown = analysis.changes;
+  const occupied: { x: number; y: number; width: number; height: number }[] = [];
+  const notes = new Map(shown.map(c => {
+    const key = changeNoteKey(c);
+    const type = key ? note(key) : t(`revisionAi.categories.${c.category}`);
+    const availableWidth = Math.max(90, (noteBounds.right - noteBounds.left) * zoom - 16);
+    const lineLimit = Math.max(12, Math.min(40, Math.floor((availableWidth - 16) / 6)));
+    const lines = noteLines(c.ai?.summary || type, lineLimit);
+    const number = numbers.get(c.id) ?? 0;
+    const expanded = expandedNoteId === c.id;
+    const width = (expanded
+      ? Math.min(availableWidth, Math.max(noteTextWidth(`#${number} ${type}`, 10.5, true), ...lines.map(line => noteTextWidth(line, 10)), noteTextWidth(`${t('revisionAi.before')} · ${t('revisionAi.after')}`, 10, true)) + 12)
+      : 32 + String(number).length * 6) / zoom;
+    const height = (expanded ? 30 + lines.length * 12 : 22) / zoom;
+    const tip = changeAnchor(c);
+    const gap = 12 / zoom;
+    const clamp = (p: Point) => ({
+      x: Math.max(noteBounds.left + gap, Math.min(p.x, noteBounds.right - width - gap)),
+      y: Math.max(noteBounds.top + gap, Math.min(p.y, noteBounds.bottom - height - gap)),
+    });
+    const candidates = [
+      { x: tip.x + gap, y: tip.y - height - gap },
+      { x: tip.x - width - gap, y: tip.y - height - gap },
+      { x: tip.x + gap, y: tip.y + gap },
+      { x: tip.x - width - gap, y: tip.y + gap },
+    ];
+    // Try the visible margins too, instead of pushing annotations below the viewport.
+    for (let y = noteBounds.top + gap; y + height <= noteBounds.bottom - gap; y += height + gap) {
+      candidates.push({ x: noteBounds.left + gap, y }, { x: noteBounds.right - width - gap, y });
+    }
+    const overlap = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) =>
+      Math.max(0, Math.min(a.x + a.width + gap, b.x + b.width) - Math.max(a.x - gap, b.x)) *
+      Math.max(0, Math.min(a.y + a.height + gap, b.y + b.height) - Math.max(a.y - gap, b.y));
+    const score = (p: Point) => {
+      const box = { ...p, width, height };
+      return occupied.reduce((sum, other) => sum + overlap(box, other), 0) * 1000
+        + shown.reduce((sum, other) => sum + overlap(box, other.bbox), 0) * 2
+        + Math.hypot(p.x - tip.x, p.y - tip.y);
+    };
+    const position = candidates.map(clamp).reduce((best, p) => score(p) < score(best) ? p : best);
+    occupied.push({ ...position, width, height });
+    const at = { x: position.x - 5 / zoom, y: position.y + 9 / zoom };
+    return [c.id, { type, lines, at, tip, width, height, number, expanded }] as const;
+  }));
+
+  const pick = (id: string) => (e: MouseEvent) => {
+    e.stopPropagation();
+    onSelectPortion(null);
+    selectChange(id);
+  };
+  const stop = (e: MouseEvent) => { if (e.button === 0) e.stopPropagation(); };
+
+  return (
+    <g className="revision-change-overlay">
+      {shown.map((c) => {
+        const color = colors[c.kind];
+        const isSelected = c.id === selectedId;
+        const openingDifference = isOpeningDifference(c);
+        const impact = openingDifference || c.doors.some(d => d.footprint) ? openingPortions(c, revision, scale.state === 'calibrated' ? scale.metersPerPixel : 0) : [];
+        const hit = interactive ? { onClick: pick(c.id), onMouseDown: stop, style: { pointerEvents: 'auto' as const, cursor: 'pointer' as const } } : {};
+        // Exact geometry owns selection; the location box is a fallback only.
+        const hasGeometry = c.walls.length || c.doors.length || c.addedSegments.length || c.removedSegments.length || c.aiProposal?.before || c.aiProposal?.after;
+        const areaHit = hasGeometry ? {} : hit;
+        // AI-located lines that were not verified in the drawing are drawn dashed: a location, not a measurement.
+        const segDash = (openingDifference && !openingImpactReady(c)) || (c.aiProposal && c.aiProposal.verification !== 'verified' && !c.edited) ? `${5 / zoom} ${4 / zoom}` : undefined;
+        return (
+          <g key={c.id} data-revision-change-id={c.id}>
+            {(impact.length ? [] : c.walls).map((w, i) => (
+              <polygon key={`w${i}`} points={w.footprint.map((p) => `${p.x},${p.y}`).join(' ')}
+                fill={w.side === 'added' ? colors.added : colors.removed} fillOpacity={selectedWalls.some(ref => ref.changeId === c.id && ref.index === i) ? 0.25 : isSelected ? 0.12 : 0.06} stroke={w.side === 'added' ? colors.added : colors.removed} strokeWidth={(isSelected || selectedWalls.some(ref => ref.changeId === c.id && ref.index === i) ? 2.2 : 1.6) / zoom} strokeDasharray={segDash ?? (w.placeholder ? `${5 / zoom} ${4 / zoom}` : undefined)} {...hit}
+                onClick={interactive ? e => { e.stopPropagation(); onSelectPortion(null); selectWallRegion(c.id, i, e.shiftKey || e.ctrlKey || e.metaKey); } : undefined} />
+            ))}
+            {(c.edited || c.walls.some(w => w.side === 'removed') || c.doors.some(d => d.side === 'removed') ? [] : c.removedSegments).map((s, i) => (
+              <line key={`r${i}`} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke={colors.removed} strokeWidth={(isSelected ? 2.2 : 1.6) / zoom} strokeLinecap="round" strokeDasharray={segDash} {...hit} />
+            ))}
+            {(c.edited || c.walls.some(w => w.side === 'added') || c.doors.some(d => d.side === 'added') ? [] : c.addedSegments).map((s, i) => (
+              <line key={`a${i}`} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke={colors.added} strokeWidth={(isSelected ? 2.2 : 1.6) / zoom} strokeLinecap="round" strokeDasharray={segDash} {...hit} />
+            ))}
+            {c.doors.map((d, i) => openingFootprint(d) ? <polygon key={`opening-${i}`}
+              points={openingFootprint(d)!.map(p => `${p.x},${p.y}`).join(' ')}
+              fill={d.side === 'added' ? colors.added : colors.removed} fillOpacity={isSelected ? 0.1 : 0.04}
+              stroke={d.side === 'added' ? colors.added : colors.removed} strokeWidth={(isSelected ? 2 : 1.4) / zoom}
+              strokeDasharray={d.geometryVerified === false || d.placeholder ? `${4 / zoom} ${4 / zoom}` : undefined} {...hit} /> : (
+              <g key={`d${i}`}>
+              <line x1={d.hinge.x} y1={d.hinge.y} x2={d.jamb.x} y2={d.jamb.y}
+                stroke="transparent" strokeWidth={12 / zoom} {...hit} />
+              <line x1={d.hinge.x} y1={d.hinge.y} x2={d.jamb.x} y2={d.jamb.y}
+                stroke={d.side === 'added' ? colors.added : colors.removed} strokeWidth={(isSelected ? 2.2 : 1.6) / zoom} strokeDasharray={segDash ?? (d.placeholder ? `${5 / zoom} ${4 / zoom}` : undefined)} strokeLinecap="round" {...hit} />
+              {!segDash && !d.placeholder && [d.hinge, d.jamb].map((p, endpoint) => <circle key={endpoint} cx={p.x} cy={p.y} r={2 / zoom}
+                fill={d.side === 'added' ? colors.added : colors.removed} pointerEvents="none" />)}
+              </g>
+            ))}
+            {!c.walls.length && !c.doors.length && c.aiProposal && (['before', 'after'] as const).map((side) => {
+              const line = c.aiProposal![side];
+              if (!c.edited && (side === 'before' ? c.removedSegments.length : c.addedSegments.length)) return null;
+              return line && <line key={side} x1={line[0].x} y1={line[0].y} x2={line[1].x} y2={line[1].y}
+                stroke={side === 'before' ? colors.removed : colors.added} strokeWidth={(isSelected ? 2.2 : 1.6) / zoom} strokeDasharray={segDash} {...hit} />;
+            })}
+            <rect x={c.bbox.x} y={c.bbox.y} width={c.bbox.width} height={c.bbox.height} rx={4 / zoom}
+              fill="transparent"
+              stroke={!c.walls.length && !c.doors.length && !c.aiProposal && !c.addedSegments.length && !c.removedSegments.length ? color : 'none'} strokeWidth={strokeW * 0.8} strokeDasharray={`${4 / zoom} ${4 / zoom}`} {...areaHit} />
+            {impact.map((portion, i) => <polygon key={`opening-impact-${i}`} points={portion.points.map(p => `${p.x},${p.y}`).join(' ')}
+              fill={portion.areaKind === 'construction' ? colors.added : colors.removed} fillOpacity={isSelected ? 0.2 : 0.12}
+              stroke={portion.areaKind === 'construction' ? colors.added : colors.removed} strokeWidth={(isSelected ? 2.2 : 1.8) / zoom} {...hit}
+              strokeDasharray={portion.preview && !portion.verified ? `${4 / zoom} ${4 / zoom}` : undefined}
+              onClick={interactive ? e => {
+                e.stopPropagation();
+                selectChange(c.id);
+                onSelectPortion(portion.preview ? null : { changeId: c.id, index: portion.element.index, part: portion.element.part });
+              } : undefined}>
+              <title>{portion.preview ? t(`areaKinds.${portion.areaKind}`) : `${t(`areaKinds.${portion.areaKind}`)} · ${portion.wallLengthM} ${t('units.m')} × ${portion.wallHeightM} ${t('units.m')} = ${portion.areaM2} ${t('units.m2')}`}</title>
+            </polygon>)}
+            <ChangeNote change={c} {...notes.get(c.id)!} selected={isSelected} zoom={zoom} rtl={rtl}
+              onToggle={interactive ? () => {
+                onSelectPortion(null);
+                selectChange(c.id);
+                setExpandedNoteId(id => id === c.id ? null : c.id);
+              } : undefined} />
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+const stopMouse = (e: MouseEvent) => e.stopPropagation();
+
+/** Wall footprints use the takeoff polygon editor: independent corners and whole-polygon moves.
+ * Openings retain their endpoint editor. Both use native page coordinates and the same edit burst. */
+function ChangeEditLayer({ change, zoom, screenToNative, selectedPortion }: { change: RevisionChange; zoom: number; screenToNative: (x: number, y: number) => Point; selectedPortion: { index: number; part: number } | null }) {
+  const colors = useRevisionColors();
+  const comparison = useCompareStore((s) => s.comparison);
+  const orthoSnap = useCompareStore((s) => s.orthoSnap);
+  const editRevisionChange = useCompareStore((s) => s.editRevisionChange);
+  const finishRevisionChangeEdit = useCompareStore((s) => s.finishRevisionChangeEdit);
+  const editSide = useRevisionUi((s) => s.editSide);
+  const scale = compareScaleFor(comparison, change.pageNumber);
+  const mpp = scale.state === 'calibrated' ? scale.metersPerPixel : 0;
+
+  const draft = !change.aiProposal && !change.walls.length && !change.doors.length ? retypeChange(change, editTypeOf(change), mpp) : change;
+  const dragCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => { dragCleanup.current?.(); }, [change.id]);
+
+  const revision = comparison?.revisions.find(r => r.id === comparison.activeRevisionId);
+  const portion = selectedPortion && openingPortions(change, revision, mpp).find(p =>
+    p.element.index === selectedPortion.index && p.element.part === selectedPortion.part);
+  const refs: EditElementRef[] = portion ? [portion.element] : [
+    ...draft.walls.map((_, index) => ({ list: 'walls' as const, index })),
+    ...draft.doors.flatMap((d, index) => openingFootprint(d) ? [{ list: 'doors' as const, index }] : []),
+  ];
+  const sideOf = (ref: EditElementRef) => (ref.list === 'walls' ? draft.walls[ref.index].side : draft.doors[ref.index].side);
+  const shown = refs.filter((ref) => editSide === 'both' || sideOf(ref) === editSide);
+
+  const beginDrag = (ref: EditElementRef, handle: 'a' | 'b' | 'move' | number) => (e: MouseEvent) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    if (ref.list === 'walls' && (e.shiftKey || e.ctrlKey || e.metaKey)) {
+      useRevisionUi.getState().selectWallRegion(change.id, ref.index, true);
+      return;
+    }
+    const line = elementLine(draft, ref);
+    if (!line) return;
+    dragCleanup.current?.();
+    const footprint = portion && ref.part != null ? portion.points : ref.list === 'walls' ? draft.walls[ref.index].footprint : openingFootprint(draft.doors[ref.index]);
+    const start = screenToNative(e.clientX, e.clientY);
+    const snapTargets = refs.filter((r) => r.list !== ref.list || r.index !== ref.index).flatMap((r) => elementLine(draft, r) ?? []);
+    const snapR = 8 / zoom;
+    const { pageNumber, id } = change;
+    let moved = false;
+    const move = (ev: globalThis.MouseEvent) => {
+      let p = screenToNative(ev.clientX, ev.clientY);
+      if (!moved && distancePx(start, p) * zoom < 2) return;
+      moved = true;
+      if (footprint) {
+        const points = handle === 'move'
+          ? translateArea(footprint, { x: p.x - start.x, y: p.y - start.y })
+          : typeof handle === 'number' ? reshapeArea(footprint, handle, p, ref.list === 'doors'
+            ? { polygon: draft.doors[ref.index].footprintShape === 'polygon' } : { polygon: true }) : null;
+        if (points && portion && ref.part != null) {
+          editRevisionChange(pageNumber, id, c => editOpeningImpactFootprint({ ...c, doors: draft.doors }, portion, points, handle === 'move'), true);
+          return;
+        }
+        if (points && ref.list === 'doors') {
+          editRevisionChange(pageNumber, id, c => setOpeningFootprint(c, ref.index, points), true);
+          return;
+        }
+        if (points) editRevisionChange(pageNumber, id, (c) => setWallFootprint(
+          !c.walls.length && !c.doors.length ? retypeChange(c, editTypeOf(c), mpp) : c, ref.index, points), true);
+        return;
+      }
+      let [a, b] = line;
+      if (handle === 'move') {
+        const dx = p.x - start.x;
+        const dy = p.y - start.y;
+        a = { x: a.x + dx, y: a.y + dy };
+        b = { x: b.x + dx, y: b.y + dy };
+      } else {
+        const fixed = handle === 'a' ? line[1] : line[0];
+        const near = snapTargets.find((q) => distancePx(q, p) <= snapR);
+        if (near) p = near;
+        else if (ev.shiftKey || orthoSnap) p = snapOrtho(fixed, p);
+        if (handle === 'a') a = p;
+        else b = p;
+      }
+      editRevisionChange(pageNumber, id, (c) => setElementLine(!c.walls.length && !c.doors.length ? retypeChange(c, editTypeOf(c), mpp) : c, ref, a, b), true);
+    };
+    const cleanup = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      window.removeEventListener(PLAN_NAVIGATION_CANCEL, cleanup);
+      dragCleanup.current = null;
+    };
+    const up = () => {
+      cleanup();
+      if (moved) finishRevisionChangeEdit();
+    };
+    dragCleanup.current = up;
+    window.addEventListener(PLAN_NAVIGATION_CANCEL, cleanup);
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  return (
+    <g className="revision-change-edit" data-plan-child-interaction="revision-edit">
+      {shown.map((ref) => {
+        const openingShape = ref.list === 'doors' && ref.part == null ? openingFootprint(draft.doors[ref.index]) : null;
+        if (openingShape) {
+          const color = colors[sideOf(ref)];
+          return <g key={`opening-${ref.index}`} onClick={stopMouse}>
+            <polygon points={openingShape.map(p => `${p.x},${p.y}`).join(' ')} fill="transparent" pointerEvents="all"
+              style={{ cursor: 'move' }} onMouseDown={beginDrag(ref, 'move')} />
+            {draft.doors[ref.index].footprintShape === 'polygon' && <AreaGeometryEdges points={openingShape} color={color} zoom={zoom}
+              onInsert={(index, event, midpoint) => {
+                if (event.button !== 0) return;
+                event.stopPropagation(); event.preventDefault();
+                const a = openingShape[index], b = openingShape[(index + 1) % openingShape.length];
+                const points = insertPolygonVertex(openingShape, index, midpoint ? { x: (a.x+b.x)/2, y: (a.y+b.y)/2 } : screenToNative(event.clientX, event.clientY));
+                if (points) editRevisionChange(change.pageNumber, change.id, c => setOpeningFootprint(c, ref.index, points));
+              }} />}
+            <AreaGeometryHandles points={openingShape} color={color} zoom={zoom} polygon={draft.doors[ref.index].footprintShape === 'polygon'}
+              onHandleMouseDown={(index, event) => {
+                if (event.altKey && draft.doors[ref.index].footprintShape === 'polygon') {
+                  event.stopPropagation(); event.preventDefault();
+                  const points = removePolygonVertex(openingShape, index);
+                  if (points) editRevisionChange(change.pageNumber, change.id, c => setOpeningFootprint(c, ref.index, points));
+                } else beginDrag(ref, index)(event);
+              }} />
+          </g>;
+        }
+        if (portion && ref.part != null) {
+          const color = portion.areaKind === 'construction' ? colors.added : colors.removed;
+          return <g key={`impact-${ref.index}-${ref.part}`} onClick={stopMouse}>
+            <polygon points={portion.points.map(p => `${p.x},${p.y}`).join(' ')}
+              fill="transparent" pointerEvents="all" style={{ cursor: 'move' }}
+              onMouseDown={beginDrag(ref, 'move')} />
+            <AreaGeometryHandles points={portion.points} color={color} zoom={zoom}
+              onHandleMouseDown={(index, event) => beginDrag(ref, index)(event)} />
+          </g>;
+        }
+        const [a, b] = elementLine(draft, ref)!;
+        const color = colors[sideOf(ref)];
+        const isWindow = ref.list === 'doors' && draft.doors[ref.index].opening === 'window';
+        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        const key = `${ref.list}${ref.index}`;
+        return (
+          <g key={key}>
+            {ref.list === 'walls' ? <polygon
+              points={draft.walls[ref.index].footprint.map((p) => `${p.x},${p.y}`).join(' ')}
+              fill="transparent" stroke={draft !== change ? color : 'none'} strokeWidth={1.5 / zoom}
+              strokeDasharray={draft !== change || draft.walls[ref.index].placeholder || (change.aiProposal && change.aiProposal.verification !== 'verified' && !change.edited) ? `${4 / zoom} ${4 / zoom}` : undefined}
+              style={{ pointerEvents: 'all', cursor: 'move' }} onMouseDown={beginDrag(ref, 'move')} onClick={stopMouse} /> : <>
+              <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={draft !== change ? color : 'none'} strokeWidth={1 / zoom} strokeLinecap="round"
+                strokeDasharray={draft !== change || isWindow || draft.doors[ref.index].placeholder ? `${5 / zoom} ${4 / zoom}` : undefined} />
+              <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={12 / zoom}
+                style={{ pointerEvents: 'stroke', cursor: 'move' }} onMouseDown={beginDrag(ref, 'move')} onClick={stopMouse} />
+            </>}
+            {mpp > 0 && (change.edited || change.walls.length > 0 || change.doors.length > 0) && (
+              <text x={mid.x + (sideOf(ref) === 'removed' ? -10 : 10) / zoom} y={mid.y - 8 / zoom} textAnchor={sideOf(ref) === 'removed' ? 'end' : 'start'} fontSize={10 / zoom} fontWeight={700} fill={color}
+                stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke" direction="ltr" style={{ pointerEvents: 'none' }}>
+                {round(distancePx(a, b) * mpp, 2)} m
+              </text>
+            )}
+            {ref.list === 'walls' ? <g onClick={stopMouse} data-revision-wall-handles={ref.index}>
+              <AreaGeometryEdges points={draft.walls[ref.index].footprint} color={color} zoom={zoom}
+                onInsert={(index, event, midpoint) => {
+                  if (event.button !== 0) return;
+                  event.stopPropagation();
+                  event.preventDefault();
+                  const footprint = draft.walls[ref.index].footprint;
+                  const a = footprint[index], b = footprint[(index + 1) % footprint.length];
+                  const points = insertPolygonVertex(footprint, index, midpoint ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : screenToNative(event.clientX, event.clientY));
+                  if (points) editRevisionChange(change.pageNumber, change.id, c => setWallFootprint(
+                    !c.walls.length && !c.doors.length ? retypeChange(c, editTypeOf(c), mpp) : c, ref.index, points));
+                }} />
+              <AreaGeometryHandles points={draft.walls[ref.index].footprint} color={color} zoom={zoom} polygon
+                onHandleMouseDown={(index, event) => {
+                  if (event.button !== 0) return;
+                  if (event.altKey) {
+                    event.stopPropagation();
+                    event.preventDefault();
+                    const points = removePolygonVertex(draft.walls[ref.index].footprint, index);
+                    if (points) editRevisionChange(change.pageNumber, change.id, c => setWallFootprint(c, ref.index, points));
+                  } else beginDrag(ref, index)(event);
+                }} />
+            </g> : <g onClick={stopMouse}>
+              <AreaGeometryHandles points={[a, b]} color={color} zoom={zoom} polygon
+                onHandleMouseDown={(index, event) => beginDrag(ref, index === 0 ? 'a' : 'b')(event)} />
+            </g>}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+/** Wall and opening drafts share rectangle/polygon tools and stay outside the document until complete. */
+function PlacingLayer({ pageKey, zoom, screenToNative }: {
+  pageKey: number; zoom: number; screenToNative: (x: number, y: number) => Point;
+}) {
+  const colors = useRevisionColors();
+  const t = useT();
+  const type = useRevisionUi((s) => s.placingType)!;
+  const target = useRevisionUi((s) => s.placingWall);
+  const mode = useRevisionUi((s) => s.openingDrawingMode);
+  const addManualRevisionChange = useCompareStore((s) => s.addManualRevisionChange);
+  const editRevisionChange = useCompareStore((s) => s.editRevisionChange);
+  const orthoSnap = useCompareStore((s) => s.orthoSnap);
+  const [points, setPoints] = useState<Point[]>([]);
+  const [footprints, setFootprints] = useState<Point[][]>([]);
+  const [shapes, setShapes] = useState<('rectangle' | 'polygon')[]>([]);
+  const [hover, setHover] = useState<Point | null>(null);
+  const [error, setError] = useState(false);
+  const wall = type.startsWith('wall');
+  const opening = familyOf(type) === 'opening';
+  const drawingFootprint = wall || opening;
+  const sides = target && !opening ? [target.side] : sidesOf(type);
+  const [openingSide, setOpeningSide] = useState(target?.side ?? sides[0]);
+  const side = openingSide;
+  const color = colors[side ?? 'added'];
+  const cancel = () => useRevisionUi.setState({ placingType: null, placingWall: null });
+  useEffect(() => { setPoints([]); setHover(null); setError(false); }, [mode]);
+
+  const nativePoint = (e: MouseEvent) => {
+    const point = screenToNative(e.clientX, e.clientY);
+    return points.length && !(drawingFootprint && mode === 'rectangle') && (e.shiftKey || orthoSnap)
+      ? snapOrtho(points[points.length - 1], point) : point;
+  };
+  const finish = (id: string | null) => {
+    if (!id) { setError(true); return; }
+    useRevisionUi.setState({ placingType: null, placingWall: null, editingChangeId: id, selectedChangeId: id, editSide: 'both' });
+  };
+  const complete = (outline: Point[]) => {
+    const drawnWall = wall ? wallFromFootprint(side, outline) : null;
+    const drawnOpening = opening ? openingFromFootprint(side, outline,
+      type.startsWith('window') ? 'window' : type.startsWith('door') ? 'door' : undefined, mode) : null;
+    if (!drawnWall && !drawnOpening) { setError(true); return; }
+    if (target) {
+      editRevisionChange(pageKey, target.changeId, c => {
+        if (drawnWall) return { ...c, walls: [...c.walls, drawnWall] };
+        if (!drawnOpening) return c;
+        const index = c.doors.findIndex(d => d.side === side);
+        return index >= 0 ? setOpeningFootprint({ ...c, doors: c.doors.map((d,i) => i === index ? { ...d, footprintShape: mode } : d) }, index, outline)
+          : { ...c, doors: [...c.doors, drawnOpening] };
+      });
+      finish(target.changeId);
+    } else {
+      const completed = [...footprints], completedShapes = [...shapes];
+      const index = sides.indexOf(side);
+      completed[index] = outline; completedShapes[index] = mode;
+      if (sides.every((_, i) => completed[i])) finish(addManualRevisionChange(pageKey, type, outline[0], completed, completedShapes));
+      else {
+        setFootprints(completed); setShapes(completedShapes); setPoints([]); setHover(null); setError(false);
+        setOpeningSide(sides.find((_, i) => !completed[i])!);
+      }
+    }
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); cancel(); }
+      else if (e.target instanceof Element && e.target.closest('[data-opening-drawing-controls]')) return;
+      else if (drawingFootprint && mode === 'polygon' && e.key === 'Enter') {
+        e.preventDefault(); e.stopImmediatePropagation(); complete(points);
+      } else if (drawingFootprint && (e.key === 'Backspace' || e.key === 'Delete')) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        setPoints(current => current.slice(0, -1)); setError(false);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [opening, drawingFootprint, mode, points, footprints, shapes, side, target, pageKey]);
+
+  const preview = drawingFootprint && mode === 'rectangle' && points.length && hover
+    ? rectanglePoints(points[0], hover) : [...points, ...(hover ? [hover] : [])];
+  useEffect(() => {
+    if (!drawingFootprint) return;
+    useRevisionUi.setState({ openingDrawing: {
+      side, sides, pointCount: points.length, error,
+      finish: () => complete(points),
+      back: () => { setPoints(current => current.slice(0, -1)); setError(false); },
+      selectSide: next => {
+        if (next === side || !sides.includes(next)) return;
+        setOpeningSide(next); setPoints([]); setHover(null); setError(false);
+      },
+    } });
+    return () => { useRevisionUi.setState({ openingDrawing: null }); };
+  }, [drawingFootprint, side, type, target, mode, points, footprints, shapes, error, pageKey]);
+  return <g className="revision-change-placing">
+    <rect x={-1e5} y={-1e5} width={2e5} height={2e5} fill="transparent" style={{ pointerEvents: 'all', cursor: 'crosshair' }}
+      onMouseDown={stopMouse} onMouseMove={e => setHover(nativePoint(e))}
+      onDoubleClick={e => { e.stopPropagation(); if (drawingFootprint && mode === 'polygon') complete(points); }}
+      onClick={e => {
+        e.stopPropagation();
+        const point = nativePoint(e);
+        if (!drawingFootprint) { finish(addManualRevisionChange(pageKey, type, point)); return; }
+        if (drawingFootprint && mode === 'rectangle') {
+          if (!points.length) { setPoints([point]); setError(false); }
+          else complete(rectanglePoints(points[0], point));
+          return;
+        }
+        if (drawingFootprint && closesPolygon(points, screenToNative(e.clientX, e.clientY), zoom)) { complete(points); return; }
+        if (points.some(p => distancePx(p, point) * zoom < 2)) return;
+        const next = [...points, point];
+        setPoints(next); setError(false);
+      }} />
+    <g pointerEvents="none">
+      {footprints.map((footprint, index) => footprint && <polygon key={index} points={footprint.map(p => `${p.x},${p.y}`).join(' ')}
+        fill={colors[sides[index]]} fillOpacity={0.06} stroke={colors[sides[index]]} strokeWidth={1 / zoom} />)}
+      {drawingFootprint && points.length > 0 && <polygon points={preview.map(p => `${p.x},${p.y}`).join(' ')}
+        fill={color} fillOpacity={0.08} stroke={color} strokeWidth={1 / zoom} strokeDasharray={`${4 / zoom} ${4 / zoom}`} />}
+      {points.map((p, index) => <circle key={index} cx={p.x} cy={p.y} r={5 / zoom} fill="#fff" stroke={color} strokeWidth={2 / zoom} />)}
+      {wall && hover && <text x={hover.x + 12 / zoom} y={hover.y - 12 / zoom} fontSize={12 / zoom} fill={color}
+        stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke">
+        {t('revisionAi.edit.drawWallStep', { side: t(side === 'removed' ? 'revisionAi.before' : 'revisionAi.after'), corner: points.length + 1 })}
+      </text>}
+    </g>
+
+  </g>;
+}

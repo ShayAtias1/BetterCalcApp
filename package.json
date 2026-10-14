@@ -28,6 +28,7 @@
     "idb": "^8.0.3",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.1.200",
+    "polygon-clipping": "^0.15.7",
     "posthog-js": "^1.434.17",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

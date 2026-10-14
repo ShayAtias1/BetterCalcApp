@@ -20,9 +20,9 @@ const manifest={preparationVersion:AI_PREPARATION_VERSION,renderer:'embedpdf-pdf
 import { result as result } from './fixtures/openings-synthetic.ts';
 const review=parseOpeningResult(result,manifest,'job');
 const job={task:'openings-v1',requestId:'openings-11111111-1111-1111-1111-111111111111',jobId:'job',planId:'plan',pageNumber:1,sourceHash:manifest.sourceHash,status:'COMPLETED',reviewKey:review.key,manifest,createdAt:1,updatedAt:1};
-test('v6 adds isolated stores; completed drafts/provenance and job persist in one transaction',async()=>{
+test('v7 keeps isolated stores; completed drafts/provenance and job persist in one transaction',async()=>{
  const rooms=structuredClone([...stores.get('aiJobs')]),roomReviews=structuredClone([...stores.get('aiReviews')]);
- await db.saveCompletedOpeningsAiJob(job,review);assert.equal(openedVersion,6);
+ await db.saveCompletedOpeningsAiJob(job,review);assert.equal(openedVersion,7);
  assert.deepEqual(transactions.at(-1),{names:['openingsAiJobs','openingsAiReviews'],mode:'readwrite'});
  assert.deepEqual(await db.loadOpeningsAiReview(review.key),review);assert.deepEqual(await db.listOpeningsAiJobs(),[job]);
  assert.deepEqual([...stores.get('aiJobs')],rooms);assert.deepEqual([...stores.get('aiReviews')],roomReviews);

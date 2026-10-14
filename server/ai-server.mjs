@@ -1,5 +1,7 @@
 import { validateOneClickSubmission, oneClickModelRequest, parseOneClickResponse } from './one-click-pipeline.mjs';
 import { validateOpeningsSubmission, openingsModelRequest, parseOpeningsModelResponse, openingsRequestDigest, openingsCostPreview, OPENINGS_RESERVATION_USD, estimateOpeningsCost } from './openings-pipeline.mjs';
+import { validateRevisionSubmission, revisionModelRequest, parseRevisionModelResponse, revisionRequestDigest, revisionCostPreview, REVISION_RESERVATION_USD, estimateRevisionCost,
+  validateRevisionPageSubmission, revisionPageModelRequest, parseRevisionPageModelResponse, revisionPageRequestDigest, revisionPageCostPreview, REVISION_PAGE_RESERVATION_USD } from './revision-pipeline.mjs';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
@@ -19,8 +21,20 @@ export function createAiService({env=process.env,fetchProvider=fetch,ledgerPath=
   let ledger=existsSync(ledgerPath)?JSON.parse(readFileSync(ledgerPath,'utf8')):[];
   if(!Array.isArray(ledger)||ledger.some(e=>!e.requestId||!Number.isFinite(e.charge)||e.charge<0))throw new Error('Invalid spending ledger; refusing paid requests.');
   function saveLedger(){writeFileSync(ledgerPath+'.tmp',JSON.stringify(ledger),{mode:0o600});renameSync(ledgerPath+'.tmp',ledgerPath);}
+  // Finished revision results are kept on disk next to the ledger: a paid answer must survive the
+  // in-memory job expiry and a restart of this service, or the client could only report it lost.
+  const resultDir=resolve(dirname(ledgerPath),'revision-results');
+  const resultPath=requestId=>/^revision-[a-f0-9-]{36}$/.test(requestId??'')?resolve(resultDir,`${requestId}.json`):null;
+  function saveRevisionResult(job){
+    const path=resultPath(job.requestId);if(!path||job.status==='PROCESSING')return;
+    try{mkdirSync(resultDir,{recursive:true,mode:0o700});writeFileSync(path+'.tmp',JSON.stringify(status(job)),{mode:0o600});renameSync(path+'.tmp',path);}catch{/* the ledger still records the admission; recovery reports it as unavailable */}
+  }
+  function loadRevisionResult(requestId){
+    const path=resultPath(requestId);if(!path||!existsSync(path))return null;
+    try{return JSON.parse(readFileSync(path,'utf8'));}catch{return null;}
+  }
   const jobs=new Map(),previews=new Map();let active=false;
-  function status(job){return {id:job.id,requestId:job.requestId,status:job.status,error:job.error,result:job.result,metrics:job.metrics,...(job.task==='openings-v1'?{task:job.task,requestDigest:job.requestDigest}: {})};}
+  function status(job){return {id:job.id,requestId:job.requestId,status:job.status,error:job.error,result:job.result,metrics:job.metrics,...(job.task==='openings-v1'||job.task?.startsWith('revision-')?{task:job.task,requestDigest:job.requestDigest}: {})};}
   async function run(job,body){
     const start=Date.now();let measured=null;
     try{
@@ -33,7 +47,7 @@ export function createAiService({env=process.env,fetchProvider=fetch,ledgerPath=
       try{raw=JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{if(response.ok)throw new Error('Provider returned invalid JSON.');}
       if(raw && typeof raw==='object'){
         const knownModel=!raw.model||raw.model===config.model||typeof raw.model==='string'&&raw.model.startsWith(config.model+'-');
-        measured=knownModel?(job.task==='openings-v1'?estimateOpeningsCost(raw):estimateCost(raw)):null;
+        measured=knownModel?(job.task==='openings-v1'?estimateOpeningsCost(raw):job.task?.startsWith('revision-')?estimateRevisionCost(raw):estimateCost(raw)):null;
         Object.assign(job.metrics,reportedAccounting(raw,measured));
       }
       if(!response.ok){
@@ -42,7 +56,7 @@ export function createAiService({env=process.env,fetchProvider=fetch,ledgerPath=
       }
       if(raw.service_tier && !['default','standard'].includes(raw.service_tier))throw new Error('Provider returned an unexpected service tier.');
       if(raw.model && raw.model!==config.model && !raw.model.startsWith(config.model+'-'))throw new Error('Provider returned an unexpected model.');
-      job.result=job.task==='openings-v1'?parseOpeningsModelResponse(raw):job.oneClick?parseOneClickResponse(raw):parseModelResponse(raw);job.status='COMPLETED';
+      job.result=job.task==='openings-v1'?parseOpeningsModelResponse(raw):job.task==='revision-v1'?parseRevisionModelResponse(raw):job.task==='revision-page-v1'?parseRevisionPageModelResponse(raw):job.oneClick?parseOneClickResponse(raw):parseModelResponse(raw);job.status='COMPLETED';
     }catch(error){
       job.status='FAILED';
       // Only our own fixed errors are sent to the client. Never provider bodies/headers/secrets.
@@ -55,6 +69,7 @@ export function createAiService({env=process.env,fetchProvider=fetch,ledgerPath=
       const expiry=setTimeout(()=>jobs.delete(job.id),3600_000);expiry.unref();
       const entry=ledger.find(e=>e.requestId===job.requestId);
       if(entry){entry.status=job.status;entry.metrics=job.metrics;if(measured!==null)entry.charge=measured;try{saveLedger();}catch{job.status='FAILED';job.metrics.status='FAILED';job.result=undefined;job.error='Spending ledger could not be saved. Restart and inspect the local service.';}}
+      if(job.task?.startsWith('revision-'))saveRevisionResult(job);
     }
   }
   const server=http.createServer(async(req,res)=>{
@@ -71,7 +86,7 @@ export function createAiService({env=process.env,fetchProvider=fetch,ledgerPath=
       const url=new URL(req.url,'http://localhost');
       // Expire only terminal job imagery-free outputs. Paid admission identities stay in the ledger.
       for(const [id,job] of jobs)if(job.status!=='PROCESSING'&&Date.now()-job.updatedAt>3600_000)jobs.delete(id);
-      if(req.method==='GET'&&url.pathname==='/ai/health')return reply(200,{configured:!!env.OPENAI_API_KEY,active,model:config.model,requestCap,spendCap,reservationUsd:COST_RESERVATION_USD,supportedTasks:['spaces','openings-v1']});
+      if(req.method==='GET'&&url.pathname==='/ai/health')return reply(200,{configured:!!env.OPENAI_API_KEY,active,model:config.model,requestCap,spendCap,reservationUsd:COST_RESERVATION_USD,supportedTasks:['spaces','openings-v1','revision-v1','revision-page-v1']});
       if(req.method==='GET'&&url.pathname==='/ai/opening-admissions'){
         const requestId=url.searchParams.get('requestId');
         if(!requestId?.startsWith('openings-'))return reply(400,{error:'Invalid openings request identity.'});
@@ -79,55 +94,70 @@ export function createAiService({env=process.env,fetchProvider=fetch,ledgerPath=
         return reply(200,{task:'openings-v1',requestId,admitted:!!entry,...(entry?{jobId:entry.jobId,status:entry.status,chargeUsd:entry.charge,metrics:entry.metrics}:{})});
       }
       const openingsRoute=url.pathname==='/ai/opening-jobs'||url.pathname.startsWith('/ai/opening-jobs/');
-      if(req.method==='GET'&&(url.pathname.startsWith('/ai/space-jobs')||openingsRoute)){
+      const revisionRoute=url.pathname==='/ai/revision-jobs';
+      const taskOf=entry=>entry.task??'spaces';
+      const routeTask=openingsRoute?'openings-v1':revisionRoute?'revision-v1':'spaces';
+      // Both revision tasks (region labels, full-plan analysis) share the revision routes.
+      const onRoute=entry=>revisionRoute?taskOf(entry).startsWith('revision-'):taskOf(entry)===routeTask;
+      if(req.method==='GET'&&(url.pathname.startsWith('/ai/space-jobs')||openingsRoute||revisionRoute)){
         const requestId=url.searchParams.get('requestId');
         const id=url.pathname.split('/')[3];
         const job=requestId?[...jobs.values()].find(j=>j.requestId===requestId):jobs.get(id);
-        if(job && (job.task==='openings-v1')===openingsRoute)return reply(200,status(job));
-        const entry=ledger.find(e=>(e.task==='openings-v1')===openingsRoute&&(requestId?e.requestId===requestId:e.jobId===id));
+        if(job && onRoute(job))return reply(200,status(job));
+        const entry=ledger.find(e=>onRoute(e)&&(requestId?e.requestId===requestId:e.jobId===id));
+        const kept=entry&&taskOf(entry).startsWith('revision-')?loadRevisionResult(entry.requestId):null;
+        if(kept)return reply(200,kept);
         if(entry)return reply(410,{error:'Job unavailable after a server restart or expiry. No inference was resubmitted.',metrics:entry.metrics});
         return reply(404,{error:'Job not found. No inference was resubmitted.'});
       }
       const openingPreview=url.pathname==='/ai/opening-previews';
-      if(req.method!=='POST'||(!openingsRoute&&!openingPreview&&url.pathname!=='/ai/space-jobs')|| (openingsRoute&&url.pathname!=='/ai/opening-jobs'))return reply(404,{error:'Unknown endpoint.'});
+      const revisionPreview=url.pathname==='/ai/revision-previews';
+      if(req.method!=='POST'||(!openingsRoute&&!openingPreview&&!revisionRoute&&!revisionPreview&&url.pathname!=='/ai/space-jobs')|| (openingsRoute&&url.pathname!=='/ai/opening-jobs'))return reply(404,{error:'Unknown endpoint.'});
       if(req.headers['content-type']!=='application/json')return reply(415,{error:'Expected application/json.'});
       if(Number(req.headers['content-length'])>MAX_BODY_BYTES)return reply(413,{error:'Image payload exceeds the input limit.'});
       let size=0;const chunks=[];
       for await(const chunk of req){size+=chunk.length;if(size>MAX_BODY_BYTES){reply(413,{error:'Image payload exceeds the input limit.'});req.resume();return;}chunks.push(chunk);}
       let body;try{body=JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{return reply(400,{error:'Invalid JSON request.'});}
       const openingTask=openingsRoute||openingPreview;
-      const allowed=openingTask?['task','requestId','manifest','images',...(openingPreview?[]:['consent'])]:['requestId','manifest','images'];
+      const revisionTask=revisionRoute||revisionPreview;
+      const consentTask=openingTask||revisionTask;
+      const previewRoute=openingPreview||revisionPreview;
+      let jobTask=openingsRoute?'openings-v1':revisionRoute?'revision-v1':null;
+      const allowed=consentTask?['task','requestId','manifest','images',...(previewRoute?[]:['consent'])]:['requestId','manifest','images'];
       if(Object.keys(body??{}).some(k=>!allowed.includes(k)))return reply(400,{error:'Unknown request fields; model and upstream are fixed.'});
-      const oneClick=body.manifest?.preparationVersion==='one-click-v1';
-      if(openingTask)validateOpeningsSubmission(body);else if(oneClick)validateOneClickSubmission(body);else validateSubmission(body);
-      if(!openingTask&&body.requestId.startsWith('openings-'))return reply(400,{error:'Openings request identities cannot be used for room jobs.'});
-      const digest=openingTask?openingsRequestDigest(body):undefined;
+      const oneClick=!consentTask&&body.manifest?.preparationVersion==='one-click-v1';
+      const revisionKind=revisionTask?(body?.task==='revision-page-v1'?'revision-page-v1':'revision-v1'):null;
+      if(revisionRoute)jobTask=revisionKind;
+      const pageAnalysis=revisionKind==='revision-page-v1';
+      if(openingTask)validateOpeningsSubmission(body);else if(revisionTask)(pageAnalysis?validateRevisionPageSubmission:validateRevisionSubmission)(body);else if(oneClick)validateOneClickSubmission(body);else validateSubmission(body);
+      if(!consentTask&&(body.requestId.startsWith('openings-')||body.requestId.startsWith('revision-')))return reply(400,{error:'Openings or revision request identities cannot be used for room jobs.'});
+      const digest=openingTask?openingsRequestDigest(body):revisionTask?(pageAnalysis?revisionPageRequestDigest(body):revisionRequestDigest(body)):undefined;
       for(const [id,p] of previews)if(p.expiresAt<Date.now())previews.delete(id);
-      if(openingPreview){
+      if(previewRoute){
         if(ledger.some(e=>e.requestId===body.requestId))return reply(410,{error:'Request already admitted; recover its job instead.'});
         if(previews.size>=100)return reply(429,{error:'Too many prepared previews.'});
-        const preview={task:'openings-v1',previewId:randomUUID(),requestId:body.requestId,requestDigest:digest,expiresAt:Date.now()+600_000,...openingsCostPreview(body)};
+        const preview={task:revisionPreview?revisionKind:'openings-v1',previewId:randomUUID(),requestId:body.requestId,requestDigest:digest,expiresAt:Date.now()+600_000,...(revisionPreview?(pageAnalysis?revisionPageCostPreview(body):revisionCostPreview(body)):openingsCostPreview(body))};
         previews.set(preview.previewId,preview);return reply(200,preview);
       }
       const previous=ledger.find(e=>e.requestId===body.requestId);
       if(previous){
-        if((previous.task==='openings-v1')!==openingsRoute||(openingsRoute&&previous.requestDigest!==digest))return reply(409,{error:'Request identity belongs to a different task or prepared payload.'});
+        if(taskOf(previous)!==(jobTask??'spaces')||(jobTask&&previous.requestDigest!==digest))return reply(409,{error:'Request identity belongs to a different task or prepared payload.'});
         const job=jobs.get(previous.jobId);return job?reply(200,status(job)):reply(410,{error:'This paid submission was already admitted. It will not be rerun.'});
       }
       let consentPreview;
-      if(openingsRoute){
+      if(jobTask){
         const consent=body.consent;consentPreview=previews.get(consent?.previewId);
-        if(!consentPreview||consent?.approved!==true||consent.requestDigest!==digest||consentPreview.requestDigest!==digest||consentPreview.requestId!==body.requestId||!Number.isFinite(consent.approvedAt)||consent.approvedAt> Date.now()+1000||consent.approvedAt<consentPreview.expiresAt-600_000)return reply(400,{error:'Explicit consent to the current prepared openings request and cost preview is required.'});
+        if(!consentPreview||consentPreview.task!==jobTask||consent?.approved!==true||consent.requestDigest!==digest||consentPreview.requestDigest!==digest||consentPreview.requestId!==body.requestId||!Number.isFinite(consent.approvedAt)||consent.approvedAt> Date.now()+1000||consent.approvedAt<consentPreview.expiresAt-600_000)return reply(400,{error:'Explicit consent to the current prepared request and cost preview is required.'});
       }
       if(!env.OPENAI_API_KEY || env.OPENAI_API_KEY==='YOUR_OPENAI_API_KEY')return reply(503,{error:'Set OPENAI_API_KEY in the local service environment.'});
       if(active)return reply(409,{error:'One AI inference is already running. Wait for it to finish.'});
       if(ledger.length>=requestCap)return reply(429,{error:'Local request cap reached.'});
-      const reservation=openingsRoute?OPENINGS_RESERVATION_USD:COST_RESERVATION_USD;
+      const reservation=openingsRoute?OPENINGS_RESERVATION_USD:revisionRoute?(pageAnalysis?REVISION_PAGE_RESERVATION_USD:REVISION_RESERVATION_USD):COST_RESERVATION_USD;
       if(ledger.reduce((sum,e)=>sum+e.charge,0)+reservation>spendCap)return reply(429,{error:'Local spending cap cannot reserve this request. Increase it explicitly if desired.'});
-      const job={id:randomUUID(),requestId:body.requestId,oneClick,...(openingsRoute?{task:'openings-v1',requestDigest:digest}:{}),status:'PROCESSING',createdAt:Date.now(),updatedAt:Date.now()};
-      const payload=openingsRoute?openingsModelRequest(body.images):oneClick?oneClickModelRequest(body.images,body.manifest):modelRequest(body.images);
-      job.metrics={...requestAccounting(payload,{requestId:job.requestId,detectionType:openingsRoute?'openings':'rooms',mode:openingsRoute?'openings-v1':oneClick?'one-click-v1':'full-page-v1',startedAt:job.createdAt,timeoutSeconds:config.timeoutSeconds,maxRetries:config.maxRetries}),status:job.status};
-      ledger.push({requestId:job.requestId,jobId:job.id,status:'PROCESSING',charge:reservation,reservationUsd:reservation,metrics:job.metrics,...(openingsRoute?{task:'openings-v1',requestDigest:digest,consent:{previewId:consentPreview.previewId,approvedAt:body.consent.approvedAt,estimatedCostUsd:consentPreview.estimatedCostUsd,reservationUsd:reservation}}:{})});
+      const job={id:randomUUID(),requestId:body.requestId,oneClick,...(jobTask?{task:jobTask,requestDigest:digest}:{}),status:'PROCESSING',createdAt:Date.now(),updatedAt:Date.now()};
+      const payload=openingsRoute?openingsModelRequest(body.images):revisionRoute?(pageAnalysis?revisionPageModelRequest(body.images,body.manifest):revisionModelRequest(body.images,body.manifest)):oneClick?oneClickModelRequest(body.images,body.manifest):modelRequest(body.images);
+      job.metrics={...requestAccounting(payload,{requestId:job.requestId,detectionType:openingsRoute?'openings':revisionRoute?'revision':'rooms',mode:openingsRoute?'openings-v1':revisionRoute?revisionKind:oneClick?'one-click-v1':'full-page-v1',startedAt:job.createdAt,timeoutSeconds:config.timeoutSeconds,maxRetries:config.maxRetries}),status:job.status};
+      ledger.push({requestId:job.requestId,jobId:job.id,status:'PROCESSING',charge:reservation,reservationUsd:reservation,metrics:job.metrics,...(jobTask?{task:jobTask,requestDigest:digest,consent:{previewId:consentPreview.previewId,approvedAt:body.consent.approvedAt,estimatedCostUsd:consentPreview.estimatedCostUsd,reservationUsd:reservation}}:{})});
       try{saveLedger();}catch{ledger.pop();return reply(503,{error:'Cannot write spending ledger; no inference submitted.'});}
       jobs.set(job.id,job);active=true;
       reply(202,status(job));

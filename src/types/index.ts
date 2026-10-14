@@ -3,6 +3,7 @@
 import { MEASUREMENT_DEFAULTS } from '../config/measurementDefaults';
 import type { ConcreteElement, RebarItem } from './structural';
 import type { PlanOpening } from './openings';
+import type { RevisionApplication } from './revisionAnalysis';
 export type { PlanOpening, PlanOpeningKind, NewPlanOpening, PlanOpeningPatch, LegacyOpeningRef } from './openings';
 
 export type TilingCategory = 'regular' | 'as';
@@ -254,6 +255,8 @@ export interface Plan {
   wallHeightDefaultM: number;
   /** Catalog entries this plan uses (see WorkCatalogSnapshot). Absent on plans that never used one. */
   workCatalog?: WorkCatalogSnapshot;
+  /** Ledger of revision changes applied to this plan from Revision Compare. Absent until the first one. */
+  revisionApplications?: RevisionApplication[];
 }
 
 export type ToolMode = 'select' | 'pan' | 'calibrate' | 'draw' | 'draw-rect' | 'measure' | 'export-region' | 'markup';
@@ -300,7 +303,7 @@ export interface ExportRegion {
 export type MeasureTool = 'distance' | 'area' | 'perimeter';
 
 /** How the user draws an area measurement: click a closed polygon, or drag a rectangle's two opposite corners. */
-export type AreaShape = 'polygon' | 'rectangle';
+export type AreaShape = 'polygon' | 'rectangle' | 'line';
 
 /** Area-measurement classification, used to tally demolition vs. new-construction quantities. */
 export type AreaKind = 'demolition' | 'construction';
@@ -344,6 +347,10 @@ export interface Measurement {
   wallLengthM?: number;
   /** For calcMode === 'wall': the wall height used for this specific measurement — starts from the project's default, editable per-measurement. */
   wallHeightM?: number;
+  /** For an item written by a revision application: the measured wall centre line (its length is the run). */
+  centerline?: Point[];
+  /** Provenance of an item written by a revision application (AI Revision Compare). */
+  revisionSource?: { comparisonId: string; revisionId: string; changeId: string; applicationId: string };
 }
 
 /** One row per room, matching the contractor-facing quantities report layout. */

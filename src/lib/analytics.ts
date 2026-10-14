@@ -560,7 +560,7 @@ export function noteAlignment(comparison: Comparison, pageKey: number, method: '
 }
 
 /** Only area measurements classified as demolition / new construction are "changes". */
-export function trackChangeMarked(comparisonId: string, measurement: CompareMeasurement, shape: 'polygon' | 'rectangle'): void {
+export function trackChangeMarked(comparisonId: string, measurement: CompareMeasurement, shape: 'polygon' | 'rectangle' | 'line'): void {
   safely(() => {
     if (measurement.tool !== 'area' || !measurement.areaKind) return;
     track('change_marked', {

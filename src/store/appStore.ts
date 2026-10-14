@@ -392,7 +392,7 @@ interface AppState {
    * Revision comparisons of the open project. Each is a Revision Compare `Comparison` document; the
    * Compare workspace and its store are unchanged — these only file it under the project.
    */
-  createComparison: (input: { name: string; apartmentNumber: string; original: File; revised: File[] }) => Promise<void>;
+  createComparison: (input: { name: string; apartmentNumber: string; original: File; revised: File[]; originalPlanId?: string }) => Promise<void>;
   openComparison: (comparisonId: string) => Promise<void>;
   renameComparison: (comparisonId: string, name: string) => Promise<void>;
   deleteComparison: (comparisonId: string) => Promise<void>;
@@ -923,14 +923,26 @@ export const useAppStore = create<AppState>((set, get) => ({
     await dbSavePlan({ ...plan, name, updatedAt: Date.now() });
     await get().refreshProjectPlans();
   },
-  createComparison: async ({ name, apartmentNumber, original, revised }) => {
+  createComparison: async ({ name, apartmentNumber, original, revised, originalPlanId }) => {
     const { currentProject } = get();
     if (!currentProject) return;
     // Same document and PDF layout the Compare start screen always created, plus its project.
     const comparison: Comparison = {
       ...createEmptyComparison(name, apartmentNumber, original.name, revised.map((f) => f.name)),
       projectId: currentProject.id,
+      ...(originalPlanId ? { linkedPlanId: originalPlanId } : {}),
     };
+    // Created from a takeoff plan: the original is that plan's own PDF, so its page calibrations
+    // apply unchanged (same native px) — measured in the original layer's space.
+    if (originalPlanId) {
+      const source = await loadPlan(originalPlanId);
+      for (const [key, page] of Object.entries(source?.pages ?? {})) {
+        const cal = page?.calibration;
+        if (!cal || !(cal.metersPerPixel > 0)) continue;
+        const pageNumber = Number(key);
+        comparison.pages[pageNumber] = { originalPageNumber: pageNumber, originalCalibration: { ...cal, space: 'original' }, revisions: {} };
+      }
+    }
     await saveComparePdfBlob(comparison.id, 'original', original);
     await Promise.all(comparison.revisions.map((rev, i) => saveComparePdfBlob(comparison.id, `revision:${rev.id}`, revised[i])));
     await dbSaveComparison(comparison);
@@ -1716,8 +1728,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ toolMode: t ? 'measure' : 'select', measureTool: t, measurePoints: [] });
     if (t) ensureOverlayVisible('measurements', get, set);
   },
-  setAreaShape: (s) => set({ areaShape: s, measurePoints: [] }),
-  setAreaCalcMode: (m) => set({ areaCalcMode: m, measurePoints: [] }),
+  setAreaShape: (s) => set({ areaShape: s, measurePoints: [], ...(s === 'line' ? { areaCalcMode: 'wall' } : {}) }),
+  setAreaCalcMode: (m) => set({ areaCalcMode: m, measurePoints: [], ...(m === 'footprint' && get().areaShape === 'line' ? { areaShape: 'polygon' } : {}) }),
   setPendingAreaKind: (k) => set({ pendingAreaKind: k }),
   setAreaKindColor: (kind, color) => {
     const { project } = get();

@@ -1,0 +1,148 @@
+/* AI Revision Compare — change detection tab. */
+.revision-tools, .revision-list { display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; }
+.revision-section { display: flex; flex-direction: column; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid var(--border, #e5e7eb); }
+.revision-section:last-child { border-bottom: none; }
+.revision-tools p, .revision-editor p { margin: 0; }
+.revision-section h4 { margin: 0; font-size: 13px; }
+.revision-section .field-label { font-size: 12px; font-weight: 600; }
+.revision-section select { width: 100%; }
+.revision-warning { position: static; display: flex; gap: 6px; align-items: flex-start; font-size: 12px; margin: 0; }
+.revision-progress { position: relative; height: 18px; background: var(--surface-2, #f1f5f9); border-radius: 4px; overflow: hidden; }
+.revision-progress-bar { position: absolute; inset-block: 0; inset-inline-start: 0; background: rgba(37, 99, 235, 0.18); transition: width 0.2s; }
+.revision-progress span { position: relative; padding-inline: 6px; line-height: 18px; }
+.revision-quality { display: flex; align-items: center; gap: 4px; padding-block: 2px; font-size: 12px; }
+.revision-quality > svg { flex: none; }
+.revision-quality.good { color: #15803d; }
+.revision-quality.fair { color: #92400e; }
+.revision-quality.poor { color: #b91c1c; }
+.revision-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.revision-card { border: 1px solid var(--border, #e5e7eb); border-inline-start: 4px solid #d97706; border-radius: 6px; padding: 8px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.revision-card.added { border-inline-start-color: var(--revision-after); }
+.revision-card.removed { border-inline-start-color: var(--revision-before); }
+.revision-card.selected { outline: 2px solid #0f172a; outline-offset: -1px; }
+.revision-card.rejected { opacity: 0.55; }
+.revision-card.applied { background: var(--surface-2, #f8fafc); }
+.revision-card-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.revision-num { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; border-radius: 10px; color: #fff; font-weight: 700; font-size: 11px; background: #d97706; }
+.revision-num.added { background: var(--revision-after); }
+.revision-num.removed { background: var(--revision-before); color: var(--text); }
+.revision-badge { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: #e2e8f0; }
+.revision-badge.high { background: #dbeafe; color: #1e3a8a; }
+.revision-badge.low { background: #f1f5f9; color: #64748b; }
+.revision-status { font-size: 11px; font-weight: 600; margin-inline-start: auto; }
+.revision-status.approved { color: #15803d; }
+.revision-status.rejected { color: #b91c1c; }
+.revision-status.applied { color: #0f172a; }
+.revision-fact { display: flex; align-items: center; gap: 4px; }
+.revision-ai { color: #4338ca; }
+.revision-evidence { display: flex; flex-wrap: wrap; gap: 4px; }
+.revision-evidence span { font-size: 10.5px; padding: 1px 5px; border-radius: 6px; background: #f1f5f9; color: #475569; }
+.revision-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.revision-history ul { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.revision-history li.reverted { opacity: 0.6; }
+.revision-history details ul { padding-inline-start: 12px; list-style: disc; }
+
+/* Context switch: two equal, compact segments instead of a full-width stretch. */
+.revision-section .segmented-tabs { align-self: flex-start; display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
+.revision-section .segmented-tabs > button { justify-content: center; }
+
+/* Change card internals: title block, aligned facts, and equal-width review actions. */
+.revision-card-head { flex-wrap: nowrap; align-items: flex-start; gap: 8px; }
+.revision-title { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; line-height: 1.3; overflow-wrap: anywhere; }
+.revision-title .muted { font-size: 11px; }
+.revision-flags { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.revision-flags .revision-status { margin-inline-start: 0; }
+.revision-facts { display: flex; flex-direction: column; gap: 3px; }
+.revision-facts:empty { display: none; }
+/* Card text runs in the UI direction (set on the card); AI and plan text inside is bidi-isolated. */
+.revision-fact { display: flex; align-items: flex-start; gap: 6px; line-height: 1.4; overflow-wrap: anywhere; text-align: start; }
+.revision-fact > svg { flex: none; margin-block-start: 3px; }
+.revision-fact > span { min-width: 0; }
+.revision-ai { line-height: 1.4; overflow-wrap: anywhere; text-align: start; }
+.revision-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-block-start: 2px; }
+.revision-actions > button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; width: 100%; white-space: nowrap; }
+
+/* Free local detection vs. the optional credit-based AI step. */
+.revision-free-note { display: flex; align-items: center; gap: 5px; margin: 0; color: #15803d; }
+.revision-ai-optional { display: flex; flex-direction: column; gap: 6px; padding-block-start: 8px; border-block-start: 1px dashed var(--border, #e5e7eb); }
+.revision-ai-optional > button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
+
+/* Before / after rows: a fixed label column keeps values aligned across rows and cards. */
+.revision-compare { display: flex; flex-direction: column; gap: 3px; }
+.revision-compare-row { display: flex; align-items: baseline; gap: 6px; line-height: 1.4; }
+.revision-compare-row > svg { flex: none; align-self: center; }
+.revision-compare-label { flex: none; min-width: 38px; font-weight: 600; color: #475569; }
+.revision-compare-row.removed .revision-compare-label { color: var(--revision-before); }
+.revision-compare-row.added .revision-compare-label { color: var(--revision-after); }
+.revision-compare-value { min-width: 0; overflow-wrap: anywhere; unicode-bidi: plaintext; font-variant-numeric: tabular-nums; }
+.revision-actions > button { border: 1px solid var(--border, #cbd5e1); }
+
+/* Compact cards: single header row, tight facts, actions right under the details. */
+.revision-card { padding: 6px 8px; gap: 4px; }
+.revision-card-head { align-items: center; gap: 6px; flex-wrap: nowrap; }
+/* The title keeps a readable width; long status badges wrap instead of squeezing it letter by letter. */
+.revision-title { flex: 1 1 auto; min-width: 7em; font-size: 12.5px; }
+.revision-flags { flex: 0 1 auto; flex-direction: row; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px; }
+.revision-facts { gap: 2px; }
+.revision-fact { line-height: 1.35; }
+.revision-actions { gap: 4px; margin-block-start: 2px; }
+.revision-actions > button { padding-block: 3px; }
+.revision-unverified { color: #b45309; }
+
+/* Manual correction of a change: classification, side filter, its lines, and adding missed changes. */
+.revision-badge.manual { background: #ede9fe; color: #5b21b6; }
+.revision-editor { display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px dashed var(--border, #cbd5e1); border-radius: 6px; background: var(--surface-2, #f8fafc); cursor: default; }
+.revision-editor .field-label { font-size: 12px; font-weight: 600; }
+.revision-editor select { width: 100%; }
+.revision-editor .segmented-tabs { align-self: flex-start; }
+.revision-edit-elements { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.revision-edit-elements li { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 5px; border-inline-start: 3px solid var(--revision-after); background: var(--bg-surface, #fff); }
+.revision-edit-elements li.removed { border-inline-start-color: var(--revision-before); }
+.revision-edit-side { flex: none; font-size: 11px; font-weight: 600; color: #475569; }
+.revision-edit-label { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; unicode-bidi: plaintext; }
+.revision-edit-height { flex: none; display: inline-flex; align-items: center; gap: 2px; font-size: 11px; }
+.revision-edit-height input { width: 56px; padding: 1px 4px; }
+.revision-add-missed { display: flex; flex-direction: column; gap: 4px; }
+.revision-add-row { display: flex; gap: 6px; }
+.revision-add-row select { flex: 1 1 auto; min-width: 0; }
+.revision-add-row button { flex: none; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+
+.revision-selection-detail { display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.revision-selection-detail > strong { font-size: 13px; }
+.revision-selection-detail .revision-editor { border-style: solid; padding: 6px; }
+.revision-quantity-preview { display: flex; flex-direction: column; gap: 3px; font-size: 12px; padding: 6px; border-radius: 6px; background: var(--surface-2, #f8fafc); }
+.revision-quantity-preview p { margin: 0; }
+.revision-legend { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 8px 0; font-size: 11px; color: var(--text-muted, #64748b); }
+.revision-legend .removed { color: var(--revision-before); }
+.revision-legend .added { color: var(--revision-after); }
+.revision-legend .removed::before, .revision-legend .added::before { content: ''; display: inline-block; width: 16px; border-top: 1px solid currentColor; margin-inline-end: 4px; vertical-align: middle; }
+.revision-card:focus-visible { outline: 2px solid var(--accent, #2563eb); }
+.revision-add-row { flex-wrap: wrap; }
+.revision-add-row select { flex-basis: 100%; }
+.revision-add-row button { width: 100%; justify-content: center; }
+
+/* Verification of AI-located geometry, as a compact chip in the card head. */
+.revision-verify { font-size: 11px; padding: 1px 6px; border-radius: 8px; white-space: nowrap; }
+.revision-verify.verified { background: #dcfce7; color: #166534; }
+.revision-verify.incomplete, .revision-verify.unverified { background: #fef3c7; color: #92400e; }
+.revision-verify.conflict { background: #fee2e2; color: #991b1b; }
+.revision-flags > svg { flex: none; color: var(--text-muted, #64748b); }
+/* Explanations on demand. */
+.revision-more { font-size: 11.5px; color: var(--text-muted, #64748b); }
+.revision-more > summary { cursor: pointer; width: fit-content; list-style-position: inside; }
+.revision-more[open] { display: flex; flex-direction: column; gap: 3px; }
+/* An approved change folded to one line. */
+.revision-card.collapsed { gap: 2px; padding-block: 4px; }
+.revision-summary > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Filter switch: compact, content-sized segments instead of a full-width stretch. */
+.revision-change-balloon:focus-visible { outline: none; }
+.revision-list > .segmented-tabs { align-self: flex-start; max-width: 100%; }
+.revision-list > .segmented-tabs > button { padding: 0 10px; }
+
+.revision-opening-drawing-controls { display: flex; flex-direction: column; gap: 5px; padding: 8px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-surface, #fff); color: var(--text); font: 12px system-ui, sans-serif; }
+.revision-opening-drawing-controls .tool-group, .revision-opening-drawing-controls p { margin: 0; }
+.revision-opening-drawing-controls .tool-label { font-size: 12px; }
+
+.revision-card.added:is(.selected, :focus-visible) { outline-color: var(--revision-after); }
+.revision-card.removed:is(.selected, :focus-visible) { outline-color: var(--revision-before); }

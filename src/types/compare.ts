@@ -1,5 +1,6 @@
 // Domain types for the Drawing Overlay & Revision Compare feature.
 import type { Point } from './index';
+import type { ComparisonContext, RevisionAnalysis } from './revisionAnalysis';
 
 /**
  * A page calibration in Revision Compare. Same shape as the takeoff side's `Calibration`, plus the
@@ -43,7 +44,7 @@ export const DEFAULT_AREA_KIND_COLORS: Record<AreaKind, string> = {
 };
 
 /** How the user draws an area measurement: click a closed polygon, or drag a rectangle's two opposite corners. */
-export type AreaShape = 'polygon' | 'rectangle';
+export type AreaShape = 'polygon' | 'rectangle' | 'line';
 
 /**
  * How an area measurement's square-meter value is derived: 'footprint' is the drawn shape's own
@@ -127,6 +128,15 @@ export interface Measurement {
   wallLengthM?: number;
   /** For calcMode === 'wall': the wall height used for this specific measurement — starts from the comparison's default, editable per-measurement. */
   wallHeightM?: number;
+  /**
+   * For a wall item created from a detected revision change: the measured centre line. When present
+   * its length (not the longest polygon edge) is the wall's run, so it can be recalculated exactly.
+   */
+  centerline?: Point[];
+  /** The detected revision change this item was created from, when approved in AI Revision Compare. */
+  revisionChangeId?: string;
+  /** Which line of that change the item measures — edits of the item are written back to it. */
+  revisionElement?: { list: 'walls' | 'doors'; index: number; part?: number };
 }
 
 /** Placeholder for future automatic change detection (out of scope for now). */
@@ -150,6 +160,13 @@ export interface RevisionLayer {
   /** Markups and measurements belong to this specific revision — they don't show up when a different revision is active. */
   markups: Markup[];
   measurements: Measurement[];
+  /**
+   * What this revision is compared against for change detection: undefined/null = the original,
+   * otherwise an earlier revision of this comparison (a sequential revision chain).
+   */
+  baseRevisionId?: string | null;
+  /** Locally detected (and optionally AI-classified) change proposals, per source page. */
+  analysis?: RevisionAnalysis;
 }
 
 /** Per-page data for one revision: its own page mapping, calibration and alignment against the original. */
@@ -197,4 +214,8 @@ export interface Comparison {
   /** Default wall height (meters) used to seed new 'wall' calc-mode area measurements; editable per-measurement afterward. Global to the comparison, fixed (not per-revision) for now. */
   wallHeightDefaultM: number;
   autoDetectedChanges?: DetectedChange[];
+  /** Design revision (quantity differences only) or during construction (demolition + construction). Absent = design. */
+  context?: ComparisonContext;
+  /** The takeoff plan approved changes are applied to. Optional: a comparison can stay standalone. */
+  linkedPlanId?: string;
 }

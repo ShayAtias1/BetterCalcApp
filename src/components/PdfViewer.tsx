@@ -62,8 +62,9 @@ import { concreteOf, rebarOf } from '../lib/structuralPlan';
 import { updateConcreteElement, updateRebarItem } from '../lib/structuralMutations';
 import type { DrawnStraightBar } from '../types/structural';
 import { hitStraightBar, translateBar } from '../lib/straightBarsGeometry';
-import { insertPolygonVertex, reshapeArea, translateArea, type AreaGeometryKind } from '../lib/areaGeometryEditing';
+import { closesPolygon, rectanglePoints, insertPolygonVertex, reshapeArea, translateArea, type AreaGeometryKind } from '../lib/areaGeometryEditing';
 import AreaGeometryHandles from './AreaGeometryHandles';
+import AreaGeometryEdges from './AreaGeometryEdges';
 import StirrupOverlay from './StirrupOverlay';
 import { CONCRETE_COLOR, REBAR_COLOR } from '../lib/structuralOverlay';
 import { useMeshLayoutView } from '../store/meshLayoutPreviewStore';
@@ -672,11 +673,11 @@ export default function PdfViewer() {
 
   // Auto-finish distance measurement once 2 points are placed.
   useEffect(() => {
-    if (!fieldDraft && measureTool === 'distance' && measurePoints.length === 2) {
+    if (!fieldDraft && (measureTool === 'distance' || (measureTool === 'area' && areaShape === 'line')) && measurePoints.length === 2) {
       finishOpenMeasurement();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [measurePoints, measureTool, fieldDraft]);
+  }, [measurePoints, measureTool, areaShape, fieldDraft]);
 
   // Auto-finish 2-point markup tools once both points are placed. Dimensions are excluded — they
   // stay open so more stops can be continued along the same line (AutoCAD DIMCONTINUE style).
@@ -1074,13 +1075,9 @@ export default function PdfViewer() {
     }
 
     if (toolMode === 'draw') {
-      if (drawingPoints.length >= 3) {
-        const first = drawingPoints[0];
-        const distScreen = Math.hypot(native.x - first.x, native.y - first.y) * zoom;
-        if (distScreen < 10) {
-          finishDrawing();
-          return;
-        }
+      if (closesPolygon(drawingPoints, native, zoom)) {
+        finishDrawing();
+        return;
       }
       addDrawingPoint(native);
       return;
@@ -1097,7 +1094,7 @@ export default function PdfViewer() {
     }
 
     if (toolMode === 'measure' && measureTool) {
-      if (measureTool === 'distance') {
+      if (measureTool === 'distance' || (measureTool === 'area' && areaShape === 'line')) {
         const point = orthoSnap && measurePoints.length > 0 ? snapOrtho(measurePoints[0], native) : native;
         addMeasurePoint(point);
         return;
@@ -1108,22 +1105,13 @@ export default function PdfViewer() {
           return;
         }
         const a = measurePoints[0];
-        finishOpenMeasurement([
-          { x: a.x, y: a.y },
-          { x: native.x, y: a.y },
-          { x: native.x, y: native.y },
-          { x: a.x, y: native.y },
-        ]);
+        finishOpenMeasurement(rectanglePoints(a, native));
         return;
       }
       const point = orthoSnap && measurePoints.length > 0 ? snapOrtho(measurePoints[measurePoints.length - 1], native) : native;
-      if (measurePoints.length >= 3) {
-        const first = measurePoints[0];
-        const distScreen = Math.hypot(point.x - first.x, point.y - first.y) * zoom;
-        if (distScreen < 10) {
-          finishOpenMeasurement();
-          return;
-        }
+      if (closesPolygon(measurePoints, point, zoom)) {
+        finishOpenMeasurement();
+        return;
       }
       addMeasurePoint(point);
       return;
@@ -1358,21 +1346,9 @@ export default function PdfViewer() {
             {selectedArea && selectedArea.points.length >= 3 && <g>
               <polygon points={selectedArea.points.map((point) => `${point.x},${point.y}`).join(' ')} fill="transparent"
                 pointerEvents={selectedArea.kind === 'suggestion' ? "none" : "all"} style={{ cursor: structuralDrag.current ? 'grabbing' : 'grab' }} />
-              {!touchInput && !reviewOnly && (selectedArea.kind === 'room' || selectedArea.kind === 'suggestion') && selectedArea.points.map((a, index) => {
-                const b = selectedArea.points[(index + 1) % selectedArea.points.length];
-                return <line key={`polygon-edge-${index}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                  stroke="transparent" strokeWidth={12 / zoom} pointerEvents="stroke" data-polygon-edge={index} style={{ cursor: 'copy' }} />;
-              })}
+              {!touchInput && !reviewOnly && (selectedArea.kind === 'room' || selectedArea.kind === 'suggestion') &&
+                <AreaGeometryEdges points={selectedArea.points} color={selectedArea.color} zoom={zoom} />}
               <AreaGeometryHandles points={selectedArea.points} color={selectedArea.color} zoom={zoom} touch={touchInput} polygon={selectedArea.kind === 'suggestion'} />
-              {!touchInput && !reviewOnly && (selectedArea.kind === 'room' || selectedArea.kind === 'suggestion') && selectedArea.points.map((a, index) => {
-                const b = selectedArea.points[(index + 1) % selectedArea.points.length];
-                const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
-                return <g key={`edge-${index}`}>
-                  <circle cx={x} cy={y} r={5 / zoom} fill="#fff" stroke={selectedArea.color} strokeWidth={1.5 / zoom}
-                    pointerEvents="all" data-suggestion-edge={index} style={{ cursor: 'copy' }}><title>Add vertex on edge</title></circle>
-                  <text x={x} y={y} textAnchor="middle" dominantBaseline="central" fontSize={10 / zoom} fill={selectedArea.color} pointerEvents="none">+</text>
-                </g>;
-              })}
             </g>}
             {/* In-progress polygon drawing */}
             {toolMode === 'draw' && drawingPoints.length > 0 && (
@@ -1461,7 +1437,7 @@ export default function PdfViewer() {
                   const color = m.areaKind ? (project.areaKindColors ?? DEFAULT_AREA_KIND_COLORS)[m.areaKind] : '#0ea5e9';
                   const vertexDotR = 3 / zoom;
                   const tickLen = 14 / zoom;
-                  const isDistance = m.tool === 'distance';
+                  const isDistance = m.tool === 'distance' || (m.tool === 'area' && m.points.length === 2);
                   const isWall = m.tool === 'area' && m.calcMode === 'wall';
                   let labelX: number;
                   let labelY: number;

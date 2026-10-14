@@ -36,6 +36,11 @@ export class PdfPlanSource implements PlanPageSource {
     this.page = page;
   }
 
+  /** The underlying pdf.js page, for analyses that read drawing operators (revision change detection). */
+  get pdfPage(): PDFPageProxy {
+    return this.page;
+  }
+
   getNativeSize() {
     const vp = this.page.getViewport({ scale: 1 });
     return { width: vp.width, height: vp.height };

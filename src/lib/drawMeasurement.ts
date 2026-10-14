@@ -37,7 +37,7 @@ export function drawMeasurementOnCanvas(
   const tx = (x: number) => (x - offsetX) * mult;
   const ty = (y: number) => (y - offsetY) * mult;
   const pts = m.points.map((p) => ({ x: tx(p.x), y: ty(p.y) }));
-  const isDistance = m.tool === 'distance';
+  const isDistance = m.tool === 'distance' || (m.tool === 'area' && m.points.length === 2);
   const isKindArea = m.tool === 'area' && !!m.areaKind;
   const isWall = m.tool === 'area' && m.calcMode === 'wall';
   const strokeW = 2 * mult;

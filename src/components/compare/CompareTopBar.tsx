@@ -1,6 +1,8 @@
 import { CompareHeaderCalibration } from './CompareContextBar';
 import { useEffect, useState } from 'react';
-import { selectCompareSaveState, useCompareStore } from '../../store/compareStore';
+import { compareScaleFor, selectCompareSaveState, useCompareStore } from '../../store/compareStore';
+import GridMenuSection from '../GridMenuSection';
+import { useRevisionUi } from '../../lib/revision/revisionWorkflow';
 import { useAppStore } from '../../store/appStore';
 import TopBarMenu, { type MenuId } from '../TopBarMenu';
 import Icon, { type IconName } from '../Icon';
@@ -12,9 +14,11 @@ import { useT } from '../../i18n';
 export default function CompareTopBar({
   onExport,
   exporting,
+  onDetectChanges,
 }: {
   onExport: (revisionScope: 'active' | 'all', pageScope: 'current' | 'all') => void;
   exporting: boolean;
+  onDetectChanges: () => void;
 }) {
   const t = useT();
   const comparison = useCompareStore((s) => s.comparison);
@@ -36,6 +40,7 @@ export default function CompareTopBar({
   const toggleAnnotationsVisible = useCompareStore((s) => s.toggleAnnotationsVisible);
   const measurementsVisible = useCompareStore((s) => s.measurementsVisible);
   const toggleMeasurementsVisible = useCompareStore((s) => s.toggleMeasurementsVisible);
+  const changeNotesVisible = useRevisionUi((s) => s.labelsVisible);
   const canUndo = useCompareStore((s) => s.history.length > 0);
   const canRedo = useCompareStore((s) => s.future.length > 0);
   const undo = useCompareStore((s) => s.undo);
@@ -205,7 +210,7 @@ export default function CompareTopBar({
           caret="none"
           title={t('compare.topBar.viewHint')}
           highlighted={!annotationsVisible || !measurementsVisible}
-          desktopMaxWidth={200}
+          desktopMaxWidth={280}
         >
           <button className="menu-item" onClick={toggleAnnotationsVisible}>
             <span className="menu-check">{annotationsVisible && <Icon name="check" size={13} />}</span>
@@ -215,8 +220,23 @@ export default function CompareTopBar({
             <span className="menu-check">{measurementsVisible && <Icon name="check" size={13} />}</span>
             {t('topBar.measurements')}
           </button>
+          <button className="menu-item" onClick={() => useRevisionUi.setState({ labelsVisible: !changeNotesVisible })}>
+            <span className="menu-check">{changeNotesVisible && <Icon name="check" size={13} />}</span>
+            {t('revisionAi.labelsToggle')}
+          </button>
           <p className="menu-hint">{t('compare.topBar.viewNote')}</p>
+          <GridMenuSection calibrated={compareScaleFor(comparison, currentPageKey).state === 'calibrated'} />
         </TopBarMenu>
+
+        <button
+          type="button"
+          className="top-bar-ai-btn"
+          onClick={onDetectChanges}
+          disabled={comparison.revisions.length === 0}
+          title={t('revisionAi.intro')}
+        >
+          {t('revisionAi.topBarButton')}
+        </button>
 
         <LanguageSwitch />
 
@@ -290,8 +310,6 @@ export default function CompareTopBar({
               : t('compare.topBar.noRegionNote')}
           </p>
         </TopBarMenu>
-        {/* Leaving the comparison saves it first, as the breadcrumb does. */}
-        <button className="btn-ghost small compare-exit-btn" onClick={close} title={t('compare.topBar.exitHint')}>{t('compare.topBar.exit')}</button>
       </div>
     </div>
   );

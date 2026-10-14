@@ -9,7 +9,7 @@ export function useMeasureHint(): string | null {
   const areaShape = useAppStore((s) => s.areaShape);
   const measurePoints = useAppStore((s) => s.measurePoints);
   if (toolMode !== 'measure' || !measureTool) return null;
-  return measureTool === 'distance'
+  return measureTool === 'distance' || (measureTool === 'area' && areaShape === 'line')
     ? t('measure.hintDistance')
     : measureTool === 'area' && areaShape === 'rectangle'
       ? t('measure.hintRectangle')

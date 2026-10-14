@@ -1,0 +1,30 @@
+Compare two revisions of the same architectural floor plan and report the meaningful architectural changes between them. Analyze visible source geometry only. No local detections, regions of interest, vectors or annotations are supplied: inspect every part of both drawings yourself.
+
+Both revisions have been aligned and rendered into the SAME pixel frame, so a point means the same physical location in BEFORE and AFTER images. There are exactly ten named images:
+- BEFORE_PAGE and AFTER_PAGE: the full sheets, reduced, for global context ONLY.
+- BEFORE_TILE_A / AFTER_TILE_A (top-left), BEFORE_TILE_B / AFTER_TILE_B (top-right), BEFORE_TILE_C / AFTER_TILE_C (bottom-left), BEFORE_TILE_D / AFTER_TILE_D (bottom-right): deterministic overlapping crops at full detail. A BEFORE tile and the AFTER tile with the same letter cover exactly the same area.
+Search all four tile pairs systematically and return each physical change once. Choose the tile letter containing the complete change and its surrounding walls. All coordinates MUST be normalized to that geometryTile: origin top-left, x right, y down, both in [0,1]. Never use the PAGE images as the coordinate frame. Never compensate for an assumed resize or rotation.
+
+Report only these change types:
+- wall-added, wall-removed, wall-relocated (the same wall moved to a new position; report it once, with both positions),
+- door-added, door-removed, window-added, window-removed, opening-modified (an opening resized, moved along its wall or changed type),
+- room-boundary-changed (a room boundary changed in a way not captured by one wall or opening change, e.g. a partition opening up two rooms).
+Do NOT report: text, room names, area labels, dimension lines or values, grid lines, title block or revision table changes, furniture, sanitary or kitchen fixtures, hatch or fill pattern changes, line weight or colour differences, misregistration or small offsets of otherwise identical geometry, structural or MEP symbols. Dimension values may be read as supporting evidence only.
+
+Geometry, in the geometryTile frame:
+- For a wall, before/after is the wall centre line: a = one end, b = the other end of the wall run that changed. Use null for the side where the wall does not exist (before = null for wall-added, after = null for wall-removed; both present for wall-relocated).
+- For EVERY door, window and opening-modified change, return beforeOpening and afterOpening as actual rectangular opening footprints. corners contains exactly four observed jamb/wall-face intersections, in cyclic order: corner 0 to corner 1 spans the opening width along one wall face; corner 2 to corner 3 spans the opposite face. The short edges 3→0 and 1→2 are the jamb returns across the actual wall thickness. Do not use the swing arc, leaf tip, a bounding box, a default wall thickness, or the entire wall as the footprint.
+- For an opening that moved or resized, supply BOTH observed footprints, each in its own BEFORE/AFTER image but the same aligned tile coordinate frame. For an added opening beforeOpening is null; for a removed opening afterOpening is null. For wall/room changes BOTH opening fields are null.
+- An opening object also reports kind (door/window/unknown), heightM and sillHeightM. Supply metric dimensions ONLY if explicitly readable in the plan; otherwise use null. Never use standard/default heights, sill heights or thicknesses.
+- before/after remain the observed opening jamb midpoints for backward-compatible location evidence. Do not substitute those lines for available corners. If an opening corner or wall face cannot be established, use null for that side's opening footprint, set requiresReview true, and state exactly what is missing. Never complete missing corners by guess.
+- For room-boundary-changed, use before/after for the boundary segment that changed when identifiable, otherwise null.
+- bbox tightly bounds the change in both revisions together.
+Do not snap, repair, extend or invent geometry. If an end is not visible in the chosen tile, still report the change with requiresReview true and the visible extent only.
+
+changeId must be unique (change-001, change-002, ...). confidence is your uncalibrated evidence score in [0,1]. requiresReview must be true when the classification, the extent or the before/after correspondence is uncertain. summary is one short Hebrew sentence for a contractor, e.g. "קיר בין חדר שינה 1 לחדר שינה 2 הוזז". evidence briefly names the visible support (wall hatching, jamb returns, swing arc, dimension change). Return an empty changes array only if no meaningful change is visible, with an explicit coverage note. coverageNotes describe areas not reliably compared. Return only JSON matching the schema.
+
+Wall continuity:
+- Identify walls by their paired architectural faces, thickness, hatching and jamb returns. Dimension extension lines, dimension baselines, ticks, arrowheads and labels are annotations, not wall boundaries or wall ends.
+- Follow both faces of each straight wall run through crossing dimension annotations. A continuous wall with the same change type is one physical change; do not split it at a dimension line, tick, arrow or label, or report it again from another overlapping tile.
+- Join adjacent wall segments only when the observed geometry confirms the same collinear wall faces, thickness and continuous extent, with the same BEFORE/AFTER change type. Proximity or a shared dimension label is not evidence of continuity.
+- Never join across an actual opening or jamb gap, a corner, structural break, thickness change, or a different change type. If annotation obscures the boundary and continuity cannot be established, require review rather than extending or inventing a wall.

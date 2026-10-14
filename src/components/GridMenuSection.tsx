@@ -6,8 +6,11 @@ import { GRID_PRESETS_M, MAX_GRID_OPACITY, MIN_GRID_OPACITY, isPresetSpacing, pa
 import Icon from './Icon';
 import { useT } from '../i18n';
 
-/** The grid controls inside the View menu: on/off, spacing (presets or custom) and line strength. */
-export default function GridMenuSection() {
+/**
+ * The grid controls inside the View menu: on/off, spacing (presets or custom) and line strength.
+ * `calibrated` is passed by viewers other than the takeoff one (Revision Compare), which own their scale.
+ */
+export default function GridMenuSection({ calibrated: calibratedOverride }: { calibrated?: boolean } = {}) {
   const t = useT();
   const project = useAppStore((s) => s.project);
   const currentPage = useAppStore((s) => s.currentPage);
@@ -17,7 +20,7 @@ export default function GridMenuSection() {
   // The field is free text while typing; it follows the saved value only when that changes elsewhere.
   useEffect(() => setCustomText(String(spacingM)), [spacingM]);
 
-  const calibrated = !!project && isPageCalibrated(project, currentPage);
+  const calibrated = calibratedOverride ?? (!!project && isPageCalibrated(project, currentPage));
   const customInvalid = customMode && parseGridSpacing(customText) === null;
 
   return (

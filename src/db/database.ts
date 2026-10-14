@@ -8,12 +8,15 @@ import { notifyPdfBlobChanged } from '../lib/pdfBlobEvents';
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { v4 as uuid } from 'uuid';
 import type { Plan, Project } from '../types';
+import type { PlanVersion } from '../types/revisionAnalysis';
 import { DEFAULT_AREA_KIND_COLORS, IDENTITY_TRANSFORM } from '../types/compare';
 import type { Comparison, ComparisonPage, RevisionLayer } from '../types/compare';
 import { migrateComparePageOwnership } from '../lib/compareMigration';
 import { withMeasurementValues } from '../lib/measurementValues';
 
 interface QtoDB extends DBSchema {
+  /** v7: plan snapshots taken before revision changes are applied (AI Revision Compare). */
+  planVersions: { key:string; value:PlanVersion };
   openingsAiJobs: { key:string; value:OpeningsJob };
   openingsAiReviews: { key:string; value:AiOpeningReview };
   aiBatches: { key:string; value:AiBatch };
@@ -47,7 +50,7 @@ interface QtoDB extends DBSchema {
 }
 
 const DB_NAME = 'bettercalc-qto';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 let dbPromise: Promise<IDBPDatabase<QtoDB>> | null = null;
 
@@ -55,6 +58,7 @@ function getDb(): Promise<IDBPDatabase<QtoDB>> {
   if (!dbPromise) {
     dbPromise = openDB<QtoDB>(DB_NAME, DB_VERSION, {
       upgrade(db) {
+        if (!db.objectStoreNames.contains('planVersions')) db.createObjectStore('planVersions', {keyPath:'id'});
         if (!db.objectStoreNames.contains('openingsAiJobs')) db.createObjectStore('openingsAiJobs', {keyPath:'requestId'});
         if (!db.objectStoreNames.contains('openingsAiReviews')) db.createObjectStore('openingsAiReviews', {keyPath:'key'});
         if (!db.objectStoreNames.contains('aiBatches')) db.createObjectStore('aiBatches', {keyPath:'id'});
@@ -110,6 +114,22 @@ export async function savePdfBlob(planId: string, blob: Blob): Promise<void> {
   const db = await getDb();
   await db.put('pdfFiles', blob, planId);
   notifyPdfBlobChanged(`plan:${planId}`);
+}
+
+/**
+ * Saves a plan together with a snapshot of a previous state in one transaction — a revision
+ * application (or revert) can never be half-written.
+ */
+export async function savePlanWithVersion(plan: Plan, version: PlanVersion): Promise<void> {
+  const db = await getDb();
+  const tx = db.transaction(['projects', 'planVersions'], 'readwrite');
+  await tx.objectStore('planVersions').put(version);
+  await tx.objectStore('projects').put(plan);
+  await tx.done;
+}
+
+export async function loadPlanVersion(id: string): Promise<PlanVersion | undefined> {
+  return (await getDb()).get('planVersions', id);
 }
 
 export async function loadPdfBlob(planId: string): Promise<Blob | undefined> {

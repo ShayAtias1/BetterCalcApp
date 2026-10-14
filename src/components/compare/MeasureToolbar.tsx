@@ -1,6 +1,7 @@
+import AreaShapePicker from '../AreaShapePicker';
 import { useEffect } from 'react';
-import { compareScaleFor, useCompareStore } from '../../store/compareStore';
-import type { AreaCalcMode, AreaKind, AreaShape, MeasureTool } from '../../types/compare';
+import { compareScaleFor, itemEditable, useCompareStore } from '../../store/compareStore';
+import type { AreaCalcMode, AreaKind, MeasureTool } from '../../types/compare';
 import { round } from '../../lib/geometry';
 import { measurementLabel } from '../../lib/measurementValues';
 import { changeMeasurements, isChangeMeasurement } from '../../lib/changeMeasurements';
@@ -12,10 +13,6 @@ const MEASURE_TOOLS: MeasureTool[] = ['distance', 'area', 'perimeter'];
 const MEASURE_ICONS: Record<MeasureTool, IconName> = { distance: 'ruler', area: 'square', perimeter: 'circle' };
 const AREA_KINDS: AreaKind[] = ['demolition', 'construction'];
 // Labels: `measure.shapes.<shape>` and `measure.calcModes.<mode>`.
-const AREA_SHAPES: { shape: AreaShape; icon: IconName }[] = [
-  { shape: 'polygon', icon: 'polygon' },
-  { shape: 'rectangle', icon: 'rectangle' },
-];
 const AREA_CALC_MODES: { mode: AreaCalcMode; icon: IconName }[] = [
   { mode: 'footprint', icon: 'square' },
   { mode: 'wall', icon: 'dimension' },
@@ -38,6 +35,8 @@ export default function MeasureToolbar({ part }: { part?: PanelPart } = {}) {
   const orthoSnap = useCompareStore((s) => s.orthoSnap);
   const setOrthoSnap = useCompareStore((s) => s.setOrthoSnap);
   const deleteMeasurement = useCompareStore((s) => s.deleteMeasurement);
+  const selectedMeasurementId = useCompareStore((s) => s.selectedMeasurementId);
+  const focusMeasurement = useCompareStore((s) => s.focusMeasurement);
   const updateMeasurement = useCompareStore((s) => s.updateMeasurement);
   const updateComparisonMeta = useCompareStore((s) => s.updateComparisonMeta);
   const startChangeMeasurement = useCompareStore((s) => s.startChangeMeasurement);
@@ -144,7 +143,7 @@ export default function MeasureToolbar({ part }: { part?: PanelPart } = {}) {
           <div className="tool-group">
             <span className="section-label">{t('measure.calcMode')}</span>
             <div className="segmented">
-              {AREA_CALC_MODES.map(({ mode, icon }) => (
+              {AREA_CALC_MODES.filter(({ mode }) => areaShape !== 'line' || mode === 'wall').map(({ mode, icon }) => (
                 <button
                   key={mode}
                   className={`tool-btn ${areaCalcMode === mode ? 'active' : ''}`}
@@ -157,22 +156,7 @@ export default function MeasureToolbar({ part }: { part?: PanelPart } = {}) {
               ))}
             </div>
           </div>
-          <div className="tool-group">
-            <span className="section-label">{t('measure.shape')}</span>
-            <div className="segmented">
-              {AREA_SHAPES.map(({ shape, icon }) => (
-                <button
-                  key={shape}
-                  className={`tool-btn ${areaShape === shape ? 'active' : ''}`}
-                  onClick={() => setAreaShape(shape)}
-                  aria-pressed={areaShape === shape}
-                >
-                  <Icon name={icon} />
-                  <span className="tool-label">{t(`measure.shapes.${shape}`)}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          <AreaShapePicker value={areaShape} onChange={setAreaShape} />
           {areaCalcMode === 'wall' && (
             <div className="form-row">
               <label>{t('measure.wallHeightDefault')}</label>
@@ -188,7 +172,7 @@ export default function MeasureToolbar({ part }: { part?: PanelPart } = {}) {
         </>
       )}
 
-      {toolMode === 'measure' && (measureTool === 'perimeter' || (measureTool === 'area' && areaShape === 'polygon')) && (
+      {toolMode === 'measure' && (measureTool === 'perimeter' || (measureTool === 'area' && areaShape !== 'rectangle')) && (
         <label className="source-color-toggle">
           <input type="checkbox" checked={orthoSnap} onChange={(e) => setOrthoSnap(e.target.checked)} />
           {t('measure.orthoOnly')}
@@ -198,7 +182,7 @@ export default function MeasureToolbar({ part }: { part?: PanelPart } = {}) {
       {toolMode === 'measure' && measureTool && (
         <p className="tool-hint">
           <Icon name="alert" size={13} />
-          {measureTool === 'distance'
+          {measureTool === 'distance' || (measureTool === 'area' && areaShape === 'line')
             ? t('measure.hintDistance')
             : measureTool === 'area' && areaShape === 'rectangle'
               ? t('measure.hintRectangle')
@@ -221,8 +205,12 @@ export default function MeasureToolbar({ part }: { part?: PanelPart } = {}) {
         <ul className="measurement-list">
           {measurements.map((m) => {
             const isWall = m.tool === 'area' && m.calcMode === 'wall';
+            // An item is selected as itself — an approved change's wall too; its AI card stays separate.
+            const select = () => focusMeasurement(m.id);
+            const editable = itemEditable(comparison, m);
             return (
-              <li key={m.id}>
+              <li key={m.id} tabIndex={0} className={selectedMeasurementId === m.id ? 'selected' : ''} onClick={select}
+                onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); select(); } }}>
                 <span>
                   {t(`measureTools.${m.tool}`)}: <strong>{measurementLabel(m)}</strong>
                   {isWall && (
@@ -234,6 +222,8 @@ export default function MeasureToolbar({ part }: { part?: PanelPart } = {}) {
                         step="0.05"
                         min="0.1"
                         className="inline-number"
+                        disabled={!editable}
+                        title={editable ? undefined : t('revisionAi.edit.sourceHint')}
                         value={m.wallHeightM ?? wallHeightDefaultM}
                         onClick={(e) => e.stopPropagation()}
                         onChange={(e) => {
@@ -248,7 +238,7 @@ export default function MeasureToolbar({ part }: { part?: PanelPart } = {}) {
                   )}
                 </span>
                 <span className="list-item-actions">
-                  <button className="icon-btn danger" title={t('measure.delete')} onClick={() => deleteMeasurement(m.id)}>
+                  <button className="icon-btn danger" disabled={!!m.revisionChangeId} title={t(m.revisionChangeId ? 'revisionAi.edit.sourceHint' : 'measure.delete')} onClick={(e) => { e.stopPropagation(); deleteMeasurement(m.id); }}>
                     <Icon name="trash" />
                   </button>
                 </span>

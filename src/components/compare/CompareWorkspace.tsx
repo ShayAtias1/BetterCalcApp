@@ -3,7 +3,7 @@ import { useWorkspaceLayout } from '../../hooks/useWorkspaceLayout';
 import AdaptiveInspector from '../AdaptiveInspector';
 import CompareCompactHeader from './CompareCompactHeader';
 import ViewModeSwitch from './ViewModeSwitch';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import CompareTopBar from './CompareTopBar';
 import CompareCanvas, { type CompareCanvasHandle } from './CompareCanvas';
 import LayerPanel from './LayerPanel';
@@ -13,6 +13,9 @@ import MarkupToolbar from './MarkupToolbar';
 import CompareCalibrationDialog from './CompareCalibrationDialog';
 import CompareContextBar from './CompareContextBar';
 import ChangesPanel from './ChangesPanel';
+import RevisionDetectPanel from './RevisionDetectPanel';
+import { DEFAULT_AREA_KIND_COLORS } from '../../types';
+import { resumeRevisionAi, useRevisionUi } from '../../lib/revision/revisionWorkflow';
 import CompareToolDock, { type CompareSidebarTab } from './CompareToolDock';
 import { PanelResizer, PanelRestoreButtons } from '../WorkspacePanels';
 import { usePanelGridStyle, usePanelLayout } from '../panelLayout';
@@ -54,8 +57,26 @@ export default function CompareWorkspace() {
   const setCurrentPageKey = useCompareStore((s) => s.setCurrentPageKey);
   const originalNumPages = useCompareStore((s) => s.originalNumPages);
   const [tab, setTab] = useState<SidebarTab>('layers');
+  const selectedChangeId = useRevisionUi((s) => s.selectedChangeId);
+  const placingType = useRevisionUi((s) => s.placingType);
+  useEffect(() => {
+    if (!placingType) return;
+    setTab('detect');
+    usePanelLayout.getState().setOpen('inspector', true);
+  }, [placingType]);
+  useEffect(() => {
+    if (!selectedChangeId) return;
+    setTab('detect');
+    usePanelLayout.getState().setOpen('inspector', true);
+    usePanelLayout.getState().setOpen('list', true);
+  }, [selectedChangeId]);
   const canvasRef = useRef<CompareCanvasHandle>(null);
   const [exporting, setExporting] = useState(false);
+  // Classifications in flight when the comparison was last open are recovered by free status reads.
+  const comparisonId = comparison?.id;
+  useEffect(() => {
+    if (comparisonId) resumeRevisionAi();
+  }, [comparisonId]);
 
   /**
    * The one export path, for all four combinations of revision scope × page scope.
@@ -148,17 +169,26 @@ export default function CompareWorkspace() {
   const expanded = layout === 'expanded' && !reviewOnly;
   const panelOpen = usePanelLayout((s) => s.open);
   const panelGridStyle = usePanelGridStyle();
-  const tabs: SidebarTab[] = ['layers', 'measure', 'markup'];
+  const tabs: SidebarTab[] = ['layers', 'measure', 'markup', 'detect'];
   /** One half of the desktop split: the page's items at the inline start, tools and settings at the inline end. */
   const desktopPanel = (part: PanelPart) => {
     if (tab === 'measure') return <MeasureToolbar part={part} />;
     if (tab === 'markup') return <MarkupToolbar part={part} />;
+    if (tab === 'detect') return <RevisionDetectPanel part={part} />;
     return part === 'list' ? <LayerPanel /> : <AlignmentTools />;
   };
 
   return (
-    <div className="workspace compare-workspace" style={expanded ? panelGridStyle : undefined}>
-      {expanded ? <CompareTopBar onExport={runExport} exporting={exporting} /> : <CompareCompactHeader />}
+    <div className="workspace compare-workspace" style={{
+      ...(expanded ? panelGridStyle : {}),
+      '--revision-before': (comparison?.areaKindColors ?? DEFAULT_AREA_KIND_COLORS).demolition,
+      '--revision-after': (comparison?.areaKindColors ?? DEFAULT_AREA_KIND_COLORS).construction,
+    } as CSSProperties}>
+      {expanded ? <CompareTopBar onExport={runExport} exporting={exporting} onDetectChanges={() => {
+        setTab('detect');
+        usePanelLayout.getState().setOpen('inspector', true);
+        usePanelLayout.getState().setOpen('list', true);
+      }} /> : <CompareCompactHeader />}
       {layout !== 'expanded' && <div className="compact-workspace-actions">
         <span className="muted">{t('adaptive.browse')}</span>
         <button className="btn-ghost" onClick={() => setPanel(panel === 'items' ? 'plan' : 'items')}>{t('adaptive.view')}</button>
@@ -173,6 +203,7 @@ export default function CompareWorkspace() {
           {!review && <CompareToolDock onPanelTab={(next) => {
             setTab(next);
             usePanelLayout.getState().setOpen('inspector', true);
+            if (next === 'detect') usePanelLayout.getState().setOpen('list', true);
           }} />}
           {!review && <CompareCalibrationDialog />}
           {expanded && <PanelRestoreButtons />}
@@ -197,7 +228,7 @@ export default function CompareWorkspace() {
           </aside>}
           {panelOpen.inspector && <aside className="sidebar inspector-panel" aria-label={t('workspace.inspector.tools')}>
             <div className="panel-head">
-              <strong>{tab === 'layers' ? t('compare.alignment.title') : t('workspace.inspector.tools')}</strong>
+              <strong>{tab === 'layers' ? t('compare.alignment.title') : tab === 'detect' ? t('revisionAi.title') : t('workspace.inspector.tools')}</strong>
             </div>
             <div className="sidebar-content">{desktopPanel('detail')}</div>
             <PanelResizer side="inspector" />
@@ -206,6 +237,7 @@ export default function CompareWorkspace() {
           <div className="sidebar-content">
             <p className="muted">{t('adaptive.reviewOnly')}</p>
             <ViewModeSwitch />
+            <RevisionDetectPanel part="list" readOnly />
           </div>
         </AdaptiveInspector>}
       </div>

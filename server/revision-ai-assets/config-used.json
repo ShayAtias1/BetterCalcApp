@@ -1,0 +1,27 @@
+{
+  "provider": "openai",
+  "apiFormat": "responses",
+  "model": "gpt-6.1-sol",
+  "reasoningEffort": "low",
+  "serviceTier": "default",
+  "imageDetail": "high",
+  "maxImages": 12,
+  "maxImageWidth": 1100,
+  "maxImageHeight": 600,
+  "maxOutputTokens": 6000,
+  "timeoutSeconds": 240,
+  "maxRetries": 0,
+  "pricing": {
+    "currency": "USD",
+    "unit": "per_million_tokens",
+    "input": 2.0,
+    "cachedInput": 0.1,
+    "cacheWrite": 2.5,
+    "output": 10.0,
+    "longContextThreshold": 272000,
+    "longInputMultiplier": 2.0,
+    "longOutputMultiplier": 1.5,
+    "source": "https://developers.openai.com/api/docs/models/gpt-6.1-sol",
+    "verifiedDate": "2026-10-07"
+  }
+}

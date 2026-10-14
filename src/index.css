@@ -1056,6 +1056,7 @@ button:disabled,
 .top-bar-ai-btn.active {
   border-color: var(--ai);
 }
+.top-bar-ai-btn:disabled { opacity: 0.5; cursor: default; }
 .top-bar-ai-count {
   display: inline-flex;
   align-items: center;
@@ -5338,7 +5339,6 @@ html[dir='rtl'] .qty-grid .col-room {
 .compare-top-bar .top-bar-crumb { max-width: 110px; }
 .compare-top-bar .identity .top-bar-menu-btn { max-width: 320px; }
 .compare-top-bar .compare-context-chip { color: var(--text-h); border-color: var(--border-strong); }
-.compare-top-bar .compare-exit-btn { flex: none; }
 /* In the compare design the view modes follow the identity group instead of sitting at the exact centre,
    which gives the comparison name its full width. */
 .top-bar.takeoff-top-bar.compare-top-bar {
@@ -5877,6 +5877,12 @@ html[dir='rtl'] .header-calibration-action + .header-calibration-action { border
 .alignment-actions > button:first-child { flex: 1 1 auto; min-width: 0; }
 .alignment-actions > button:last-child { flex: none; padding-inline: 12px; }
 
+/* Compact Compare sidebar: keep every control and warning, with less surrounding space. */
+.compare-workspace .inspector-panel .sidebar-content { padding: 8px; }
+.compare-workspace .alignment-tools.tool-group { gap: 6px; }
+.compare-workspace .alignment-card { gap: 6px; padding: 6px 8px; }
+.compare-workspace .alignment-actions { gap: 6px; }
+
 /* Polish: room workspace controls — both selects share one label column, and every control in the
    block (selects, draw, assign work, assign to apartment) has the same height and corner radius. */
 .room-workspace-fields {
@@ -5902,3 +5908,16 @@ html[dir='rtl'] .header-calibration-action + .header-calibration-action { border
 .room-create-row > .btn-secondary.small,
 .room-list-head > .btn-secondary.small { padding-block: 0; }
 .room-list-head > .btn-secondary.small { width: 100%; }
+.area-geometry-add {
+  opacity: 0;
+  pointer-events: none;
+}
+.area-geometry-add circle {
+  pointer-events: none;
+}
+.area-geometry-edge:hover > .area-geometry-add {
+  opacity: 1;
+}
+.area-geometry-edge:hover > .area-geometry-add circle {
+  pointer-events: all;
+}

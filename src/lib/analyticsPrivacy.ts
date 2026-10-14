@@ -116,7 +116,7 @@ export interface AnalyticsEvents {
     comparison_id: AnalyticsId;
     area_kind: 'demolition' | 'construction';
     calc_mode: 'footprint' | 'wall';
-    shape: 'polygon' | 'rectangle';
+    shape: 'polygon' | 'rectangle' | 'line';
   };
   error_occurred: { area: ErrorArea; error_name: string; export_kind?: ExportKind };
 }
