@@ -12,7 +12,7 @@ import { analysisInputKey } from '../../lib/revision/detect';
 import { checkPlanLink, latestApplication, pendingApplication, type LinkStatus } from '../../lib/revision/apply';
 import { changeItems, relocationQuantities } from '../../lib/revision/changeItems';
 import { isOpeningDifference, openingImpact, openingImpactReady, openingWallThicknessPx } from '../../lib/revision/openingImpact';
-import { openingGeometryNeedsVerification, openingFootprint, setOpeningThickness, EDIT_TYPES, editTypeOf, familyOf, hasUnplacedLines, removeElement, retypeChange, setOpeningHeight, sidesOf, isAiWallChange, wallGeometryNeedsVerification, wallHasFootprint } from '../../lib/revision/changeEdit';
+import { openingGeometryNeedsVerification, openingFootprint, setOpeningThickness, rotateOpening90, EDIT_TYPES, editTypeOf, familyOf, hasUnplacedLines, removeElement, retypeChange, setOpeningHeight, sidesOf, isAiWallChange, wallGeometryNeedsVerification, wallHasFootprint } from '../../lib/revision/changeEdit';
 import {
   applyApprovedChanges,
   swapSelectedChange,
@@ -339,6 +339,12 @@ export function ChangeEditor({ change }: { change: RevisionChange }) {
                     onBlur={finishEdit} />
                   <span aria-hidden="true">{t('revisionAi.edit.heightUnit')}</span>
                 </label>
+              )}
+              {el.list === 'doors' && (
+                <button className="btn-ghost small icon-only" aria-label={t('revisionAi.edit.rotate90')} title={t('revisionAi.edit.rotate90')}
+                  onClick={() => apply((c) => rotateOpening90(c, el.index))}>
+                  <Icon name="rotate" size={12} />
+                </button>
               )}
               <button className="btn-ghost small icon-only" aria-label={t('markup.delete')} title={t('markup.delete')}
                 onClick={() => apply((c) => removeElement(c, { list: el.list, index: el.index }))}>

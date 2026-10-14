@@ -149,3 +149,16 @@ test('expanded descriptions are portalled into the last child of the plan svg (t
   assert.match(overlay,/createPortal\(<>\{popups\}<\/>, popupLayer\)/);
   assert.match(overlay,/<rect x=\{x\} y=\{y\} width=\{popupWidth\}[^>]*fillOpacity=\{1\}/);
 });
+
+const { rotateOpening90 } = await import('../../src/lib/revision/changeEdit.ts');
+test('rotateOpening90 turns the opening 90° clockwise about its centre, keeping dimensions; four turns restore it',()=>{
+  const door={side:'added',hinge:{x:0,y:10},jamb:{x:100,y:10},radiusPx:100,heightM:2.1,wallThicknessPx:20,opening:'door',
+    footprint:[{x:0,y:0},{x:100,y:0},{x:100,y:20},{x:0,y:20}],geometryVerified:true,impactVerified:true};
+  const c={...base('door-added'),category:'opening',doors:[door]};
+  const r=rotateOpening90(c,0).doors[0];
+  assert.deepEqual(r.hinge,{x:50,y:-40});assert.deepEqual(r.jamb,{x:50,y:60});
+  assert.deepEqual(r.footprint,[{x:60,y:-40},{x:60,y:60},{x:40,y:60},{x:40,y:-40}]);
+  assert.equal(r.wallThicknessPx,20);assert.equal(r.radiusPx,100);assert.equal(r.heightM,2.1);
+  let x=c;for(let i=0;i<4;i++)x=rotateOpening90(x,0);
+  assert.deepEqual(x.doors[0].footprint,door.footprint);assert.deepEqual(x.doors[0].hinge,door.hinge);
+});

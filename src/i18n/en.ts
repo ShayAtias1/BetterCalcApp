@@ -2145,6 +2145,7 @@ export const en: Dictionary = {
       "lengthPx": "{value} px",
       "height": "Opening height in metres",
       "heightUnit": "m",
+      "rotate90": "Rotate 90°",
       "removeLine": "Remove line",
       "addBefore": "Add original line",
       "addAfter": "Add revised line",

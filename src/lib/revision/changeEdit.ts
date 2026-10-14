@@ -39,6 +39,19 @@ export function setOpeningFootprint(c: RevisionChange, index: number, points: Po
     wallThicknessPx: geometry.thicknessPx, geometryVerified: true, impactVerified: false, placeholder: undefined } : d) };
 }
 
+/** Rotate an opening 90° clockwise (screen space) about its centre; width, thickness and height are unchanged. */
+export function rotateOpening90(c: RevisionChange, index: number): RevisionChange {
+  const d = c.doors[index];
+  if (!d) return c;
+  const outline = openingFootprint(d);
+  const around = outline && outline.length ? outline : [d.hinge, d.jamb];
+  const xs = around.map(p => p.x), ys = around.map(p => p.y);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const turn = (p: Point): Point => ({ x: cx - (p.y - cy), y: cy + (p.x - cx) });
+  return { ...c, doors: c.doors.map((door, i) => i === index ? { ...door, hinge: turn(door.hinge), jamb: turn(door.jamb),
+    ...(door.footprint ? { footprint: door.footprint.map(turn) } : {}), geometryVerified: true, impactVerified: false, placeholder: undefined } : door) };
+}
+
 /** Resize across the opening's measured axis while retaining every polygon vertex. */
 export function setOpeningThickness(c: RevisionChange, index: number, thicknessPx: number | undefined): RevisionChange {
   const d = c.doors[index];

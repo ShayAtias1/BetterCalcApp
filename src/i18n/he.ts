@@ -2155,6 +2155,7 @@ export const he = {
       "lengthPx": "{value} פיקסל",
       "height": "גובה הפתח במטרים",
       "heightUnit": "מ׳",
+      "rotate90": "סובב 90°",
       "removeLine": "הסר קו",
       "addBefore": "הוסף קו בתוכנית המקורית",
       "addAfter": "הוסף קו בתוכנית המעודכנת",
