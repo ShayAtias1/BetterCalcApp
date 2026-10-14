@@ -1,3 +1,4 @@
+import { startWorkspaceSession } from './lib/workspaceSession';
 import BulkTakeoff from './components/BulkTakeoff';
 import AppDialogs from './components/AppDialogs';
 import MultiPlanAi from './components/MultiPlanAi';
@@ -259,11 +260,19 @@ function useUnsavedChangesGuard() {
 }
 
 function AppContent() {
+  const t = useT();
+  const [restoring, setRestoring] = useState(true);
+  useEffect(() => {
+    let mounted = true;
+    void startWorkspaceSession().then(() => { if (mounted) setRestoring(false); });
+    return () => { mounted = false; };
+  }, []);
   // `project` is the open plan; `currentProject` the project folder around it.
   const plan = useAppStore((s) => s.project);
   const currentProject = useAppStore((s) => s.currentProject);
   const comparison = useCompareStore((s) => s.comparison);
   useUnsavedChangesGuard();
+  if (restoring) return <div className="workspace home" role="status">{t('common.loading')}</div>;
   if (plan) return <Workspace />;
   if (comparison) return <CompareWorkspace />;
   if (currentProject) return <ProjectOverview />;

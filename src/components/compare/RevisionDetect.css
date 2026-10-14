@@ -95,6 +95,9 @@
 .revision-editor .field-label { font-size: 12px; font-weight: 600; }
 .revision-editor select { width: 100%; }
 .revision-editor .segmented-tabs { align-self: flex-start; }
+.revision-editor .revision-actions { grid-template-columns: minmax(0, 1fr); }
+.revision-editor .revision-actions > button { min-width: 0; white-space: normal; overflow-wrap: anywhere; height: auto; line-height: 1.4; }
+.revision-editor .revision-actions > button > svg { flex-shrink: 0; }
 .revision-edit-elements { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .revision-edit-elements li { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 5px; border-inline-start: 3px solid var(--text-muted, #64748b); background: var(--bg-surface, #fff); }
 .revision-edit-elements li.work-construction { border-inline-start-color: var(--revision-construction); }
