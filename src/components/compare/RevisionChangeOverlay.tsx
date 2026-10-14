@@ -716,7 +716,6 @@ function PlacingLayer({ pageKey, zoom, screenToNative }: {
   pageKey: number; zoom: number; screenToNative: (x: number, y: number) => Point;
 }) {
   const colors = useRevisionColors();
-  const t = useT();
   const type = useRevisionUi((s) => s.placingType)!;
   const target = useRevisionUi((s) => s.placingWall);
   const mode = useRevisionUi((s) => s.openingDrawingMode);
@@ -827,10 +826,6 @@ function PlacingLayer({ pageKey, zoom, screenToNative }: {
       {drawingFootprint && points.length > 0 && <polygon points={preview.map(p => `${p.x},${p.y}`).join(' ')}
         fill={color} fillOpacity={0.08} stroke={color} strokeWidth={1 / zoom} strokeDasharray={`${4 / zoom} ${4 / zoom}`} />}
       {points.map((p, index) => <circle key={index} cx={p.x} cy={p.y} r={5 / zoom} fill="#fff" stroke={color} strokeWidth={2 / zoom} />)}
-      {wall && hover && <text x={hover.x + 12 / zoom} y={hover.y - 12 / zoom} fontSize={12 / zoom} fill={color}
-        stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke">
-        {t('revisionAi.edit.drawWallStep', { side: `${t(`revisionAi.work.${elementWorkKind('walls', side)}`)} · ${t(side === 'removed' ? 'revisionAi.before' : 'revisionAi.after')}`, corner: points.length + 1 })}
-      </text>}
     </g>
 
   </g>;

@@ -630,7 +630,7 @@ export const he = {
     },
     tabs: {
       layers: 'שכבות ויישור',
-      measure: 'כיול ומדידה',
+      measure: 'כלי מדידה',
       markup: 'סימונים',
       detect: 'שינויים',
     },

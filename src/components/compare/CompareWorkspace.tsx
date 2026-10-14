@@ -169,7 +169,7 @@ export default function CompareWorkspace() {
   const expanded = layout === 'expanded' && !reviewOnly;
   const panelOpen = usePanelLayout((s) => s.open);
   const panelGridStyle = usePanelGridStyle();
-  const tabs: SidebarTab[] = ['layers', 'measure', 'markup', 'detect'];
+  const tabs: SidebarTab[] = ['layers', 'detect', 'measure', 'markup'];
   /** One half of the desktop split: the page's items at the inline start, tools and settings at the inline end. */
   const desktopPanel = (part: PanelPart) => {
     if (tab === 'measure') return <MeasureToolbar part={part} />;

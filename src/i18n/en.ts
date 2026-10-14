@@ -631,9 +631,9 @@ export const en: Dictionary = {
       alignHint: 'Align - drag the revised plan into place',
     },
     tabs: {
-      layers: 'Layers',
-      measure: 'Measure',
-      markup: 'Markups',
+      layers: 'Layers & Alignment',
+      measure: 'Measurement Tools',
+      markup: 'Annotations',
       detect: 'Changes',
     },
     exportNothing: 'No sheet/revision combination that can be exported was found.',

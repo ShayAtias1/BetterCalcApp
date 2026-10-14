@@ -162,3 +162,13 @@ test('rotateOpening90 turns the opening 90° clockwise about its centre, keeping
   let x=c;for(let i=0;i<4;i++)x=rotateOpening90(x,0);
   assert.deepEqual(x.doors[0].footprint,door.footprint);assert.deepEqual(x.doors[0].hinge,door.hinge);
 });
+
+test('entering manual change drawing mode renders the placing layer without throwing',()=>{
+  setup(base('wall-added'));
+  for(const type of ['wall-added','door-added','other']){
+    useRevisionUi.setState({placingType:type,placingWall:null,selectedChangeId:null,editingChangeId:null});
+    const html=render();
+    assert.match(html,/revision-change-placing/);
+  }
+  useRevisionUi.setState({placingType:null});
+});
