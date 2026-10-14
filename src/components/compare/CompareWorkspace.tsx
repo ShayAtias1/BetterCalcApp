@@ -228,7 +228,7 @@ export default function CompareWorkspace() {
           </aside>}
           {panelOpen.inspector && <aside className="sidebar inspector-panel" aria-label={t('workspace.inspector.tools')}>
             <div className="panel-head">
-              <strong>{tab === 'layers' ? t('compare.alignment.title') : tab === 'detect' ? t('revisionAi.title') : t('workspace.inspector.tools')}</strong>
+              <strong>{tab === 'layers' ? t('compare.alignment.title') : tab === 'detect' ? t('compare.tabs.detect') : t('workspace.inspector.tools')}</strong>
             </div>
             <div className="sidebar-content">{desktopPanel('detail')}</div>
             <PanelResizer side="inspector" />

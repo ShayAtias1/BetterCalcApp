@@ -1,14 +1,12 @@
 import { useRef, useState } from 'react';
 import { compareScaleFor, useCompareStore } from '../../store/compareStore';
-import type { AreaKind, MarkupTool, MeasureTool } from '../../types/compare';
+import type { MarkupTool, MeasureTool } from '../../types/compare';
 import Icon, { type IconName } from '../Icon';
 import ResponsivePopover from '../ResponsivePopover';
 import { useT } from '../../i18n';
 import { runAutoAlign, useAutoAlignUi } from '../../lib/autoAlign';
 import { useRevisionUi } from '../../lib/revision/revisionWorkflow';
 
-const CHANGE_KINDS: AreaKind[] = ['demolition', 'construction'];
-const CHANGE_ICONS: Record<AreaKind, IconName> = { demolition: 'hammer', construction: 'wall' };
 const MEASURE_TOOLS: MeasureTool[] = ['distance', 'area', 'perimeter'];
 const MEASURE_ICONS: Record<MeasureTool, IconName> = { distance: 'ruler', area: 'square', perimeter: 'circle' };
 const MARKUP_TOOLS: MarkupTool[] = ['cloud', 'arrow', 'rectangle', 'text', 'dimension', 'mask'];
@@ -29,8 +27,6 @@ export default function CompareToolDock({ onPanelTab }: { onPanelTab: (tab: Comp
   const setToolMode = useCompareStore((s) => s.setToolMode);
   const measureTool = useCompareStore((s) => s.measureTool);
   const setMeasureTool = useCompareStore((s) => s.setMeasureTool);
-  const pendingAreaKind = useCompareStore((s) => s.pendingAreaKind);
-  const startChangeMeasurement = useCompareStore((s) => s.startChangeMeasurement);
   const markupTool = useCompareStore((s) => s.markupTool);
   const setMarkupTool = useCompareStore((s) => s.setMarkupTool);
   const startCalibration = useCompareStore((s) => s.startCalibration);
@@ -46,7 +42,6 @@ export default function CompareToolDock({ onPanelTab }: { onPanelTab: (tab: Comp
   const scale = compareScaleFor(comparison, currentPageKey);
   const canMeasure = scale.state === 'calibrated';
   const blockedReason = scale.state === 'ambiguous' ? t('compare.measure.ambiguousScale') : t('compare.measure.notCalibrated');
-  const armedKind = toolMode === 'measure' && measureTool === 'area' ? pendingAreaKind : null;
   const hasRevision = comparison.revisions.length > 0;
 
   const plainButton = (mode: 'select' | 'pan', icon: IconName) => (
@@ -146,22 +141,8 @@ export default function CompareToolDock({ onPanelTab }: { onPanelTab: (tab: Comp
               {autoAligning ? t('compare.autoAlign.running') : t('compare.autoAlign.button')}
             </button>
           </> : menu === 'measure' ? <>
-            {/* Recording demolition and new construction is this workspace's main job, so it comes first. */}
-            <p className="menu-hint menu-section-title">{t('compare.measure.changes')}</p>
-            {CHANGE_KINDS.map((kind) => (
-              <button key={kind} className={`menu-item ${armedKind === kind ? 'active' : ''}`} disabled={!canMeasure} title={canMeasure ? undefined : blockedReason}
-                aria-pressed={armedKind === kind}
-                onClick={() => pick(() => {
-                  startChangeMeasurement(kind);
-                  onPanelTab('measure');
-                })}>
-                <span className="menu-check" style={{ color: comparison.areaKindColors[kind] }}><Icon name={CHANGE_ICONS[kind]} size={16} /></span>
-                {t(`areaKinds.${kind}`)}
-              </button>
-            ))}
-            <div className="menu-divider" />
             {MEASURE_TOOLS.map((tool) => {
-              const active = toolMode === 'measure' && !armedKind && measureTool === tool;
+              const active = toolMode === 'measure' && measureTool === tool;
               return (
                 <button key={tool} className={`menu-item ${active ? 'active' : ''}`} disabled={!canMeasure} title={canMeasure ? undefined : blockedReason}
                   onClick={() => pick(() => setMeasureTool(active ? null : tool))}>

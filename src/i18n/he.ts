@@ -632,7 +632,7 @@ export const he = {
       layers: 'שכבות ויישור',
       measure: 'כיול ומדידה',
       markup: 'סימונים',
-      detect: 'זיהוי שינויים',
+      detect: 'שינויים',
     },
     exportNothing: 'לא נמצא שילוב גיליון/גרסה שניתן לייצא.',
     exportNothingSkipped: 'לא נמצא שילוב גיליון/גרסה שניתן לייצא: {skipped}',
@@ -786,7 +786,7 @@ export const he = {
       kindColor: 'צבע הסימון על התוכנית',
       emptyAll: 'אין סימוני הריסה או בנייה חדשה בגרסה "{revision}".',
       emptyPage: 'אין סימוני הריסה או בנייה חדשה בגיליון {page} בגרסה "{revision}".',
-      emptyHint: 'בטאב "כיול ומדידה" בחר הריסה או בנייה חדשה וסמן על התוכנית.',
+      emptyHint: 'בטאב "שינויים" לחץ "הוסף שינוי" וסמן על התוכנית.',
       headers: {
         number: '#',
         kind: 'סוג',

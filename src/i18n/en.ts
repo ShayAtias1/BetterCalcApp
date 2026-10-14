@@ -634,7 +634,7 @@ export const en: Dictionary = {
       layers: 'Layers',
       measure: 'Measure',
       markup: 'Markups',
-      detect: 'Change detection',
+      detect: 'Changes',
     },
     exportNothing: 'No sheet/revision combination that can be exported was found.',
     exportNothingSkipped: 'No sheet/revision combination that can be exported was found: {skipped}',
@@ -788,7 +788,7 @@ export const en: Dictionary = {
       kindColor: 'Mark colour on the plan',
       emptyAll: 'There are no demolition or new construction marks in revision "{revision}".',
       emptyPage: 'There are no demolition or new construction marks on sheet {page} of revision "{revision}".',
-      emptyHint: 'In the "Measure" tab, choose Demolition or New Construction and mark on the plan.',
+      emptyHint: 'In the "Changes" tab, click "Add change" and mark it on the plan.',
       headers: {
         number: '#',
         kind: 'Type',

@@ -1,7 +1,7 @@
 import AreaShapePicker from '../AreaShapePicker';
 import { useEffect } from 'react';
 import { compareScaleFor, itemEditable, useCompareStore } from '../../store/compareStore';
-import type { AreaCalcMode, AreaKind, MeasureTool } from '../../types/compare';
+import type { AreaCalcMode, MeasureTool } from '../../types/compare';
 import { round } from '../../lib/geometry';
 import { measurementLabel } from '../../lib/measurementValues';
 import { changeMeasurements, isChangeMeasurement } from '../../lib/changeMeasurements';
@@ -11,7 +11,6 @@ import type { PanelPart } from '../PanelPart';
 
 const MEASURE_TOOLS: MeasureTool[] = ['distance', 'area', 'perimeter'];
 const MEASURE_ICONS: Record<MeasureTool, IconName> = { distance: 'ruler', area: 'square', perimeter: 'circle' };
-const AREA_KINDS: AreaKind[] = ['demolition', 'construction'];
 // Labels: `measure.shapes.<shape>` and `measure.calcModes.<mode>`.
 const AREA_CALC_MODES: { mode: AreaCalcMode; icon: IconName }[] = [
   { mode: 'footprint', icon: 'square' },
@@ -26,8 +25,6 @@ export default function MeasureToolbar({ part }: { part?: PanelPart } = {}) {
   const measureTool = useCompareStore((s) => s.measureTool);
   const setMeasureTool = useCompareStore((s) => s.setMeasureTool);
   const measurePoints = useCompareStore((s) => s.measurePoints);
-  const pendingAreaKind = useCompareStore((s) => s.pendingAreaKind);
-  const setPendingAreaKind = useCompareStore((s) => s.setPendingAreaKind);
   const areaShape = useCompareStore((s) => s.areaShape);
   const setAreaShape = useCompareStore((s) => s.setAreaShape);
   const areaCalcMode = useCompareStore((s) => s.areaCalcMode);
@@ -39,7 +36,6 @@ export default function MeasureToolbar({ part }: { part?: PanelPart } = {}) {
   const focusMeasurement = useCompareStore((s) => s.focusMeasurement);
   const updateMeasurement = useCompareStore((s) => s.updateMeasurement);
   const updateComparisonMeta = useCompareStore((s) => s.updateComparisonMeta);
-  const startChangeMeasurement = useCompareStore((s) => s.startChangeMeasurement);
   const setChangesOpen = useCompareStore((s) => s.setChangesOpen);
 
   // Losing the scale — switching to an uncalibrated page, or re-aligning a layer whose legacy
@@ -66,7 +62,6 @@ export default function MeasureToolbar({ part }: { part?: PanelPart } = {}) {
   const pageMeasurements = (activeRevision?.measurements ?? []).filter((m) => m.pageNumber === currentPageKey);
   const measurements = pageMeasurements.filter((m) => !isChangeMeasurement(m));
   const pageChangeCount = changeMeasurements(pageMeasurements).length;
-  const armedKind = toolMode === 'measure' && measureTool === 'area' ? pendingAreaKind : null;
   const showAreaOptions = toolMode === 'measure' && measureTool === 'area';
   const wallHeightDefaultM = comparison.wallHeightDefaultM;
 
@@ -83,51 +78,22 @@ export default function MeasureToolbar({ part }: { part?: PanelPart } = {}) {
         </div>
       )}
 
-      {/* The workspace's main job: recording what is demolished and what is built. One deliberate
-          click each — not a classification hidden three levels inside a generic area tool. Both
-          arm the same area/wall drawing infrastructure, already classified. */}
-      <div className="tool-group">
-        <span className="section-label">{t('compare.measure.changes')}</span>
-        <div className="segmented change-kinds">
-          {AREA_KINDS.map((k) => (
-            <button
-              key={k}
-              className={`tool-btn change-kind ${k} ${armedKind === k ? 'active' : ''}`}
-              onClick={() => (armedKind === k ? setPendingAreaKind(null) : startChangeMeasurement(k))}
-              disabled={!canMeasure}
-              aria-pressed={armedKind === k}
-              title={canMeasure ? t('compare.measure.markKind', { kind: t(`areaKinds.${k}`) }) : blockedReason}
-            >
-              <span className="color-dot" style={{ background: comparison.areaKindColors[k] }} />
-              <span className="tool-label">{t(`areaKinds.${k}`)}</span>
-            </button>
-          ))}
-        </div>
+      {/* Demolition and new construction are recorded in the שינויים tab; existing items stay in the changes panel. */}
+      {!part && <button className="btn-ghost small full-width changes-panel-open" onClick={() => setChangesOpen(true)}>
+        <Icon name="table" />
+        {pageChangeCount > 0 ? t('compare.measure.changesPanelCount', { count: pageChangeCount }) : t('compare.measure.changesPanel')}
+      </button>}
 
-        {armedKind && (
-          <p className={`tool-hint armed ${armedKind}`}>
-            <Icon name="scan" size={13} />
-            {t('compare.measure.armed', { kind: t(`areaKinds.${armedKind}`), mode: t(`measure.calcModes.${areaCalcMode}`) })}
-          </p>
-        )}
-
-        {!part && <button className="btn-ghost small full-width changes-panel-open" onClick={() => setChangesOpen(true)}>
-          <Icon name="table" />
-          {pageChangeCount > 0 ? t('compare.measure.changesPanelCount', { count: pageChangeCount }) : t('compare.measure.changesPanel')}
-        </button>}
-      </div>
-
-      {/* Secondary: plain, unclassified measurements. */}
       <div className="tool-group">
         <span className="section-label">{t('measure.tools')}</span>
         <div className="segmented grid">
           {MEASURE_TOOLS.map((tool) => (
             <button
               key={tool}
-              className={`tool-btn ${toolMode === 'measure' && !armedKind && measureTool === tool ? 'active' : ''}`}
-              onClick={() => setMeasureTool(measureTool === tool && !armedKind ? null : tool)}
+              className={`tool-btn ${toolMode === 'measure' && measureTool === tool ? 'active' : ''}`}
+              onClick={() => setMeasureTool(measureTool === tool ? null : tool)}
               disabled={!canMeasure}
-              aria-pressed={toolMode === 'measure' && !armedKind && measureTool === tool}
+              aria-pressed={toolMode === 'measure' && measureTool === tool}
               title={canMeasure ? t(`measureTools.${tool}`) : blockedReason}
             >
               <Icon name={MEASURE_ICONS[tool]} />
@@ -137,7 +103,7 @@ export default function MeasureToolbar({ part }: { part?: PanelPart } = {}) {
         </div>
       </div>
 
-      {/* How an area is measured — shared by a classified change and a plain area measurement. */}
+      {/* How an area is measured. */}
       {showAreaOptions && (
         <>
           <div className="tool-group">
