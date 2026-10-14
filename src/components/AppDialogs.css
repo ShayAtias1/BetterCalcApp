@@ -11,7 +11,7 @@
 .app-dialog-wide { width: min(1100px, calc(100vw - 32px)); }
 .app-notices { position: fixed; inset-inline-end: 20px; bottom: 20px; z-index: 200; display: grid; gap: 8px; max-width: min(440px, calc(100vw - 40px)); }
 .app-notice { display: flex; align-items: start; gap: 12px; padding: 12px 14px; border: 0; border-radius: var(--r-lg); background: var(--bg-panel); color: var(--text); box-shadow: var(--shadow); line-height: 1.5; }
-.app-notice span { flex: 1; }
+.app-notice span { flex: 1; white-space: pre-line; unicode-bidi: plaintext; }
 
 /* Opt-in persistent modal header: inline end is left in Hebrew, right in English. */
 .app-dialog-header {

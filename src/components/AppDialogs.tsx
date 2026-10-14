@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/appStore';
 import { useCompareStore } from '../store/compareStore';
 import { useT } from '../i18n';
-import { dismissNotice, settleDialog, useAppDialogs, type DialogRequest } from '../lib/appDialogs';
+import { dismissNotice, noticeDuration, settleDialog, useAppDialogs, type DialogRequest } from '../lib/appDialogs';
 import AppModal from './AppModal';
 
 function RequestDialog({ request: d }: { request: DialogRequest }) {
@@ -28,6 +28,21 @@ function RequestDialog({ request: d }: { request: DialogRequest }) {
     </form>
   </AppModal>;
 }
+/** A notice dismisses itself; pointing at or focusing it holds it until the pointer/focus leaves. */
+function Notice({ id, message }: { id: number; message: string }) {
+  const t = useT();
+  const [held, setHeld] = useState(false);
+  useEffect(() => {
+    if (held) return;
+    const timer = window.setTimeout(() => dismissNotice(id), noticeDuration(message));
+    return () => window.clearTimeout(timer);
+  }, [id, message, held]);
+  return <div className="app-notice" onMouseEnter={() => setHeld(true)} onMouseLeave={() => setHeld(false)}
+    onFocus={() => setHeld(true)} onBlur={() => setHeld(false)}>
+    <span role="status">{message}</span><button className="btn-ghost small" aria-label={t('dialogs.close')} onClick={() => dismissNotice(id)}>×</button>
+  </div>;
+}
+
 export default function AppDialogs() {
   const t = useT();
   const queue = useAppDialogs(s => s.queue), notices = useAppDialogs(s => s.notices);
@@ -40,9 +55,7 @@ export default function AppDialogs() {
   return <>
     {queue[0] && <RequestDialog key={queue[0].id} request={queue[0]} />}
     <div className="app-notices" aria-label={t('dialogs.noticeTitle')}>
-      {notices.map(n => <div className="app-notice" key={n.id}>
-        <span role="status">{n.message}</span><button className="btn-ghost small" aria-label={t('dialogs.close')} onClick={() => dismissNotice(n.id)}>×</button>
-      </div>)}
+      {notices.map(n => <Notice key={n.id} id={n.id} message={n.message} />)}
     </div>
   </>;
 }

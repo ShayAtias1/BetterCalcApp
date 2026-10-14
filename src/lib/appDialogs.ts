@@ -47,6 +47,11 @@ export function settleDialog(id: number, value: string | boolean | null): void {
   useAppDialogs.setState(s => ({ queue: s.queue.filter(d => d.id !== id) }));
   item?.resolve(value);
 }
+/** How long a notice stays: long enough to read its text, never stuck on screen. */
+export function noticeDuration(message: string): number {
+  return Math.min(12_000, 4_000 + message.length * 50);
+}
+
 export function notify(message: string): void {
   useAppDialogs.setState(s => ({ notices: [...s.notices, { id: ++nextId, message }] }));
 }
