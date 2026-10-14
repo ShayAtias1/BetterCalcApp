@@ -288,6 +288,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
   const revisedCanvasRef = useRef<HTMLCanvasElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
+  const [popupLayer, setPopupLayer] = useState<SVGGElement | null>(null);
   const [revisedPageSize, setRevisedPageSize] = useState({ width: 0, height: 0 });
   const isPanning = useRef(false);
   const alignDrag = useRef<{ startX: number; startY: number; startOffsetX: number; startOffsetY: number } | null>(null);
@@ -1053,8 +1054,14 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
     },
     onTap: (_x, _y, target) => {
       const element = target instanceof Element ? target : null;
-      const changeId = element?.closest('[data-revision-change-id]')?.getAttribute('data-revision-change-id');
-      if (changeId) { useRevisionUi.getState().selectChange(changeId); return; }
+      const changeId = element?.closest('[data-revision-change-id]')?.getAttribute('data-revision-change-id')
+        ?? element?.closest('[data-revision-popup]')?.getAttribute('data-revision-popup');
+      if (changeId) {
+        useRevisionUi.getState().selectChange(changeId);
+        // Touch taps never produce a click, so numbered bubbles are toggled from the tap itself.
+        element?.closest('.revision-change-balloon, .revision-change-popup')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        return;
+      }
       useRevisionUi.getState().selectChange(null);
       const markupId = element?.closest('[data-markup-id]')?.getAttribute('data-markup-id');
       const measurementId = element?.closest('[data-measurement-id]')?.getAttribute('data-measurement-id');
@@ -1303,7 +1310,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
             })}
 
             {/* Detected revision changes awaiting review */}
-            <RevisionChangeOverlay strokeW={strokeW} zoom={zoom} interactive={toolMode === 'select' || reviewOnly} editable={!reviewOnly && toolMode === 'select'} screenToNative={screenToNative}
+            <RevisionChangeOverlay strokeW={strokeW} zoom={zoom} interactive={toolMode === 'select' || reviewOnly} editable={!reviewOnly && toolMode === 'select'} screenToNative={screenToNative} popupLayer={popupLayer}
               noteBounds={{
                 left: Math.max(0, -pan.x / zoom),
                 top: Math.max(0, -pan.y / zoom),
@@ -1402,6 +1409,8 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
                   </g>
                 );
               })()}
+            {/* Topmost layer: expanded revision descriptions paint above every annotation, arrow and handle. */}
+            <g ref={setPopupLayer} className="revision-popup-layer" />
           </svg>
         )}
 

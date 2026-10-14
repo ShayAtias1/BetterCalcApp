@@ -1,6 +1,7 @@
 import { elementWorkKind, revisionWorkKinds } from '../../lib/revision/workClassification';
 import { revisionTypeLabelKey } from './revisionTerminology';
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { compareScaleFor, useCompareStore } from '../../store/compareStore';
 import { useRevisionUi } from '../../lib/revision/revisionWorkflow';
 import { changeNoteKey, elementLine, setElementLine, setWallFootprint, setOpeningFootprint, openingFootprint, openingFromFootprint, familyOf, retypeChange, editTypeOf, sidesOf, wallFromFootprint, type EditElementRef } from '../../lib/revision/changeEdit';
@@ -19,11 +20,31 @@ import { isAiWallChange, wallHasFootprint, wallGeometryNeedsVerification } from 
 import { editOpeningImpactFootprint } from '../../lib/revision/openingImpactEditing';
 import type { RevisionLayer } from '../../types/compare';
 import { openingWallFootprints } from '../../lib/revision/openingGeometry';
-import { placeRevisionLabel, type LabelBox } from '../../lib/revision/labelLayout';
-import { isRelocationChange, relocationAnnotation } from '../../lib/revision/relocationAnnotation';
+import { layoutNotePopup, layoutZoom, NOTE_POPUP, placeRevisionLabel, UNBOUNDED, type LabelBox } from '../../lib/revision/labelLayout';
+import { relocationAnnotation } from '../../lib/revision/relocationAnnotation';
 import type { AreaKind } from '../../types/compare';
 
 interface AnnotationTarget { work: AreaKind; points: Point[] }
+
+/** A general area note (e.g. "room boundary changed"): an annotation, never construction/demolition geometry. */
+export function isRegionalNote(change: RevisionChange): boolean {
+  return change.aiProposal?.changeType === 'room-boundary-changed' && !change.userType;
+}
+
+/** Scalloped architectural revision-cloud outline around a box, bulging outward. */
+export function revisionCloudPath(box: { x: number; y: number; width: number; height: number }, zoom: number): string {
+  const corners = [{ x: box.x, y: box.y }, { x: box.x + box.width, y: box.y }, { x: box.x + box.width, y: box.y + box.height }, { x: box.x, y: box.y + box.height }];
+  const bump = 12 / zoom;
+  let d = `M${corners[0].x} ${corners[0].y}`;
+  corners.forEach((a, i) => {
+    const b = corners[(i + 1) % 4];
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    const n = Math.min(120, Math.max(1, Math.round(length / bump)));
+    const r = (length / n) * 0.6;
+    for (let k = 1; k <= n; k++) d += `A${r} ${r} 0 0 1 ${a.x + (b.x - a.x) * k / n} ${a.y + (b.y - a.y) * k / n}`;
+  });
+  return d + 'Z';
+}
 
 function annotationTargets(change: RevisionChange, portions: OpeningPortion[]): AnnotationTarget[] {
   if (portions.length) return portions.map(p => ({ work: p.areaKind, points: p.points }));
@@ -61,8 +82,9 @@ function arrowsCross(a: { from: Point; to: Point }, b: { from: Point; to: Point 
   return side(a.from,a.to,b.from)*side(a.from,a.to,b.to)<0 && side(b.from,b.to,a.from)*side(b.from,b.to,a.to)<0;
 }
 
-function AnnotationLeader({ box, tip, work, zoom, selected }: { box: LabelBox; tip: Point; work: AreaKind; zoom: number; selected: boolean }) {
+function AnnotationLeader({ box, tip, work, zoom, selected, color }: { box: LabelBox; tip: Point; work: AreaKind; zoom: number; selected: boolean; color?: string }) {
   const colors = useRevisionColors();
+  const stroke = color ?? colors[work];
   const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
   const dx = tip.x - center.x, dy = tip.y - center.y;
   const edge = Math.min(1, box.width / (2 * Math.abs(dx || 1e-9)), box.height / (2 * Math.abs(dy || 1e-9)));
@@ -72,8 +94,8 @@ function AnnotationLeader({ box, tip, work, zoom, selected }: { box: LabelBox; t
   const ux = (tip.x-start.x)/length, uy = (tip.y-start.y)/length, head = Math.min(5/zoom,length/2);
   const base = { x: tip.x-ux*head, y: tip.y-uy*head };
   return <g className={`revision-annotation-leader ${work}`} pointerEvents="none">
-    <line x1={start.x} y1={start.y} x2={base.x} y2={base.y} stroke={colors[work]} strokeWidth={(selected ? 1.2 : 1) / zoom} />
-    <polygon points={[tip,{x:base.x-uy*head/2,y:base.y+ux*head/2},{x:base.x+uy*head/2,y:base.y-ux*head/2}].map(p=>`${p.x},${p.y}`).join(' ')} fill={colors[work]} />
+    <line x1={start.x} y1={start.y} x2={base.x} y2={base.y} stroke={stroke} strokeWidth={(selected ? 1.1 : 0.8) / zoom} strokeLinecap="round" />
+    <polygon points={[tip,{x:base.x-uy*head/2,y:base.y+ux*head/2},{x:base.x+uy*head/2,y:base.y-ux*head/2}].map(p=>`${p.x},${p.y}`).join(' ')} fill={stroke} />
   </g>;
 }
 
@@ -103,7 +125,9 @@ function useRevisionColors() {
  * own space): removed lines in the demolition color, added lines in the construction color, measured wall footprints filled, each region
  * boxed and numbered like its row in the review list. Clicking a region selects it.
  */
-export default function RevisionChangeOverlay({ strokeW, zoom, interactive, editable, screenToNative, noteBounds }: {
+export default function RevisionChangeOverlay({ strokeW, zoom, interactive, editable, screenToNative, noteBounds, popupLayer }: {
+  /** Topmost SVG group (last child of the plan svg) that expanded descriptions are portalled into. */
+  popupLayer?: SVGGElement | null;
   strokeW: number;
   zoom: number;
   interactive: boolean;
@@ -136,7 +160,7 @@ export default function RevisionChangeOverlay({ strokeW, zoom, interactive, edit
   const editing = editable && markersVisible && editingId === selectedId ? analysis?.changes.find((c) => c.id === editingId && c.status !== 'applied' && (!stale || c.manual || c.edited)) : undefined;
   return (
     <>
-      {analysis && markersVisible && <ChangeMarkers key={`${comparison?.id}:${revision?.id}:${currentPageKey}`} changes={analysis.changes} strokeW={strokeW} zoom={zoom} interactive={interactive} noteBounds={noteBounds} onSelectPortion={setSelectedPortion} />}
+      {analysis && markersVisible && <ChangeMarkers key={`${comparison?.id}:${revision?.id}:${currentPageKey}`} changes={analysis.changes} strokeW={strokeW} zoom={zoom} interactive={interactive} noteBounds={noteBounds} popupLayer={popupLayer} onSelectPortion={setSelectedPortion} />}
       {editing && !mergePreview && <ChangeEditLayer change={editing} zoom={zoom} screenToNative={screenToNative}
         selectedPortion={selectedPortion?.changeId === editing.id ? selectedPortion : null} />}
       {mergePreview && markersVisible && mergePreview.comparisonId === comparison?.id && mergePreview.revisionId === revision?.id && mergePreview.pageKey === currentPageKey &&
@@ -174,18 +198,6 @@ function changeAnchor(change: RevisionChange): Point {
   return points.reduce((best, p) => p.x > best.x || (p.x === best.x && p.y < best.y) ? p : best, points[0] ?? { x: x + width, y });
 }
 
-/** Wrap every word instead of truncating descriptions or hiding annotation content. */
-function noteLines(text: string, limit: number): string[] {
-  const lines: string[] = [];
-  let line = '';
-  for (const word of text.split(/\s+/).filter(Boolean)) {
-    if (line && line.length + word.length + 1 > limit) { lines.push(line); line = ''; }
-    line += (line ? ' ' : '') + word;
-  }
-  if (line) lines.push(line);
-  return lines;
-}
-
 let noteMeasureContext: CanvasRenderingContext2D | null | undefined;
 function noteTextWidth(text: string, size: number, bold = false): number {
   if (typeof document === 'undefined') return text.length * size * 0.6;
@@ -210,24 +222,18 @@ function RelocationArrow({ from, to, zoom, color }: { from: Point; to: Point; zo
   </g>;
 }
 
-function ChangeNote({ change, type, lines, at, targets, width, height, number, selected, expanded, zoom, rtl, onToggle }: {
-  change: RevisionChange; type: string; lines: string[]; at: Point; targets: AnnotationTarget[];
-  width: number; height: number; number: number; selected: boolean; expanded: boolean; zoom: number; rtl: boolean;
+function ChangeNote({ type, at, targets, regionTip, width, height, number, selected, expanded, zoom, onToggle }: {
+  type: string; at: Point; targets: AnnotationTarget[]; regionTip?: Point;
+  width: number; height: number; number: number; selected: boolean; expanded: boolean; zoom: number;
   onToggle?: () => void;
 }) {
-  const colors = useRevisionColors();
-  const t = useT();
-  const work = revisionWorkKinds(change);
-  const before = change.walls.some(w => w.side === 'removed') || change.doors.some(d => d.side === 'removed') || change.removedSegments.length > 0 || !!change.aiProposal?.before;
-  const after = change.walls.some(w => w.side === 'added') || change.doors.some(d => d.side === 'added') || change.addedSegments.length > 0 || !!change.aiProposal?.after;
   const box = { x: at.x + 5 / zoom, y: at.y - 9 / zoom };
-  const textX = rtl ? box.x + width - 6 / zoom : box.x + 6 / zoom;
-  const textDirection = { direction: rtl ? 'rtl' as const : 'ltr' as const, unicodeBidi: 'plaintext' as const };
   const ink = '#1e293b';
   return (
     <g className="revision-change-note">
       {annotationLeaders(targets,{...box,width,height}).map(leader =>
         <AnnotationLeader key={leader.work} box={{...box,width,height}} tip={leader.to} work={leader.work} zoom={zoom} selected={selected} />)}
+      {regionTip && <AnnotationLeader box={{...box,width,height}} tip={regionTip} work="construction" color="#64748b" zoom={zoom} selected={selected} />}
     <g className="revision-change-balloon" pointerEvents={onToggle ? 'auto' : 'none'}
       role={onToggle ? 'button' : undefined} tabIndex={onToggle ? 0 : undefined} aria-expanded={expanded} aria-label={`#${number} ${type}`}
       onClick={e => { e.stopPropagation(); onToggle?.(); }}
@@ -236,32 +242,104 @@ function ChangeNote({ change, type, lines, at, targets, width, height, number, s
       style={{ cursor: onToggle ? 'pointer' : undefined, outline: 'none', WebkitTapHighlightColor: 'transparent' }}>
       <title>{type}</title>
       <rect x={at.x + 5 / zoom} y={at.y - 9 / zoom} width={width} height={height}
-        rx={(expanded ? 3 : 10) / zoom} fill="#fff" fillOpacity={0.96} stroke="#64748b" strokeWidth={1 / zoom} />
+        rx={10 / zoom} fill="#fff" fillOpacity={0.96} stroke="#64748b" strokeWidth={1 / zoom} />
 
-      {expanded ? <>
-      <text x={textX} y={at.y} direction={rtl ? 'rtl' : 'ltr'} textAnchor="start" style={textDirection}
-        fontSize={10.5 / zoom} fontWeight={700} fontFamily="system-ui, sans-serif" fill={ink} stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke" strokeLinejoin="round">
-        #{number} {type}
-      </text>
-      <text x={textX} y={at.y + 13 / zoom} direction={rtl ? 'rtl' : 'ltr'} textAnchor="start" style={textDirection}
-        fontSize={10 / zoom} fontFamily="system-ui, sans-serif" fill={ink} stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke" strokeLinejoin="round">
-        {lines.map((line, i) => <tspan key={i} x={textX} dy={i ? 12 / zoom : 0}>{line}</tspan>)}
-      </text>
-      <text x={textX} y={at.y + (15 + lines.length * 12) / zoom} direction={rtl ? 'rtl' : 'ltr'} textAnchor="start" style={textDirection}
-        fontSize={10 / zoom} fontWeight={700} fontFamily="system-ui, sans-serif" stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke">
-        {work.map((kind, i) => <tspan key={kind} fill={colors[kind]}>{i ? ' · ' : ''}{t(`revisionAi.work.${kind}`)}</tspan>)}
-        {(before || after) && <tspan fill={ink}>{work.length ? ' · ' : ''}{[before && t('revisionAi.before'), after && t('revisionAi.after')].filter(Boolean).join(' / ')}</tspan>}
-      </text>
-      </> : <text x={at.x + 5 / zoom + width / 2} y={at.y + 2 / zoom} textAnchor="middle" dominantBaseline="central"
+      <text x={at.x + 5 / zoom + width / 2} y={at.y + 2 / zoom} textAnchor="middle" dominantBaseline="central"
         fontSize={11 / zoom} fontWeight={700} fontFamily="system-ui, sans-serif" fill={ink} direction="ltr">
         #{number}
-      </text>}
+      </text>
       </g>
     </g>
   );
 }
 
-function ChangeMarkers({ changes, strokeW, zoom, interactive, noteBounds, onSelectPortion }: { changes: RevisionChange[]; strokeW: number; zoom: number; interactive: boolean; noteBounds: { left: number; top: number; right: number; bottom: number }; onSelectPortion: (ref: { changeId: string; index: number; part: number } | null) => void }) {
+/** Popup sits just below its bubble (above when there is no room); only the popup is clamped, never the bubble. */
+export function notePopupPosition(bubble: LabelBox, width: number, height: number, bounds: { left: number; top: number; right: number; bottom: number }, zoom: number): Point {
+  const gap = 3 / zoom;
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+  const below = bubble.y + bubble.height + gap;
+  return {
+    x: clamp(bubble.x, bounds.left, Math.max(bounds.left, bounds.right - width)),
+    y: below + height <= bounds.bottom ? below : clamp(bubble.y - gap - height, bounds.top, Math.max(bounds.top, bounds.bottom - height)),
+  };
+}
+
+/** Floating description anchored to its numbered bubble; only the popup is clamped to the viewport. */
+function ChangeNotePopup({ change, titleLines, lines, bubble, popupWidth, popupHeight, bounds, zoom, rtl, onToggle }: {
+  change: RevisionChange; titleLines: string[]; lines: string[]; bubble: LabelBox; popupWidth: number; popupHeight: number;
+  bounds: { left: number; top: number; right: number; bottom: number }; zoom: number; rtl: boolean; onToggle?: () => void;
+}) {
+  const colors = useRevisionColors();
+  const t = useT();
+  const work = revisionWorkKinds(change);
+  const { x, y } = notePopupPosition(bubble, popupWidth, popupHeight, bounds, zoom);
+  const { padding, titleSize, titleLine, bodySize, bodyLine, sectionGap } = NOTE_POPUP;
+  // RTL text is right-aligned to the inner padding edge; LTR to the left one.
+  const textX = rtl ? x + popupWidth - padding / zoom : x + padding / zoom;
+  // Baselines sit ~80% down each line box so ascenders and descenders stay inside the padding.
+  const titleBaseline = y + (padding + titleLine * 0.78) / zoom;
+  const bodyTop = padding + titleLines.length * titleLine + sectionGap;
+  const workTop = bodyTop + (lines.length ? lines.length * bodyLine + sectionGap : 0);
+  const textDirection = { direction: rtl ? 'rtl' as const : 'ltr' as const, unicodeBidi: 'plaintext' as const };
+  const ink = '#1e293b';
+  return (
+    <g className="revision-change-popup" data-revision-popup={change.id} pointerEvents={onToggle ? 'auto' : 'none'}
+      onClick={e => { e.stopPropagation(); onToggle?.(); }}
+      onMouseDown={onToggle ? e => { e.stopPropagation(); e.preventDefault(); } : undefined}
+      style={{ cursor: onToggle ? 'pointer' : undefined }}>
+      <rect x={x} y={y} width={popupWidth} height={popupHeight} rx={3 / zoom} fill="#fff" fillOpacity={1} stroke="#64748b" strokeWidth={1 / zoom} />
+      <text x={textX} y={titleBaseline} direction={rtl ? 'rtl' : 'ltr'} textAnchor="start" style={textDirection}
+        fontSize={titleSize / zoom} fontWeight={700} fontFamily="system-ui, sans-serif" fill={ink} stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke" strokeLinejoin="round">
+        {titleLines.map((line, i) => <tspan key={i} x={textX} dy={i ? titleLine / zoom : 0}>{line}</tspan>)}
+      </text>
+      {lines.length > 0 && <text x={textX} y={y + (bodyTop + bodyLine * 0.78) / zoom} direction={rtl ? 'rtl' : 'ltr'} textAnchor="start" style={textDirection}
+        fontSize={bodySize / zoom} fontFamily="system-ui, sans-serif" fill={ink} stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke" strokeLinejoin="round">
+        {lines.map((line, i) => <tspan key={i} x={textX} dy={i ? bodyLine / zoom : 0}>{line}</tspan>)}
+      </text>}
+      <text x={textX} y={y + (workTop + bodyLine * 0.78) / zoom} direction={rtl ? 'rtl' : 'ltr'} textAnchor="start" style={textDirection}
+        fontSize={bodySize / zoom} fontWeight={700} fontFamily="system-ui, sans-serif" stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke">
+        {work.map((kind, i) => <tspan key={kind} fill={colors[kind]}>{i ? ' · ' : ''}{t(`revisionAi.work.${kind}`)}</tspan>)}
+      </text>
+    </g>
+  );
+}
+
+function noteBubbleSize(number: number, zoom: number) {
+  return { width: (26 + String(number).length * 6) / zoom, height: 22 / zoom };
+}
+
+/** Bubble centres for every change, laid out once per zoom step in change order without hiding any. */
+function layoutChangeNotes(changes: RevisionChange[], revision: RevisionLayer | undefined, mpp: number, zoom: number) {
+  const occupied: LabelBox[] = [];
+  const occupiedArrows: { from: Point; to: Point }[] = changes.flatMap(c => {
+    const movement = relocationAnnotation(c);
+    return movement ? [{ from: movement.from, to: movement.to }] : [];
+  });
+  const geometry = changes.flatMap(c => {
+    const elements = changeGeometry(c);
+    return elements.length ? elements.map(points => {
+      const xs = points.map(p => p.x), ys = points.map(p => p.y);
+      return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
+    }) : [c.bbox];
+  });
+  return new Map(changes.map((c, i) => {
+    const regional = isRegionalNote(c);
+    const targets = regional ? [] : annotationTargets(c, openingPortions(c, revision, mpp));
+    const { width, height } = noteBubbleSize(i + 1, zoom);
+    const centers = targets.map(target => target.points.length >= 3 ? polygonCentroid(target.points)
+      : { x: target.points.reduce((sum,p)=>sum+p.x,0)/target.points.length, y:target.points.reduce((sum,p)=>sum+p.y,0)/target.points.length });
+    const anchor = new Set(targets.map(target => target.work)).size > 1
+      ? { x:centers.reduce((sum,p)=>sum+p.x,0)/centers.length, y:centers.reduce((sum,p)=>sum+p.y,0)/centers.length }
+      : changeAnchor(c);
+    const position = placeRevisionLabel(anchor, width, height, zoom, occupied, geometry, UNBOUNDED, box =>
+      annotationLeaders(targets,box).reduce((score,leader)=>score+occupiedArrows.filter(other=>arrowsCross(leader,other)).length*40,0));
+    occupiedArrows.push(...annotationLeaders(targets,{...position,width,height}));
+    occupied.push({ ...position, width, height });
+    return [c.id, { center: { x: position.x + width / 2, y: position.y + height / 2 }, targets, regional }] as const;
+  }));
+}
+
+function ChangeMarkers({ changes, strokeW, zoom, interactive, noteBounds, popupLayer, onSelectPortion }: { popupLayer?: SVGGElement | null; changes: RevisionChange[]; strokeW: number; zoom: number; interactive: boolean; noteBounds: { left: number; top: number; right: number; bottom: number }; onSelectPortion: (ref: { changeId: string; index: number; part: number } | null) => void }) {
   const colors = useRevisionColors();
   const t = useT();
   const comparison = useCompareStore(s => s.comparison);
@@ -277,50 +355,38 @@ function ChangeMarkers({ changes, strokeW, zoom, interactive, noteBounds, onSele
   const selectedWalls = useRevisionUi(s => s.selectedWallRegions);
   const selectWallRegion = useRevisionUi(s => s.selectWallRegion);
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
-  const analysis = { changes };
-  const numbers = new Map(analysis.changes.map((c, i) => [c.id, i + 1]));
+  const numbers = new Map(changes.map((c, i) => [c.id, i + 1]));
   // The review-list filter never hides annotations on the drawing.
-  const shown = analysis.changes;
-  const occupied: LabelBox[] = [];
-  const occupiedArrows: { from: Point; to: Point }[] = shown.flatMap(c => {
-    const movement = relocationAnnotation(c);
-    return movement ? [{ from: movement.from, to: movement.to }] : [];
-  });
-  const geometry = shown.flatMap(c => {
-    const elements = changeGeometry(c);
-    return elements.length ? elements.map(points => {
-      const xs = points.map(p => p.x), ys = points.map(p => p.y);
-      return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
-    }) : [c.bbox];
-  });
+  const shown = changes;
+  const mpp = scale.state === 'calibrated' ? scale.metersPerPixel : 0;
+  const zoomStep = layoutZoom(zoom);
+  // Bubble layout ignores pan and expansion and reruns only when the changes or the zoom step change.
+  const layout = useMemo(() => layoutChangeNotes(changes, revision, mpp, zoomStep), [changes, revision, mpp, zoomStep]);
   const notes = new Map(shown.map(c => {
     const key = changeNoteKey(c);
     const editType = editTypeOf(c);
     const wallLabel = language === 'he' && (editType === 'wall-added' || editType === 'wall-removed');
     const type = wallLabel ? t(revisionTypeLabelKey(editType, comparison?.context, language))
       : key ? note(key) : t(`revisionAi.categories.${c.category}`);
-    const availableWidth = Math.max(90, (noteBounds.right - noteBounds.left) * zoom - 16);
-    const lineLimit = Math.max(12, Math.min(40, Math.floor((availableWidth - 16) / 6)));
-    const lines = noteLines(wallLabel ? type : c.ai?.summary || type, lineLimit);
     const number = numbers.get(c.id) ?? 0;
     const expanded = expandedNoteId === c.id;
-    const portions = openingPortions(c, revision, scale.state === 'calibrated' ? scale.metersPerPixel : 0);
-    const targets = annotationTargets(c, portions);
-    const width = (expanded
-      ? Math.min(availableWidth, Math.max(noteTextWidth(`#${number} ${type}`, 10.5, true), ...lines.map(line => noteTextWidth(line, 10)), noteTextWidth(`${revisionWorkKinds(c).map(k => t(`revisionAi.work.${k}`)).join(' · ')} · ${t('revisionAi.before')} / ${t('revisionAi.after')}`, 10, true)) + 12)
-      : 26 + String(number).length * 6) / zoom;
-    const height = (expanded ? 30 + lines.length * 12 : 22) / zoom;
-    const centers = targets.map(target => target.points.length >= 3 ? polygonCentroid(target.points)
-      : { x: target.points.reduce((sum,p)=>sum+p.x,0)/target.points.length, y:target.points.reduce((sum,p)=>sum+p.y,0)/target.points.length });
-    const anchor = new Set(targets.map(target => target.work)).size > 1
-      ? { x:centers.reduce((sum,p)=>sum+p.x,0)/centers.length, y:centers.reduce((sum,p)=>sum+p.y,0)/centers.length }
-      : changeAnchor(c);
-    const position = placeRevisionLabel(anchor, width, height, zoom, occupied, geometry, noteBounds, box =>
-      annotationLeaders(targets,box).reduce((score,leader)=>score+occupiedArrows.filter(other=>arrowsCross(leader,other)).length*40,0));
-    occupiedArrows.push(...annotationLeaders(targets,{...position,width,height}));
-    occupied.push({ ...position, width, height });
+    const { center, targets, regional } = layout.get(c.id)!;
+    // Layout never depends on expansion: the description is a floating popup, so expanding or collapsing
+    // cannot move any other label or arrow.
+    const { width, height } = noteBubbleSize(number, zoom);
+    // Popup size comes from the wrapped, measured content in screen px.
+    const popup = expanded ? layoutNotePopup(`#${number} ${type}`, wallLabel ? type : c.ai?.summary || type,
+      revisionWorkKinds(c).map(k => t(`revisionAi.work.${k}`)).join(' · '), (noteBounds.right - noteBounds.left) * zoom, noteTextWidth) : null;
+    const titleLines = popup?.titleLines ?? [];
+    const lines = popup?.lines ?? [];
+    const popupWidth = (popup?.width ?? 0) / zoom;
+    const popupHeight = (popup?.height ?? 0) / zoom;
+    const position = { x: center.x - width / 2, y: center.y - height / 2 };
     const at = { x: position.x - 5 / zoom, y: position.y + 9 / zoom };
-    return [c.id, { type, lines, at, targets, width, height, number, expanded }] as const;
+    const regionTip = regional ? nearestTargetPoint([{ x: c.bbox.x, y: c.bbox.y }, { x: c.bbox.x + c.bbox.width, y: c.bbox.y },
+      { x: c.bbox.x + c.bbox.width, y: c.bbox.y + c.bbox.height }, { x: c.bbox.x, y: c.bbox.y + c.bbox.height }],
+      { x: position.x + width / 2, y: position.y + height / 2 }) : undefined;
+    return [c.id, { type, titleLines, lines, at, targets, regionTip, width, height, number, expanded, popupWidth, popupHeight }] as const;
   }));
 
   const pick = (id: string) => (e: MouseEvent) => {
@@ -329,10 +395,16 @@ function ChangeMarkers({ changes, strokeW, zoom, interactive, noteBounds, onSele
     selectChange(id);
   };
   const stop = (e: MouseEvent) => { if (e.button === 0) e.stopPropagation(); };
+  const toggleNote = (id: string) => interactive ? () => {
+    onSelectPortion(null);
+    selectChange(id);
+    setExpandedNoteId(current => current === id ? null : id);
+  } : undefined;
 
   return (
     <g className="revision-change-overlay">
-      {shown.map((c) => {
+      {[...shown.filter(isRegionalNote), ...shown.filter(c => !isRegionalNote(c))].map((c) => {
+        const regional = isRegionalNote(c);
         const movement = relocationAnnotation(c);
         const elementColor = (list: 'walls' | 'doors', side: 'removed' | 'added') => colors[elementWorkKind(list, side)];
         const impactColor = (portion: OpeningPortion) => colors[portion.areaKind];
@@ -342,14 +414,13 @@ function ChangeMarkers({ changes, strokeW, zoom, interactive, noteBounds, onSele
         const isSelected = c.id === selectedId;
         const openingDifference = isOpeningDifference(c);
         const impact = openingDifference || c.doors.some(d => d.footprint) ? openingPortions(c, revision, scale.state === 'calibrated' ? scale.metersPerPixel : 0) : [];
-        const hit = interactive ? { onClick: pick(c.id), onMouseDown: stop, style: { pointerEvents: 'auto' as const, cursor: 'pointer' as const } } : {};
+        const hit = interactive && !regional ? { onClick: pick(c.id), onMouseDown: stop, style: { pointerEvents: 'auto' as const, cursor: 'pointer' as const } } : {};
         // Exact geometry owns selection; the location box is a fallback only.
         const hasGeometry = c.walls.length || c.doors.length || c.addedSegments.length || c.removedSegments.length || c.aiProposal?.before || c.aiProposal?.after;
-        const areaHit = hasGeometry ? {} : hit;
         // AI-located lines that were not verified in the drawing are drawn dashed: a location, not a measurement.
         const segDash = wallGeometryNeedsVerification(c) || (openingDifference && !openingImpactReady(c)) || (c.aiProposal && c.aiProposal.verification !== 'verified' && !c.edited) ? `${5 / zoom} ${4 / zoom}` : undefined;
         return (
-          <g key={c.id} data-revision-change-id={c.id}>
+          <g key={c.id} data-revision-change-id={c.id} pointerEvents={regional ? 'none' : undefined}>
             {(impact.length ? [] : c.walls).map((w, i) => (
               isAiWallChange(c) && !wallHasFootprint(w) ? (Array.isArray(w.centerline) && w.centerline.length === 2 && w.centerline.every(p => p && Number.isFinite(p.x) && Number.isFinite(p.y)) ?
                 <line key={`w${i}`} x1={w.centerline[0].x} y1={w.centerline[0].y} x2={w.centerline[1].x} y2={w.centerline[1].y}
@@ -360,10 +431,16 @@ function ChangeMarkers({ changes, strokeW, zoom, interactive, noteBounds, onSele
                 onClick={interactive ? e => { e.stopPropagation(); onSelectPortion(null); selectWallRegion(c.id, i, e.shiftKey || e.ctrlKey || e.metaKey); } : undefined} />
             ))}
             {(c.edited || c.walls.some(w => w.side === 'removed') || c.doors.some(d => d.side === 'removed') ? [] : c.removedSegments).map((s, i) => (
-              <line key={`r${i}`} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke={lineWork('removed')} strokeWidth={(isSelected ? 2.2 : 1.6) / zoom} strokeLinecap="round" strokeDasharray={segDash} {...hit} />
+              <g key={`r${i}`}>
+                <line x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke="transparent" strokeWidth={12 / zoom} strokeLinecap="round" {...hit} />
+                <line x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke={lineWork('removed')} strokeWidth={(isSelected ? 2.2 : 1.6) / zoom} strokeLinecap="round" strokeDasharray={segDash} {...hit} />
+              </g>
             ))}
             {(c.edited || c.walls.some(w => w.side === 'added') || c.doors.some(d => d.side === 'added') ? [] : c.addedSegments).map((s, i) => (
-              <line key={`a${i}`} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke={lineWork('added')} strokeWidth={(isSelected ? 2.2 : 1.6) / zoom} strokeLinecap="round" strokeDasharray={segDash} {...hit} />
+              <g key={`a${i}`}>
+                <line x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke="transparent" strokeWidth={12 / zoom} strokeLinecap="round" {...hit} />
+                <line x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke={lineWork('added')} strokeWidth={(isSelected ? 2.2 : 1.6) / zoom} strokeLinecap="round" strokeDasharray={segDash} {...hit} />
+              </g>
             ))}
             {c.doors.map((d, i) => openingFootprint(d) ? <polygon key={`opening-${i}`}
               points={openingFootprint(d)!.map(p => `${p.x},${p.y}`).join(' ')}
@@ -382,12 +459,22 @@ function ChangeMarkers({ changes, strokeW, zoom, interactive, noteBounds, onSele
             {!c.walls.length && !c.doors.length && c.aiProposal && (['before', 'after'] as const).map((side) => {
               const line = c.aiProposal![side];
               if (!c.edited && (side === 'before' ? c.removedSegments.length : c.addedSegments.length)) return null;
-              return line && <line key={side} x1={line[0].x} y1={line[0].y} x2={line[1].x} y2={line[1].y}
-                stroke={lineWork(side === 'before' ? 'removed' : 'added')} strokeWidth={(isSelected ? 2.2 : 1.6) / zoom} strokeDasharray={segDash} {...hit} />;
+              return line && <g key={side}>
+                <line x1={line[0].x} y1={line[0].y} x2={line[1].x} y2={line[1].y} stroke="transparent" strokeWidth={12 / zoom} {...hit} />
+                <line x1={line[0].x} y1={line[0].y} x2={line[1].x} y2={line[1].y}
+                  stroke={lineWork(side === 'before' ? 'removed' : 'added')} strokeWidth={(isSelected ? 2.2 : 1.6) / zoom} strokeDasharray={segDash} {...hit} />
+              </g>;
             })}
-            <rect x={c.bbox.x} y={c.bbox.y} width={c.bbox.width} height={c.bbox.height} rx={4 / zoom}
+            {regional && <g className="revision-cloud" data-revision-cloud={c.id}>
+              {/* Only the outline is interactive; the interior never intercepts clicks. */}
+              <path d={revisionCloudPath(c.bbox, zoom)} fill="none" stroke={colors.neutral} strokeWidth={(isSelected ? 1.1 : 0.7) / zoom}
+                strokeOpacity={isSelected ? 0.85 : 0.5} strokeLinejoin="round" pointerEvents="none" />
+              {interactive && <path d={revisionCloudPath(c.bbox, zoom)} fill="none" stroke="transparent" strokeWidth={10 / zoom}
+                data-revision-cloud-hit={c.id} onClick={pick(c.id)} onMouseDown={stop} style={{ pointerEvents: 'stroke', cursor: 'pointer' }} />}
+            </g>}
+            {!regional && <rect x={c.bbox.x} y={c.bbox.y} width={c.bbox.width} height={c.bbox.height} rx={4 / zoom}
               fill="transparent"
-              stroke={!c.walls.length && !c.doors.length && !c.aiProposal && !c.addedSegments.length && !c.removedSegments.length ? color : 'none'} strokeWidth={strokeW * 0.8} strokeDasharray={`${4 / zoom} ${4 / zoom}`} {...areaHit} />
+              stroke={!c.walls.length && !c.doors.length && !c.aiProposal && !c.addedSegments.length && !c.removedSegments.length ? color : 'none'} strokeWidth={strokeW * 0.8} strokeDasharray={`${4 / zoom} ${4 / zoom}`} data-revision-hit="area" {...(hasGeometry ? { style: { pointerEvents: 'none' as const } } : hit)} />}
             {impact.map((portion, i) => <polygon key={`opening-impact-${i}`} points={portion.points.map(p => `${p.x},${p.y}`).join(' ')}
               fill={impactColor(portion)} fillOpacity={isSelected ? 0.2 : 0.12}
               stroke={impactColor(portion)} strokeWidth={(isSelected ? 2.2 : 1.8) / zoom} {...hit}
@@ -400,15 +487,22 @@ function ChangeMarkers({ changes, strokeW, zoom, interactive, noteBounds, onSele
               <title>{portion.preview ? t(`areaKinds.${portion.areaKind}`) : `${t(`areaKinds.${portion.areaKind}`)} · ${portion.wallLengthM} ${t('units.m')} × ${portion.wallHeightM} ${t('units.m')} = ${portion.areaM2} ${t('units.m2')}`}</title>
             </polygon>)}
             {movement && <RelocationArrow from={movement.from} to={movement.to} zoom={zoom} color={elementColor(familyOf(editTypeOf(c)) === 'opening' ? 'doors' : 'walls', 'removed')} />}
-            <ChangeNote change={c} {...notes.get(c.id)!} selected={isSelected} zoom={zoom} rtl={rtl}
-              onToggle={interactive ? () => {
-                onSelectPortion(null);
-                selectChange(c.id);
-                setExpandedNoteId(id => id === c.id ? null : c.id);
-              } : undefined} />
+            <ChangeNote {...notes.get(c.id)!} selected={isSelected} zoom={zoom} onToggle={toggleNote(c.id)} />
           </g>
         );
       })}
+      {/* Descriptions float above the drawing and never take part in label layout. */}
+      {(() => {
+        const popups = shown.map(c => {
+          const n = notes.get(c.id)!;
+          if (!n.expanded) return null;
+          return <ChangeNotePopup key={`popup-${c.id}`} change={c} titleLines={n.titleLines} lines={n.lines}
+            bubble={{ x: n.at.x + 5 / zoom, y: n.at.y - 9 / zoom, width: n.width, height: n.height }}
+            popupWidth={n.popupWidth} popupHeight={n.popupHeight} bounds={noteBounds} zoom={zoom} rtl={rtl} onToggle={toggleNote(c.id)} />;
+        });
+        // SVG paints in document order: the popup layer is the last child of the plan svg, above geometry, arrows and handles.
+        return popupLayer ? createPortal(<>{popups}</>, popupLayer) : popups;
+      })()}
     </g>
   );
 }
@@ -526,8 +620,9 @@ function ChangeEditLayer({ change, zoom, screenToNative, selectedPortion }: { ch
           const visibleImpact = impacts.find(p => p.element.index === ref.index
             && p.points.length === openingShape.length
             && openingShape.every(a => p.points.some(b => distancePx(a, b) < 1e-6)));
-          const color = isRelocationChange(change) ? colors[sideOf(ref) === 'removed' ? 'demolition' : 'construction'] : visibleImpact
-            ? visibleImpact.areaKind === 'construction' ? colors.construction : colors.demolition
+          // Handles take the color of the polygon they edit: the visible work portion, else the same
+          // element work kind the overlay fills with — never the before/after version alone.
+          const color = visibleImpact ? colors[visibleImpact.areaKind]
             : isOpeningDifference(draft) ? colors.neutral : colors[elementWorkKind('doors', sideOf(ref))];
           return <g key={`opening-${ref.index}`} onClick={stopMouse}>
             <polygon points={openingShape.map(p => `${p.x},${p.y}`).join(' ')} fill="transparent" pointerEvents="all"
@@ -561,7 +656,7 @@ function ChangeEditLayer({ change, zoom, screenToNative, selectedPortion }: { ch
           </g>;
         }
         const [a, b] = elementLine(draft, ref)!;
-        const color = isRelocationChange(change) ? colors[sideOf(ref) === 'removed' ? 'demolition' : 'construction'] : colors[elementWorkKind(ref.list, sideOf(ref))];
+        const color = colors[elementWorkKind(ref.list, sideOf(ref))];
         const isWindow = ref.list === 'doors' && draft.doors[ref.index].opening === 'window';
         const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
         const key = `${ref.list}${ref.index}`;

@@ -324,7 +324,6 @@ export function ChangeEditor({ change }: { change: RevisionChange }) {
                 checked={selectedWalls.some(ref => ref.changeId === change.id && ref.index === el.index)}
                 onChange={() => useRevisionUi.getState().selectWallRegion(change.id, el.index, true)} />}
               <WorkLabels kinds={elementWorkKinds(change, el.list, el.index)} />
-              <span className="revision-edit-side">{t(el.side === 'removed' ? 'revisionAi.before' : 'revisionAi.after')}</span>
               <span className="revision-edit-label" dir="auto">{el.list === 'walls' && mpp
                 ? t('revisionAi.edit.wallDimensions', { length: round(change.walls[el.index].lengthPx * mpp, 2), thickness: round(change.walls[el.index].thicknessPx * mpp * 100, 1) })
                 : <>{el.label} · {length(el.a, el.b)}</>}</span>

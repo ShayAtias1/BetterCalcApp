@@ -117,3 +117,41 @@ test('swapping narrowed/widened updates work, polygon color, corner colors and q
   await store().persist();const restored=await loadComparison(current().id);assert.deepEqual(revisionWorkKinds(restored.revisions[0].analysis.pages[1].changes[0]),['demolition']);
   assert.equal(elementWorkKind('doors','added'),'demolition');assert.equal(elementWorkKind('walls','added'),'construction');
 });
+
+// Every editable polygon's handles carry the color of the work polygon drawn under them.
+function handleGroups(html) {
+  const edit=html.slice(html.indexOf('class="revision-change-edit"'));
+  return [...edit.matchAll(/<g class="area-geometry-handles">(.*?)<\/g><\/g>(?!<g>)/g)].map(m=>[...m[1].matchAll(/<circle cx="([^"]+)" cy="([^"]+)" r="5"[^>]*stroke="([^"]+)"/g)]
+    .map(c=>({x:+c[1],y:+c[2],color:c[3]})));
+}
+function assertHandlesMatchPolygons(html) {
+  const overlay=html.slice(0,html.indexOf('class="revision-change-edit"'));
+  const polygons=[...overlay.matchAll(/<polygon[^>]*points="([^"]+)"[^>]*fill="([^"]+)"/g)].map(m=>({points:m[1],color:m[2]}));
+  const groups=handleGroups(html);assert.ok(groups.length>0,'handles are rendered');
+  for(const group of groups){
+    const shape=polygons.filter(p=>p.points===group.map(h=>`${h.x},${h.y}`).join(' '));
+    assert.ok(shape.length,'each handle group edits a drawn polygon');
+    for(const h of group)assert.equal(h.color,shape.at(-1).color,`handle at ${h.x},${h.y} matches its polygon`);
+  }
+  return groups.map(g=>g[0].color);
+}
+const relocatedOpening=()=>({...base('opening-modified'),doors:[{...opening('removed',0,100),impactVerified:false},{...opening('added',200,100),impactVerified:false}]});
+for(const editSide of ['both','removed','added'])test(`relocated opening before verification: handles follow work, not version (${editSide})`,()=>{
+  fixture(relocatedOpening());useRevisionUi.setState({editSide});
+  const colors=assertHandlesMatchPolygons(render());
+  // The old opening is filled (construction); the new one is cut (demolition).
+  assert.deepEqual(colors,{both:[GREEN,YELLOW],removed:[GREEN],added:[YELLOW]}[editSide]);
+});
+
+test('relocated opening handle colors stay matched after swap, Undo/Redo and reload',async()=>{
+  fixture(relocatedOpening());
+  assert.deepEqual(assertHandlesMatchPolygons(render()),[GREEN,YELLOW]);
+  await store().swapRevisionChange(1,'selected',false);useRevisionUi.setState({selectedChangeId:'selected',editingChangeId:'selected',editSide:'both'});
+  // Ownership swapped: the opening now at x 0 is new (cut, yellow), the one at x 200 is filled (green).
+  assert.deepEqual(assertHandlesMatchPolygons(render()),[YELLOW,GREEN]);
+  store().undo();assert.deepEqual(assertHandlesMatchPolygons(render()),[GREEN,YELLOW]);
+  store().redo();assert.deepEqual(assertHandlesMatchPolygons(render()),[YELLOW,GREEN]);
+  await store().persist();const restored=await loadComparison(current().id);
+  store().setComparison(restored);useRevisionUi.setState({selectedChangeId:'selected',editingChangeId:'selected',editSide:'both'});
+  assert.deepEqual(assertHandlesMatchPolygons(render()),[YELLOW,GREEN]);
+});
