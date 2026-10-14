@@ -1,15 +1,19 @@
 import polygonClipping from 'polygon-clipping';
 import type { Polygon } from 'polygon-clipping';
+import type { Point } from '../../types';
 import type { RevisionChange } from '../../types/revisionAnalysis';
 import { isValidAreaPolygon } from '../areaGeometryEditing';
 import { finalizeEditedChange, wallFromFootprint } from './changeEdit';
+import { bridgeCrossesOpening, wallGapConnector } from './wallGapBridge';
 
 export interface WallRegionRef { changeId: string; index: number }
-export type WallMergeError = 'incompatible' | 'separated' | 'holes' | 'invalid';
-export type WallMergeResult = { ok: true; change: RevisionChange; changeIds: string[] } | { ok: false; error: WallMergeError };
+export type WallMergeError = 'incompatible' | 'separated' | 'holes' | 'invalid' | 'uncalibrated' | 'opening' | 'confirmation';
+export interface WallGapPreview { connectors: Point[][]; gapLengthsM: number[]; footprint: Point[]; confirmationKey: string }
+export type WallMergeResult = { ok: true; change: RevisionChange; changeIds: string[] }
+  | { ok: false; error: WallMergeError; preview?: WallGapPreview };
 
-/** Exact boolean union, with no snapping, convex hull, or bridge across an empty gap. */
-export function prepareWallRegionMerge(changes: RevisionChange[], selection: WallRegionRef[]): WallMergeResult {
+/** Exact union; calibrated manual gap fills require confirmation of the current preview. */
+export function prepareWallRegionMerge(changes: RevisionChange[], selection: WallRegionRef[], options: { metersPerPixel?: number; confirmedPreview?: string } = {}): WallMergeResult {
   const refs = [...new Map(selection.map(ref => [`${ref.changeId}:${ref.index}`, ref])).values()];
   if (refs.length < 2) return { ok: false, error: 'incompatible' };
   const regions = refs.map(ref => {
@@ -26,10 +30,39 @@ export function prepareWallRegionMerge(changes: RevisionChange[], selection: Wal
   let union;
   try { union = polygonClipping.union(polygons[0], ...polygons.slice(1)); }
   catch { return { ok: false, error: 'invalid' }; }
-  if (union.length !== 1) return { ok: false, error: 'separated' };
+  const connectors: Point[][] = [], gapLengthsM: number[] = [];
+  if (union.length !== 1) {
+    const mpp = options.metersPerPixel;
+    if (mpp == null) return { ok: false, error: 'separated' };
+    if (!(mpp > 0) || !Number.isFinite(mpp)) return { ok: false, error: 'uncalibrated' };
+    const candidates = [];
+    for (let i = 0; i < regions.length; i++) for (let j = i + 1; j < regions.length; j++) {
+      const connector = wallGapConnector(regions[i].wall!, regions[j].wall!, mpp);
+      if (connector) candidates.push(connector);
+    }
+    candidates.sort((a, b) => a.gapM - b.gapM);
+    let blockedByOpening = false;
+    try {
+      for (const candidate of candidates) {
+        if (bridgeCrossesOpening(candidate.points, first.wall.side, changes, mpp)) { blockedByOpening = true; continue; }
+        const connector: Polygon = [candidate.points.map(p => [p.x, p.y])];
+        const next = polygonClipping.union(union, connector);
+        if (next.length >= union.length) continue;
+        connectors.push(candidate.points); gapLengthsM.push(candidate.gapM); union = next;
+        if (union.length === 1) break;
+      }
+    } catch { return { ok: false, error: 'invalid' }; }
+    if (union.length !== 1) return { ok: false, error: blockedByOpening ? 'opening' : 'separated' };
+  }
   // The current editable polygon model has one ring. Never silently fill a hole in the union.
   if (union[0].length !== 1) return { ok: false, error: 'holes' };
   const footprint = union[0][0].slice(0, -1).map(([x, y]) => ({ x, y }));
+  if (connectors.length) {
+    const preview: WallGapPreview = { connectors, gapLengthsM, footprint,
+      confirmationKey: JSON.stringify({ refs, footprint, connectors, metersPerPixel: options.metersPerPixel,
+        changes: changes.filter(c => refs.some(ref => ref.changeId === c.id)) }) };
+    if (options.confirmedPreview !== preview.confirmationKey) return { ok: false, error: 'confirmation', preview };
+  }
   const mergedWall = wallFromFootprint(first.wall.side, footprint);
   if (!mergedWall) return { ok: false, error: 'invalid' };
   const changeIds = [...new Set(refs.map(ref => ref.changeId))];

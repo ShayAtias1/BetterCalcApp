@@ -57,6 +57,7 @@ export default function RevisionChangeOverlay({ strokeW, zoom, interactive, edit
   const markersVisible = useRevisionUi((s) => s.markersVisible);
   const editingId = useRevisionUi((s) => s.editingChangeId);
   const selectedId = useRevisionUi((s) => s.selectedChangeId);
+  const mergePreview = useRevisionUi(s => s.wallMergePreview);
   const placingType = useRevisionUi((s) => s.placingType);
   const placingWall = useRevisionUi((s) => s.placingWall);
   const revision = comparison?.revisions.find((r) => r.id === comparison.activeRevisionId);
@@ -65,14 +66,20 @@ export default function RevisionChangeOverlay({ strokeW, zoom, interactive, edit
   useEffect(() => { if (placingType) setSelectedPortion(null); }, [placingType]);
   const analysis = revision?.analysis?.pages[currentPageKey];
   const wallTopology = analysis?.changes.map(c => `${c.id}:${c.walls.length}`).join('|');
-  useEffect(() => { useRevisionUi.setState({ selectedWallRegions: [] }); }, [comparison?.id, revision?.id, currentPageKey, wallTopology]);
+  useEffect(() => { useRevisionUi.setState({ selectedWallRegions: [], wallMergePreview: null }); }, [comparison?.id, revision?.id, currentPageKey, wallTopology]);
   const stale = !!analysis && !analysis.manualOnly && !!comparison && analysis.inputKey !== analysisInputKey(comparison, revision!.id, currentPageKey);
   const editing = editable && markersVisible && editingId === selectedId ? analysis?.changes.find((c) => c.id === editingId && c.status !== 'applied' && (!stale || c.manual || c.edited)) : undefined;
   return (
     <>
       {analysis && markersVisible && <ChangeMarkers key={`${comparison?.id}:${revision?.id}:${currentPageKey}`} changes={analysis.changes} strokeW={strokeW} zoom={zoom} interactive={interactive} noteBounds={noteBounds} onSelectPortion={setSelectedPortion} />}
-      {editing && <ChangeEditLayer change={editing} zoom={zoom} screenToNative={screenToNative}
+      {editing && !mergePreview && <ChangeEditLayer change={editing} zoom={zoom} screenToNative={screenToNative}
         selectedPortion={selectedPortion?.changeId === editing.id ? selectedPortion : null} />}
+      {mergePreview && markersVisible && mergePreview.comparisonId === comparison?.id && mergePreview.revisionId === revision?.id && mergePreview.pageKey === currentPageKey &&
+        <g className="revision-wall-merge-preview" pointerEvents="none">
+          <polygon points={mergePreview.footprint.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#f59e0b" strokeWidth={2 / zoom} strokeDasharray={`${6 / zoom} ${4 / zoom}`} />
+          {mergePreview.connectors.map((points, i) => <polygon key={i} points={points.map(p => `${p.x},${p.y}`).join(' ')}
+            fill="#f59e0b" fillOpacity={0.5} stroke="#b45309" strokeWidth={2 / zoom} />)}
+        </g>}
       {editable && placingType && <PlacingLayer key={`${comparison?.id}:${revision?.id}:${currentPageKey}:${placingType}:${placingWall?.changeId}:${placingWall?.side}`}
         pageKey={currentPageKey} zoom={zoom} screenToNative={screenToNative} />}
     </>

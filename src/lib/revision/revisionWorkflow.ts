@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { WallRegionRef } from './wallRegionMerge';
+import type { WallRegionRef, WallGapPreview } from './wallRegionMerge';
 import { useCompareStore } from '../../store/compareStore';
 import { useAppStore } from '../../store/appStore';
 import { confirmAiDialog, confirmDialog, notify } from '../appDialogs';
@@ -35,6 +35,7 @@ interface RevisionUiState {
   applying: boolean;
   selectedChangeId: string | null;
   selectedWallRegions: WallRegionRef[];
+  wallMergePreview: (WallGapPreview & { comparisonId: string; revisionId: string; pageKey: number }) | null;
   selectWallRegion: (changeId: string, index: number, additive?: boolean) => void;
   filter: ChangeFilter;
   /** One-shot viewport request for the compare canvas. */
@@ -78,6 +79,7 @@ export const useRevisionUi = create<RevisionUiState>((set, get) => ({
   applying: false,
   selectedChangeId: null,
   selectedWallRegions: [],
+  wallMergePreview: null,
   selectWallRegion: (changeId, index, additive = false) => {
     const store = useCompareStore.getState();
     const change = store.comparison?.revisions.find(r => r.id === store.comparison?.activeRevisionId)
@@ -89,7 +91,7 @@ export const useRevisionUi = create<RevisionUiState>((set, get) => ({
     store.setSelectedMeasurementId(null);
     const previous = additive ? get().selectedWallRegions : [];
     const selected = previous.some(ref => ref.changeId === changeId && ref.index === index);
-    set({ selectedWallRegions: selected ? previous.filter(ref => ref.changeId !== changeId || ref.index !== index) : [...previous, { changeId, index }],
+    set({ wallMergePreview: null, selectedWallRegions: selected ? previous.filter(ref => ref.changeId !== changeId || ref.index !== index) : [...previous, { changeId, index }],
       selectedChangeId: changeId, editingChangeId: changeId, editSide: 'both', placingType: null, placingWall: null, markersVisible: true });
   },
   filter: 'high',
@@ -113,7 +115,7 @@ export const useRevisionUi = create<RevisionUiState>((set, get) => ({
       store.setSelectedMarkupId(null);
       store.setSelectedMeasurementId(null);
     }
-    set({ selectedChangeId, selectedWallRegions: [], editingChangeId: selectedChangeId, editSide: 'both', placingType: null, placingWall: null, ...(selectedChangeId ? { markersVisible: true } : {}) });
+    set({ selectedChangeId, selectedWallRegions: [], wallMergePreview: null, editingChangeId: selectedChangeId, editSide: 'both', placingType: null, placingWall: null, ...(selectedChangeId ? { markersVisible: true } : {}) });
   },
 }));
 
@@ -122,7 +124,7 @@ export function startManualChangeDrawing(type: RevisionEditType, wall: RevisionU
   store.setToolMode('select');
   store.setSelectedMarkupId(null);
   store.setSelectedMeasurementId(null);
-  useRevisionUi.setState({ placingType: type, placingWall: wall, editingChangeId: null, selectedChangeId: null, selectedWallRegions: [], markersVisible: true });
+  useRevisionUi.setState({ placingType: type, placingWall: wall, editingChangeId: null, selectedChangeId: null, selectedWallRegions: [], wallMergePreview: null, markersVisible: true });
 }
 
 /** Which proposals a filter shows. Approved/applied ones always stay visible; rejected ones only under "all". */

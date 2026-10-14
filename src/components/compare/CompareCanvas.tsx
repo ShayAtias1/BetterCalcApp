@@ -930,7 +930,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
               label.setAttribute('direction', labelDirection(text, exportLanguage));
             }
           }
-          overlay.querySelectorAll('.revision-change-edit, .revision-change-placing, [data-handle-markup-id], [data-handle-measurement-id]').forEach((el) => el.remove());
+          overlay.querySelectorAll('.revision-change-edit, .revision-change-placing, .revision-wall-merge-preview, [data-handle-markup-id], [data-handle-measurement-id]').forEach((el) => el.remove());
           overlay.style.fontFamily = getComputedStyle(svgRef.current).fontFamily;
           const svgString = new XMLSerializer().serializeToString(overlay);
           const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`;

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { prepareWallRegionMerge, type WallRegionRef, type WallMergeError } from '../lib/revision/wallRegionMerge';
+import { prepareWallRegionMerge, type WallRegionRef, type WallMergeError, type WallGapPreview } from '../lib/revision/wallRegionMerge';
 import { v4 as uuid } from 'uuid';
 import type {
   AlignmentPointPair,
@@ -313,7 +313,7 @@ interface CompareState {
   addManualRevisionChange: (pageKey: number, type: RevisionEditType, at: Point, footprints?: Point[][], openingShapes?: ('rectangle' | 'polygon')[]) => string | null;
   /** Deletes a detected or manual change and its pending items. Applied changes must be reverted first. */
   deleteRevisionChange: (pageKey: number, changeId: string) => void;
-  mergeWallRegions: (pageKey: number, selection: WallRegionRef[]) => { changeId: string } | { error: WallMergeError };
+  mergeWallRegions: (pageKey: number, selection: WallRegionRef[], confirmedPreview?: string) => { changeId: string } | { error: WallMergeError; preview?: WallGapPreview };
   /** Marks changes applied to (or, after a revert, returned from) the linked takeoff plan. */
   setRevisionChangesStatus: (revisionId: string, changeIds: string[], status: 'applied' | 'approved') => void;
 
@@ -1437,13 +1437,14 @@ export const useCompareStore = create<CompareState>((set, get) => ({
     scheduleSave(get, set);
     return change.id;
   },
-  mergeWallRegions: (pageKey, selection) => {
+  mergeWallRegions: (pageKey, selection, confirmedPreview) => {
     const { comparison } = get();
     const revision = comparison?.revisions.find(r => r.id === comparison.activeRevisionId);
     const page = revision?.analysis?.pages[pageKey];
     if (!comparison || !revision || !page) return { error: 'incompatible' };
-    const result = prepareWallRegionMerge(page.changes, selection);
-    if (!result.ok) return { error: result.error };
+    const scale = compareScaleFor(comparison, pageKey);
+    const result = prepareWallRegionMerge(page.changes, selection, { metersPerPixel: scale.state === 'calibrated' ? scale.metersPerPixel : 0, confirmedPreview });
+    if (!result.ok) return { error: result.error, ...(result.preview ? { preview: result.preview } : {}) };
     const ids = new Set(result.changeIds);
     const itemIds = new Set(page.changes.filter(c => ids.has(c.id)).flatMap(c => c.measurementIds ?? []));
     let merged = result.change;

@@ -636,10 +636,13 @@ function OpeningDrawingControls() {
 function WallMergeControls({ analysis, disabled }: { analysis: RevisionPageAnalysis | undefined; disabled: boolean }) {
   const t = useT();
   const selection = useRevisionUi(s => s.selectedWallRegions);
+  const preview = useRevisionUi(s => s.wallMergePreview);
+  const comparison = useCompareStore(s => s.comparison);
   const pageKey = useCompareStore(s => s.currentPageKey);
   const merge = useCompareStore(s => s.mergeWallRegions);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => { setError(null); }, [selection]);
+  useEffect(() => { useRevisionUi.setState({ wallMergePreview: null }); }, [comparison, selection, pageKey]);
   if (selection.length < 2) return null;
   const regions = selection.map(ref => {
     const change = analysis?.changes.find(c => c.id === ref.changeId);
@@ -647,16 +650,33 @@ function WallMergeControls({ analysis, disabled }: { analysis: RevisionPageAnaly
   });
   const compatible = regions.every(({ change, wall }) => change && wall && !wall.placeholder && !change.doors.length
     && change.status !== 'applied' && change.status === regions[0].change?.status && wall.side === regions[0].wall?.side);
+  const performMerge = (confirmationKey?: string) => {
+    const result = merge(pageKey, selection, confirmationKey);
+    if ('error' in result) {
+      if (result.preview && comparison) {
+        setError(null);
+        useRevisionUi.setState({ wallMergePreview: { ...result.preview, comparisonId: comparison.id, revisionId: comparison.activeRevisionId, pageKey }, markersVisible: true });
+      } else {
+        useRevisionUi.setState({ wallMergePreview: null });
+        setError(t(`revisionAi.edit.mergeErrors.${result.error}`));
+      }
+    } else {
+      useRevisionUi.getState().selectChange(result.changeId);
+      useRevisionUi.setState({ selectedWallRegions: [{ changeId: result.changeId, index: 0 }] });
+    }
+  };
   return <section className="revision-selection-detail">
     <p className="tool-hint">{t('revisionAi.edit.mergeHint')}</p>
-    <button className="btn-secondary small" disabled={disabled || !compatible} onClick={() => {
-      const result = merge(pageKey, selection);
-      if ('error' in result) setError(t(`revisionAi.edit.mergeErrors.${result.error}`));
-      else {
-        useRevisionUi.getState().selectChange(result.changeId);
-        useRevisionUi.setState({ selectedWallRegions: [{ changeId: result.changeId, index: 0 }] });
-      }
-    }}>{t('revisionAi.edit.mergeRegions')}</button>
+    {!preview && <button className="btn-secondary small" disabled={disabled || !compatible}
+      onClick={() => performMerge()}>{t('revisionAi.edit.mergeRegions')}</button>}
+    {preview && <div role="region" aria-label={t('revisionAi.edit.gapPreviewTitle')}>
+      <p className="revision-warning">{t('revisionAi.edit.gapPreview', { count: preview.connectors.length, gapCm: round(Math.max(...preview.gapLengthsM) * 100, 1) })}</p>
+      <div className="revision-actions">
+        <button className="btn-primary small" disabled={disabled || !compatible}
+          onClick={() => performMerge(preview.confirmationKey)}>{t('revisionAi.edit.confirmGapFill')}</button>
+        <button className="btn-ghost small" onClick={() => useRevisionUi.setState({ wallMergePreview: null })}>{t('revisionAi.edit.cancelPlacing')}</button>
+      </div>
+    </div>}
     {!compatible && <p className="revision-warning">{t('revisionAi.edit.mergeErrors.incompatible')}</p>}
     {error && <p className="revision-warning" role="alert">{error}</p>}
   </section>;
