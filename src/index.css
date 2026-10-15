@@ -457,6 +457,30 @@ button:disabled,
   align-items: center;
   gap: var(--s-2);
 }
+.projects-page .home-panel-head { flex-wrap: wrap; }
+.projects-page .panel-head-actions { flex-wrap: wrap; }
+.storage-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin-bottom: var(--s-4);
+}
+.storage-note {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  font: var(--t-meta);
+  color: var(--muted);
+}
+.storage-note-reminder {
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.storage-note-reminder > span { flex: 1; min-width: 0; }
 
 /* Project overview: plans, then the project-wide summary, as two home panels. */
 .project-overview {

@@ -5,6 +5,8 @@ import type { AiJobRecord, AiReviewRecord } from '../lib/ai/contracts';
 import type { OpeningsJob } from '../lib/ai/openingsContracts';
 import type { AiOpeningReview } from '../types/aiOpenings';
 import { notifyPdfBlobChanged } from '../lib/pdfBlobEvents';
+import { requestPersistentStorageAfterSave } from '../lib/storagePersistence';
+import { detectOrphans, CLEANABLE_CATEGORIES, type CleanableCategory, type OrphanProtection, type OrphanReport } from '../lib/orphans';
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { v4 as uuid } from 'uuid';
 import type { Plan, Project } from '../types';
@@ -87,6 +89,29 @@ function getDb(): Promise<IDBPDatabase<QtoDB>> {
   return dbPromise;
 }
 
+// ---------- plan-dependent records ----------
+
+/** Stores whose records belong to a plan through a `planId` field (no index): deleted with the plan. */
+const PLAN_DEPENDENT_STORES = ['planVersions', 'aiReviews', 'openingsAiReviews'] as const;
+
+/**
+ * Deletes, inside the caller's transaction, the revision snapshots and completed AI reviews of the
+ * given plans. Jobs are deliberately left alone: one may still be running (see `scanOrphans`).
+ */
+async function deletePlanDependents(
+  tx: { objectStore(name: typeof PLAN_DEPENDENT_STORES[number]): { getAll(): Promise<unknown[]>; delete(key: string): Promise<void> } },
+  planIds: ReadonlySet<string>,
+): Promise<void> {
+  if (planIds.size === 0) return;
+  const keyOf: Record<typeof PLAN_DEPENDENT_STORES[number], string> = { planVersions: 'id', aiReviews: 'key', openingsAiReviews: 'key' };
+  for (const name of PLAN_DEPENDENT_STORES) {
+    const store = tx.objectStore(name);
+    for (const record of (await store.getAll()) as Record<string, unknown>[]) {
+      if (typeof record.planId === 'string' && planIds.has(record.planId)) await store.delete(record[keyOf[name]] as string);
+    }
+  }
+}
+
 // ---------- plans ----------
 
 /**
@@ -108,6 +133,7 @@ async function readAllPlans(db: IDBPDatabase<QtoDB>): Promise<Plan[]> {
 export async function savePlan(plan: Plan): Promise<void> {
   const db = await getDb();
   await db.put('projects', plan);
+  requestPersistentStorageAfterSave();
 }
 
 export async function savePdfBlob(planId: string, blob: Blob): Promise<void> {
@@ -171,7 +197,7 @@ export async function loadPlan(id: string): Promise<Plan | undefined> {
 /** Deletes a plan with its PDF and takes it out of its project's plan list. */
 export async function deletePlan(planId: string): Promise<void> {
   const db = await getDb();
-  const tx = db.transaction(['projects', 'pdfFiles', 'takeoffProjects'], 'readwrite');
+  const tx = db.transaction(['projects', 'pdfFiles', 'takeoffProjects', ...PLAN_DEPENDENT_STORES], 'readwrite');
   const plan = await tx.objectStore('projects').get(planId);
   if (plan?.projectId) {
     const project = await tx.objectStore('takeoffProjects').get(plan.projectId);
@@ -185,6 +211,7 @@ export async function deletePlan(planId: string): Promise<void> {
   }
   await tx.objectStore('projects').delete(planId);
   await tx.objectStore('pdfFiles').delete(planId);
+  await deletePlanDependents(tx, new Set([planId]));
   await tx.done;
 }
 
@@ -201,6 +228,7 @@ export interface ProjectWithPlans {
 export async function saveProject(project: Project): Promise<void> {
   const db = await getDb();
   await db.put('takeoffProjects', project);
+  requestPersistentStorageAfterSave();
 }
 
 /**
@@ -337,11 +365,12 @@ export async function deleteProject(projectId: string): Promise<void> {
     await deleteComparison(comparison.id);
   }
   const plans = (await db.getAll('projects')).filter((p) => p.projectId === projectId);
-  const tx = db.transaction(['projects', 'pdfFiles', 'takeoffProjects'], 'readwrite');
+  const tx = db.transaction(['projects', 'pdfFiles', 'takeoffProjects', ...PLAN_DEPENDENT_STORES], 'readwrite');
   for (const plan of plans) {
     await tx.objectStore('projects').delete(plan.id);
     await tx.objectStore('pdfFiles').delete(plan.id);
   }
+  await deletePlanDependents(tx, new Set(plans.map((p) => p.id)));
   await tx.objectStore('takeoffProjects').delete(projectId);
   await tx.done;
 }
@@ -466,6 +495,7 @@ function withComparisonMeasurementValues(comparison: Comparison): Comparison {
 export async function saveComparison(comparison: Comparison): Promise<void> {
   const db = await getDb();
   await db.put('comparisons', comparison);
+  requestPersistentStorageAfterSave();
 }
 
 export async function listComparisons(): Promise<Comparison[]> {
@@ -568,4 +598,204 @@ export async function collectOpeningsAiReview(plan:Plan,key:string,currentPlan?:
     tx.abort();try{await tx.done;}catch{/* Leave the review unconsumed for the next activation. */}return undefined;
   }
   await tx.done;return review;
+}
+
+// ---------- project backup (export / import) ----------
+
+export interface ProjectBackupData {
+  project: Project;
+  plans: {
+    plan: Plan;
+    pdf: Blob | null;
+    versions: PlanVersion[];
+    aiReviews: AiReviewRecord[];
+    openingsAiReviews: AiOpeningReview[];
+  }[];
+  comparisons: { comparison: Comparison; pdfs: Record<string, Blob> }[];
+}
+
+/** The schema version a backup is stamped with. */
+export const BACKUP_SCHEMA_VERSION = DB_VERSION;
+
+/** Reads one project with everything a backup holds, through the loaders so legacy shapes are migrated. Read-only. */
+export async function readProjectForBackup(projectId: string): Promise<ProjectBackupData | undefined> {
+  const loaded = await loadProjectWithPlans(projectId);
+  if (!loaded) return undefined;
+  const db = await getDb();
+  const [versions, aiReviews, openingsAiReviews] = await Promise.all([
+    db.getAll('planVersions'),
+    db.getAll('aiReviews'),
+    db.getAll('openingsAiReviews'),
+  ]);
+  const plans = [];
+  for (const plan of loaded.plans) {
+    plans.push({
+      plan,
+      pdf: (await db.get('pdfFiles', plan.id)) ?? null,
+      versions: versions.filter((v) => v.planId === plan.id),
+      aiReviews: aiReviews.filter((r) => r.planId === plan.id),
+      openingsAiReviews: openingsAiReviews.filter((r) => r.planId === plan.id),
+    });
+  }
+  const comparisons = [];
+  for (const comparison of loaded.comparisons) {
+    const pdfs: Record<string, Blob> = {};
+    for (const layer of ['original', ...comparison.revisions.map((r) => `revision:${r.id}`)]) {
+      const blob = await db.get('comparePdfFiles', `${comparison.id}:${layer}`);
+      if (blob) pdfs[layer] = blob;
+    }
+    comparisons.push({ comparison, pdfs });
+  }
+  return { project: loaded.project, plans, comparisons };
+}
+
+export async function listProjectIdsForBackup(): Promise<string[]> {
+  return (await listProjects()).map((p) => p.project.id);
+}
+
+/** Ids of everything an import could collide with. Runs the legacy migrations first so ids are final. */
+export async function readExistingBackupIds(): Promise<{
+  projects: Set<string>; plans: Set<string>; comparisons: Set<string>; planVersions: Set<string>;
+}> {
+  const db = await getDb();
+  await migrateLegacyDocuments(db);
+  const [projects, plans, comparisons, planVersions] = await Promise.all([
+    db.getAllKeys('takeoffProjects'),
+    db.getAllKeys('projects'),
+    db.getAllKeys('comparisons'),
+    db.getAllKeys('planVersions'),
+  ]);
+  return { projects: new Set(projects), plans: new Set(plans), comparisons: new Set(comparisons), planVersions: new Set(planVersions) };
+}
+
+/** Thrown when an id to import appeared locally after the import was planned; nothing was written. */
+export class BackupImportConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BackupImportConflictError';
+  }
+}
+
+/**
+ * Writes imported projects in ONE transaction: every id is re-checked inside it, then all records and
+ * blobs are put. Any failure aborts the whole transaction, so an import is all-or-nothing and never
+ * touches an existing record.
+ */
+export async function writeImportedProjects(projects: ProjectBackupData[]): Promise<void> {
+  const db = await getDb();
+  const tx = db.transaction(
+    ['takeoffProjects', 'projects', 'pdfFiles', 'comparisons', 'comparePdfFiles', 'planVersions', 'aiReviews', 'openingsAiReviews'],
+    'readwrite',
+  );
+  try {
+    for (const p of projects) {
+      const taken = [
+        await tx.objectStore('takeoffProjects').getKey(p.project.id),
+        ...(await Promise.all(p.plans.map((x) => tx.objectStore('projects').getKey(x.plan.id)))),
+        ...(await Promise.all(p.comparisons.map((x) => tx.objectStore('comparisons').getKey(x.comparison.id)))),
+        ...(await Promise.all(p.plans.flatMap((x) => x.versions.map((v) => tx.objectStore('planVersions').getKey(v.id))))),
+        ...(await Promise.all(p.plans.flatMap((x) => x.aiReviews.map((r) => tx.objectStore('aiReviews').getKey(r.key))))),
+        ...(await Promise.all(p.plans.flatMap((x) => x.openingsAiReviews.map((r) => tx.objectStore('openingsAiReviews').getKey(r.key))))),
+      ];
+      if (taken.some((key) => key !== undefined)) throw new BackupImportConflictError('an imported id already exists');
+    }
+    for (const p of projects) {
+      await tx.objectStore('takeoffProjects').put(p.project);
+      for (const x of p.plans) {
+        await tx.objectStore('projects').put(x.plan);
+        if (x.pdf) await tx.objectStore('pdfFiles').put(x.pdf, x.plan.id);
+        for (const v of x.versions) await tx.objectStore('planVersions').put(v);
+        for (const r of x.aiReviews) await tx.objectStore('aiReviews').put(r);
+        for (const r of x.openingsAiReviews) await tx.objectStore('openingsAiReviews').put(r);
+      }
+      for (const x of p.comparisons) {
+        await tx.objectStore('comparisons').put(x.comparison);
+        for (const [layer, blob] of Object.entries(x.pdfs)) await tx.objectStore('comparePdfFiles').put(blob, `${x.comparison.id}:${layer}`);
+      }
+    }
+  } catch (error) {
+    try { tx.abort(); } catch { /* already finished */ }
+    await tx.done.catch(() => undefined);
+    throw error;
+  }
+  await tx.done;
+}
+
+// ---------- orphan detection and cleanup ----------
+
+/** Read-only scan of the whole database; changes nothing. Blobs are listed by key, never read. */
+export async function scanOrphans(protect: OrphanProtection = {}): Promise<OrphanReport> {
+  const db = await getDb();
+  const [plans, projects, comparisons, pdfFileKeys, comparePdfKeys, planVersions, aiReviews, openingsAiReviews, aiJobs, openingsAiJobs, aiBatches] =
+    await Promise.all([
+      db.getAll('projects'), db.getAll('takeoffProjects'), db.getAll('comparisons'),
+      db.getAllKeys('pdfFiles'), db.getAllKeys('comparePdfFiles'), db.getAll('planVersions'),
+      db.getAll('aiReviews'), db.getAll('openingsAiReviews'), db.getAll('aiJobs'), db.getAll('openingsAiJobs'), db.getAll('aiBatches'),
+    ]);
+  return detectOrphans({
+    plans: plans.map((p) => ({ id: p.id, projectId: p.projectId })),
+    projects: projects.map((p) => ({ id: p.id, planIds: Array.isArray(p.planIds) ? p.planIds : [], comparisonIds: p.comparisonIds })),
+    comparisons: comparisons.map((c) => ({ id: c.id, projectId: c.projectId, revisionIds: Array.isArray(c.revisions) ? c.revisions.map((r) => r.id) : null })),
+    pdfFileKeys: pdfFileKeys.map(String),
+    comparePdfKeys: comparePdfKeys.map(String),
+    planVersions: planVersions.map((v) => ({ id: v.id, planId: v.planId })),
+    aiReviews: aiReviews.map((r) => ({ key: r.key, planId: r.planId })),
+    openingsAiReviews: openingsAiReviews.map((r) => ({ key: r.key, planId: r.planId })),
+    aiJobs: aiJobs.map((j) => ({ requestId: j.requestId, planId: j.planId, status: j.status })),
+    openingsAiJobs: openingsAiJobs.map((j) => ({ requestId: j.requestId, planId: j.planId, status: j.status })),
+    aiBatches: aiBatches.map((b) => ({ id: b.id, projectId: b.projectId, pages: Array.isArray(b.pages) ? b.pages.map((x) => ({ planId: x.planId })) : [] })),
+  }, protect);
+}
+
+/**
+ * Deletes the orphans a `scanOrphans` report lists, all in ONE transaction. Each record's owner is
+ * re-checked inside the transaction immediately before deleting it, so a plan or comparison saved
+ * after the scan keeps its records. Any error aborts everything. Never runs automatically.
+ */
+export async function deleteOrphans(
+  report: OrphanReport,
+  categories: CleanableCategory[] = CLEANABLE_CATEGORIES,
+): Promise<Record<CleanableCategory, number>> {
+  const db = await getDb();
+  const tx = db.transaction(
+    ['projects', 'comparisons', 'pdfFiles', 'comparePdfFiles', 'planVersions', 'aiReviews', 'openingsAiReviews'],
+    'readwrite',
+  );
+  const deleted = Object.fromEntries(CLEANABLE_CATEGORIES.map((c) => [c, 0])) as Record<CleanableCategory, number>;
+  const planMissing = async (planId: unknown) => typeof planId === 'string' && (await tx.objectStore('projects').getKey(planId)) === undefined;
+  try {
+    if (categories.includes('planVersions')) {
+      for (const id of report.cleanable.planVersions) {
+        const record = await tx.objectStore('planVersions').get(id);
+        if (record && await planMissing(record.planId)) { await tx.objectStore('planVersions').delete(id); deleted.planVersions++; }
+      }
+    }
+    for (const store of ['aiReviews', 'openingsAiReviews'] as const) {
+      if (!categories.includes(store)) continue;
+      for (const key of report.cleanable[store]) {
+        const record = await tx.objectStore(store).get(key);
+        if (record && await planMissing(record.planId)) { await tx.objectStore(store).delete(key); deleted[store]++; }
+      }
+    }
+    if (categories.includes('pdfFiles')) {
+      for (const key of report.cleanable.pdfFiles) {
+        if (await planMissing(key)) { await tx.objectStore('pdfFiles').delete(key); deleted.pdfFiles++; }
+      }
+    }
+    if (categories.includes('comparePdfFiles')) {
+      for (const key of report.cleanable.comparePdfFiles) {
+        const comparisonId = key.slice(0, key.indexOf(':'));
+        if (comparisonId && (await tx.objectStore('comparisons').getKey(comparisonId)) === undefined) {
+          await tx.objectStore('comparePdfFiles').delete(key);
+          deleted.comparePdfFiles++;
+        }
+      }
+    }
+  } catch (error) {
+    try { tx.abort(); } catch { /* already finished */ }
+    await tx.done.catch(() => undefined);
+    throw error;
+  }
+  await tx.done;
+  return deleted;
 }

@@ -25,6 +25,9 @@ export default function SavedItemList({
   onDelete,
   openTitle,
   deleteTitle,
+  onExport,
+  exportTitle,
+  exportLabel,
 }: {
   items: SavedItem[];
   /** Marks which product the row belongs to. */
@@ -35,6 +38,11 @@ export default function SavedItemList({
   onDelete: (id: string) => void;
   openTitle: string;
   deleteTitle: string;
+  /** Optional per-row export (project backup); rows show no export action without it. */
+  onExport?: (id: string) => void;
+  exportTitle?: string;
+  /** Visible text beside the export icon. */
+  exportLabel?: string;
 }) {
   const t = useT();
   if (loading) return <p className="muted saved-list-loading">{t('common.loading')}</p>;
@@ -57,6 +65,19 @@ export default function SavedItemList({
             <span className="saved-list-name" dir="auto">{item.name}</span>
             <span className="saved-list-meta">{item.meta}</span>
           </span>
+          {onExport && (
+            <button
+              className="btn-secondary small saved-list-export"
+              title={exportTitle}
+              onClick={(e) => {
+                e.stopPropagation();
+                onExport(item.id);
+              }}
+            >
+              <Icon name="download" />
+              {exportLabel}
+            </button>
+          )}
           <span className="list-item-actions">
             <button
               className="icon-btn danger"
