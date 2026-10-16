@@ -16,7 +16,7 @@
 
 ## Project conventions
 
-- Browser-only quantity takeoff and revision comparison for Israeli contractors. PDFs and project data stay client-side in IndexedDB; no server or authentication. UI text is inline Hebrew with RTL layout.
+- Browser-only quantity takeoff and revision comparison for Israeli contractors. PDFs and project data stay client-side in IndexedDB; no server. Optional Supabase accounts (`src/lib/supabase`, `docs/SUPABASE-SETUP.md`) must never gate, move or delete local data, and only the publishable key may reach the frontend. UI text is inline Hebrew with RTL layout.
 - Analytics must go through `src/lib/analytics.ts` and never include plan content. Read `docs/ANALYTICS.md` before changing events.
 - Takeoff and Compare use separate types, stores, and viewers. Decide whether shared markup or measurement changes apply to both. Projects contain plans and comparisons; store `project` is the open plan, while `currentProject` describes its folder. Persist a plan before leaving it. Project totals reuse each plan's `buildRoomSummaries` through `src/lib/projectQuantities.ts`.
 - Persist coordinates in native PDF page pixels (`getViewport({ scale: 1 })`, top-left origin). Convert input through `useCanvasTransform.screenToNative`; SVG overlays use native coordinates regardless of canvas render scale. Calibration is per page; uncalibrated areas and lengths are zero. Compare alignment helpers must match the CSS transform and revised-page centre pivot.
