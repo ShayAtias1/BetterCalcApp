@@ -11,7 +11,7 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL?: string;
   /** Supabase PUBLISHABLE (anon) key. Public by design; the secret/service-role key must never be a VITE_ variable. */
   readonly VITE_SUPABASE_PUBLISHABLE_KEY?: string;
-  /** Cloudflare Turnstile PUBLIC site key (CAPTCHA is inactive until CAPTCHA_ENABLED is set). */
+  /** Cloudflare Turnstile PUBLIC site key (missing → CAPTCHA is off; set → sign-in code requests carry a Turnstile token). */
   readonly VITE_TURNSTILE_SITE_KEY?: string;
 }
 

@@ -13,6 +13,8 @@ import {
   listAiUsage,
   normalizeDisplayName,
   requestAccountDeletion,
+  safeInvoiceUrl,
+  listPayments,
   saveBillingProfile,
   updateDisplayName,
   FLAGS_OFF,
@@ -237,4 +239,14 @@ test('the saved name is cached per user on this device and cleared on request', 
   writeCachedName(storage, 'u1', null);
   assert.equal(readCachedName(storage, 'u1'), null);
   assert.equal(readCachedName(null, 'u1'), null); // storage unavailable
+});
+
+test('invoice links are kept only as absolute https URLs', async () => {
+  assert.equal(safeInvoiceUrl('https://billing.example/inv/1.pdf'), 'https://billing.example/inv/1.pdf');
+  for (const bad of ['javascript:alert(1)', ' JavaScript:alert(1)', 'data:text/html,x', 'http://billing.example/a', '//billing.example/a', '/inv/1', 'https://user:pw@billing.example/a', '', null, 42]) {
+    assert.equal(safeInvoiceUrl(bad), null, String(bad));
+  }
+  const rows = [{ id: 'p', description: null, status: 'paid', amount_minor: 100, currency: 'ILS', invoice_url: 'javascript:alert(1)', created_at: '2026-01-01T00:00:00Z' }];
+  const client = { from: () => ({ select: () => ({ order: () => ({ limit: async () => ({ data: rows, error: null }) }) }) }) };
+  assert.equal((await listPayments(client as never))[0].invoiceUrl, null);
 });

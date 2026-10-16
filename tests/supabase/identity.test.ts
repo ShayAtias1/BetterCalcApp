@@ -47,24 +47,51 @@ test('the owner can edit their name but not consent or onboarding columns', asyn
   await assert.rejects(as(A, () => db.exec(`update public.profiles set display_name = '${'x'.repeat(81)}' where id = '${A}'`)), /check constraint/);
 });
 
+const setLegalVersion = (v: string | null) =>
+  db.exec(`update public.commercial_settings set value = ${v === null ? "'null'" : `to_jsonb('${v}'::text)`} where key = 'legal_version'`);
+
 test('onboarding records name and consent with the server clock, once', async () => {
-  await as(A, () => db.exec("select public.complete_onboarding('  Dana  ', 'v1')"));
-  const first = (await q(`select display_name, terms_version, terms_accepted_at, privacy_accepted_at, onboarding_completed_at from public.profiles where id = '${A}'`))[0];
-  assert.equal(first.display_name, 'Dana');
-  assert.equal(first.terms_version, 'v1');
-  assert.ok(first.terms_accepted_at instanceof Date && first.onboarding_completed_at instanceof Date);
-  await as(A, () => db.exec("select public.complete_onboarding('Dana L', 'v2')"));
-  const again = (await q(`select display_name, terms_version, terms_accepted_at from public.profiles where id = '${A}'`))[0];
-  assert.deepEqual([again.display_name, again.terms_version], ['Dana L', 'v2']);
-  assert.equal(again.terms_accepted_at.getTime(), first.terms_accepted_at.getTime()); // first agreement time is kept
-  assert.equal((await q(`select onboarding_completed_at from public.profiles where id = '${B}'`))[0].onboarding_completed_at, null);
+  await setLegalVersion('v1');
+  try {
+    await as(A, () => db.exec("select public.complete_onboarding('  Dana  ', 'v1')"));
+    const first = (await q(`select display_name, terms_version, terms_accepted_at, privacy_accepted_at, onboarding_completed_at from public.profiles where id = '${A}'`))[0];
+    assert.equal(first.display_name, 'Dana');
+    assert.equal(first.terms_version, 'v1');
+    assert.ok(first.terms_accepted_at instanceof Date && first.onboarding_completed_at instanceof Date);
+    await setLegalVersion('v2');
+    await as(A, () => db.exec("select public.complete_onboarding('Dana L', 'v2')"));
+    const again = (await q(`select display_name, terms_version, terms_accepted_at from public.profiles where id = '${A}'`))[0];
+    assert.deepEqual([again.display_name, again.terms_version], ['Dana L', 'v2']);
+    assert.equal(again.terms_accepted_at.getTime(), first.terms_accepted_at.getTime()); // first agreement time is kept
+    assert.equal((await q(`select onboarding_completed_at from public.profiles where id = '${B}'`))[0].onboarding_completed_at, null);
+  } finally {
+    await setLegalVersion(null);
+  }
 });
 
 test('onboarding rejects empty names, missing versions and anonymous callers', async () => {
-  await assert.rejects(as(A, () => db.exec("select public.complete_onboarding('   ', 'v1')")), /invalid_name/);
+  await assert.rejects(as(A, () => db.exec("select public.complete_onboarding('   ', 'pending')")), /invalid_name/);
   await assert.rejects(as(A, () => db.exec("select public.complete_onboarding('Dana', '')")), /invalid_version/);
   await assert.rejects(as(A, () => db.exec("select public.complete_onboarding('Dana', null)")), /invalid_version/);
-  await assert.rejects(as(null, () => db.exec("select public.complete_onboarding('Dana', 'v1')"), 'anon'), /permission denied/);
+  await assert.rejects(as(null, () => db.exec("select public.complete_onboarding('Dana', 'pending')"), 'anon'), /permission denied/);
+});
+
+test('consent is recorded only against the version the server announces', async () => {
+  // Before the texts are published only the app's placeholder is accepted.
+  await assert.rejects(as(A, () => db.exec("select public.complete_onboarding('Dana', 'v9')")), /invalid_version/);
+  await as(A, () => db.exec("select public.complete_onboarding('Dana', ' pending ')"));
+  assert.equal((await q(`select terms_version from public.profiles where id = '${A}'`))[0].terms_version, 'pending');
+  await setLegalVersion('2026-11');
+  try {
+    for (const wrong of ['pending', '2026-10', '2026-11x']) {
+      await assert.rejects(as(B, () => db.exec(`select public.complete_onboarding('Bo', '${wrong}')`)), /invalid_version/, wrong);
+    }
+    assert.equal((await q(`select onboarding_completed_at from public.profiles where id = '${B}'`))[0].onboarding_completed_at, null);
+    await as(B, () => db.exec("select public.complete_onboarding('Bo', '2026-11')"));
+    assert.equal((await q(`select terms_version from public.profiles where id = '${B}'`))[0].terms_version, '2026-11');
+  } finally {
+    await setLegalVersion(null);
+  }
 });
 
 test('deletion requests: own only, cancellable, and listed for the service role', async () => {
@@ -85,6 +112,29 @@ test('deletion requests: own only, cancellable, and listed for the service role'
   await db.exec("update public.account_deletion_requests set status = 'processing'");
   await as(A, () => db.exec('select public.cancel_account_deletion()')); // too late once processing
   assert.equal((await q('select status from public.account_deletion_requests'))[0].status, 'processing');
+});
+
+test('the deletion worker claims requests after the grace period, only as the service role', async () => {
+  await as(A, () => db.exec('select public.request_account_deletion()'));
+  await as(B, () => db.exec('select public.request_account_deletion()'));
+  await as(B, () => db.exec('select public.cancel_account_deletion()'));
+  for (const fn of ["claim_account_deletions('0 days')", `cloud_user_objects('${A}')`, `record_account_deleted('${A}')`]) {
+    await assert.rejects(as(A, () => q(`select * from public.${fn}`)), /permission denied/, fn);
+    await assert.rejects(as(null, () => q(`select * from public.${fn}`), 'anon'), /permission denied/, fn);
+  }
+  const claim = (grace: string) => as(null, () => q(`select * from public.claim_account_deletions('${grace}')`), 'service_role');
+  assert.deepEqual(await claim('7 days'), []); // still inside the grace period: the user can cancel
+  assert.equal((await q(`select status from public.account_deletion_requests where user_id = '${A}'`))[0].status, 'requested');
+  await db.exec(`update public.account_deletion_requests set requested_at = now() - interval '8 days'`);
+  assert.deepEqual((await claim('7 days')).map((r) => r.user_id), [A]); // the cancelled request is never claimed
+  assert.equal((await q(`select status from public.account_deletion_requests where user_id = '${A}'`))[0].status, 'processing');
+  await as(A, () => db.exec('select public.cancel_account_deletion()'));
+  assert.equal((await q(`select status from public.account_deletion_requests where user_id = '${A}'`))[0].status, 'processing');
+  assert.deepEqual((await claim('7 days')).map((r) => r.user_id), [A]); // retried until done
+  await assert.rejects(claim('-1 days'), /invalid_grace/);
+  await as(null, () => db.exec(`select public.record_account_deleted('${A}')`), 'service_role');
+  const audit = await q(`select action from public.audit_log where target_user = '${A}' order by id`);
+  assert.deepEqual(audit.map((a) => a.action).slice(-2), ['account_deletion_started', 'account_deleted']);
 });
 
 test('deleting the auth user removes the profile and the request', async () => {

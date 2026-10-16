@@ -1,4 +1,4 @@
-import { pdfjsLib } from './pdfjsSetup';
+import { pdfjsLib, SAFE_PDF_OPTIONS } from './pdfjsSetup';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { loadPdfBlob } from '../db/database';
 
@@ -13,7 +13,7 @@ export function getPdfDocumentByKey(cacheKey: string, loadBlob: () => Promise<Bl
         if (!blob) throw new Error('PDF file not found in local storage');
         return blob.arrayBuffer();
       })
-      .then((buf) => pdfjsLib.getDocument({ data: buf }).promise);
+      .then((buf) => pdfjsLib.getDocument({ ...SAFE_PDF_OPTIONS, data: buf }).promise);
     cache.set(cacheKey, promise);
   }
   return promise;

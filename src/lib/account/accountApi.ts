@@ -176,12 +176,23 @@ export function listAiUsage(client: AccountClient, limit = 50): Promise<AiUsageR
   });
 }
 
+/** Invoice links open in a new tab, so only absolute https URLs are kept (never javascript:, data: or http:). */
+export function safeInvoiceUrl(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  try {
+    const url = new URL(raw.trim());
+    return url.protocol === 'https:' && !url.username && !url.password ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface PaymentRow { id: string; description: string | null; status: string; amountMinor: number; currency: string; invoiceUrl: string | null; createdAt: number }
 
 export function listPayments(client: AccountClient, limit = 50): Promise<PaymentRow[]> {
   return guard(async () => {
     const rows = unwrap(await client.from('payments').select('id, description, status, amount_minor, currency, invoice_url, created_at').order('created_at', { ascending: false }).limit(limit)) as Record<string, any>[] | null;
-    return (rows ?? []).map((r) => ({ id: r.id, description: r.description ?? null, status: r.status, amountMinor: Number(r.amount_minor), currency: r.currency, invoiceUrl: r.invoice_url ?? null, createdAt: Date.parse(r.created_at) }));
+    return (rows ?? []).map((r) => ({ id: r.id, description: r.description ?? null, status: r.status, amountMinor: Number(r.amount_minor), currency: r.currency, invoiceUrl: safeInvoiceUrl(r.invoice_url), createdAt: Date.parse(r.created_at) }));
   });
 }
 

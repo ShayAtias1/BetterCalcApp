@@ -1,5 +1,5 @@
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
-import { pdfjsLib } from './pdfjsSetup';
+import { pdfjsLib, SAFE_PDF_OPTIONS } from './pdfjsSetup';
 import { PdfPlanSource, type PlanPageSource, type PlanRenderHandle } from './planSource';
 import { boundedPdfScale } from './pdfRenderBudget';
 import { PdfiumDocument, isViewerRenderCancelled, viewerRenderCancelled } from './pdfium/document';
@@ -44,7 +44,7 @@ export class ViewerPdfDocument {
     if(!blob)throw new Error('PDF file not found in local storage');
     const bytes=await blob.arrayBuffer();
     if(signal.aborted)throw viewerRenderCancelled();
-    const task=pdfjsLib.getDocument({data:bytes.slice(0)});
+    const task=pdfjsLib.getDocument({...SAFE_PDF_OPTIONS,data:bytes.slice(0)});
     const abort=()=>{void task.destroy().catch(()=>undefined);};
     signal.addEventListener('abort',abort,{once:true});
     try {

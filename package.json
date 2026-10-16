@@ -29,7 +29,7 @@
     "file-saver": "^2.0.5",
     "idb": "^8.0.3",
     "pdf-lib": "^1.17.1",
-    "pdfjs-dist": "^6.1.200",
+    "pdfjs-dist": "^6.4.299",
     "polygon-clipping": "^0.15.7",
     "posthog-js": "^1.434.17",
     "react": "^19.2.7",
@@ -51,5 +51,10 @@
     "supabase": "^2.121.0",
     "typescript": "~6.0.2",
     "vite": "^8.1.1"
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "^11.1.1"
+    }
   }
 }

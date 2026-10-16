@@ -1,11 +1,11 @@
 /**
- * Cloudflare Turnstile client for Supabase's CAPTCHA protection. Built but NOT active: with
- * CAPTCHA_ENABLED false no script is loaded and no token is requested, which is what Supabase expects
- * while its dashboard CAPTCHA setting is off. To activate, set both ends together: Supabase
- * Authentication → Bot and Abuse Protection → Turnstile (with the secret), `VITE_TURNSTILE_SITE_KEY`, and
- * this flag. Only the public site key ever reaches the browser.
+ * Cloudflare Turnstile client for Supabase's CAPTCHA protection. Active only when the build has a public
+ * site key (`VITE_TURNSTILE_SITE_KEY`): without one no script is loaded and no token is requested, which is
+ * what Supabase expects while its dashboard CAPTCHA setting is off. Supabase ignores a token it does not
+ * require, so set the site key first, deploy, then turn on Authentication → Attack Protection → CAPTCHA
+ * (Turnstile, with the secret) in Supabase. Only the public site key ever reaches the browser.
  */
-export const CAPTCHA_ENABLED = false;
+export const CAPTCHA_ENABLED = !!import.meta.env?.VITE_TURNSTILE_SITE_KEY?.trim();
 
 const SCRIPT_URL = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 
@@ -38,7 +38,7 @@ function loadTurnstile(): Promise<TurnstileApi> {
  */
 export async function getCaptchaToken(
   enabled = CAPTCHA_ENABLED,
-  siteKey: string | undefined = import.meta.env?.VITE_TURNSTILE_SITE_KEY,
+  siteKey: string | undefined = import.meta.env?.VITE_TURNSTILE_SITE_KEY?.trim(),
 ): Promise<string | undefined> {
   if (!enabled || !siteKey) return undefined;
   const turnstile = await loadTurnstile();

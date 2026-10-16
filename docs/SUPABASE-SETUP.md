@@ -56,7 +56,13 @@ None of this can be done from the repository.
 6. **Authentication → SMTP** (Phase 1B): configure a custom SMTP sender with SPF/DKIM. The built-in
    Supabase mailer is heavily rate-limited and not for production. Set the OTP to 6 digits with a short
    expiry (about 10 minutes).
-7. **Authentication → Attack Protection** (Phase 1B): enable CAPTCHA (Cloudflare Turnstile).
+7. **Authentication → Attack Protection**: CAPTCHA with Cloudflare Turnstile. Order matters, or sign-in breaks:
+   (a) create a Turnstile widget (Cloudflare dashboard) for the production domain; (b) set its **site key** as
+   `VITE_TURNSTILE_SITE_KEY` in the hosting build environment and redeploy (the app then sends a token with every
+   sign-in code request; Supabase ignores it while CAPTCHA is off); (c) only then enable CAPTCHA here with the
+   Turnstile **secret key**. The secret key never goes into any `VITE_` variable or this repository.
+   Also review **Authentication → Rate Limits** (emails sent per hour, sign-ups/sign-ins per IP) and keep
+   **anonymous sign-ins off**.
 8. **Environment variables.** Copy `.env.example` to `.env.local` (git-ignored) for development, and
    set the same two variables in the hosting provider's build environment:
    ```
@@ -94,9 +100,9 @@ How it is enforced (all on the server, nothing trusts the browser):
    -- update public.entitlements set status = 'ended', ended_at = now() where user_id = '<uuid>';
    ```
    Only `source = 'test'` rows should exist before billing; the billing webhook will write `'billing'` rows.
-4. Periodically (a scheduled job, later) run `select public.cleanup_stale_cloud_backups();` and remove
-   anything listed by `select * from public.cloud_orphan_objects();` through the Storage API (service role).
-   Do not delete rows in `storage.objects` directly.
+4. Abandoned and refused uploads are removed by the **account-maintenance** Edge Function (see
+   "Scheduled maintenance" below). Until it runs they count against the user's own quota at their real size
+   (migration `20261022000000_cloud_backup_hardening.sql`). Never delete rows in `storage.objects` directly.
 5. Supabase database backups do **not** include Storage files. Backups are immutable (never overwritten),
    but a deleted file is gone; consider a periodic bucket copy before launch.
 
@@ -121,16 +127,48 @@ update public.commercial_settings set value = '"v1"' where key = 'legal_version'
 Operations that are server-only (service role, never the browser):
 
 - **Manual credits:** `select public.credit_admin_grant('<user uuid>', 'purchased', 50, 'reason', '<your uuid>');` (logged in `audit_log`).
-- **Account deletion:** `select * from public.pending_account_deletions();` lists requests. To process one: remove the
-  user's files through the Storage API (`cloud-backups/<uid>/`), then delete the auth user (Dashboard or Admin API), which
-  cascades to all rows; payments keep their record without the user link. Local projects are never touched.
-  No waiting period is enforced by the database; that is an operations decision.
+- **Account deletion:** carried out by the **account-maintenance** Edge Function (below) once a request is older than
+  `ACCOUNT_DELETION_GRACE_DAYS` (default 7; the user can cancel until then). It removes the user's files through the
+  Storage API, deletes the auth user (which cascades to all rows; payments keep their record without the user link) and
+  writes `account_deletion_started` / `account_deleted` entries to `audit_log`. Local projects are never touched.
+  `select * from public.pending_account_deletions();` still lists open requests.
+- **Consent:** `complete_onboarding` accepts only the version in `commercial_settings.legal_version` (the app's
+  placeholder `pending` until it is set), so set `legal_version` in the same release that publishes the texts.
 - **Webhooks (when a provider is chosen):** a server handler verifies the provider's signature, maps the payload to
   `NormalizedBillingEvent` (`src/lib/billing/paymentProvider.ts`), records it with `record_payment_event` (idempotent),
   and applies it with `apply_subscription_state` / `credit_purchase`. Both refuse while their switch is off.
 - **Plans and prices:** insert into `plans`, `prices`, `credit_packs` once decided. Nothing is seeded.
 - **Terms and privacy texts:** fill `src/lib/legal/legalDocs.ts` (after legal review), then set `legal_version`.
 
+
+## Scheduled maintenance (account-maintenance Edge Function)
+
+`supabase/functions/account-maintenance` removes abandoned/refused cloud uploads and carries out account deletion
+requests (logic in `supabase/functions/_shared/maintenance.ts`, tested in `tests/supabase/maintenance.test.ts`). It runs
+only when called with the `x-maintenance-secret` header; it does not use user JWTs. Nothing runs until you deploy and
+schedule it:
+
+1. Apply migrations `20261021000000_consent_and_account_deletion.sql` and `20261022000000_cloud_backup_hardening.sql`
+   (`npx supabase db push --dry-run`, review, then `npx supabase db push`).
+2. Generate a secret of at least 32 characters (`openssl rand -hex 32`) and store it as a function secret:
+   ```bash
+   npx supabase secrets set MAINTENANCE_SECRET=<secret> ACCOUNT_DELETION_GRACE_DAYS=7
+   npx supabase functions deploy account-maintenance --no-verify-jwt
+   ```
+   `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided to Edge Functions automatically.
+3. Schedule it (Database → Extensions: enable `pg_cron` and `pg_net`; then in the SQL editor). Keep the secret in Vault,
+   not in the job text:
+   ```sql
+   select vault.create_secret('<secret>', 'maintenance_secret');
+   select cron.schedule('account-maintenance', '17 3 * * *', $$
+     select net.http_post(
+       url := 'https://<ref>.supabase.co/functions/v1/account-maintenance',
+       headers := jsonb_build_object('Content-Type', 'application/json', 'x-maintenance-secret',
+         (select decrypted_secret from vault.decrypted_secrets where name = 'maintenance_secret')),
+       body := '{}'::jsonb);
+   $$);
+   ```
+4. Check the function logs after the first run: they contain counts and user ids only.
 
 ## Verifying
 
@@ -143,6 +181,8 @@ Operations that are server-only (service role, never the browser):
 - `tests/supabase/cloudBackups.test.ts` does the same for Phase 2: entitlement rules, the 1 GB quota,
   reserved-path-only uploads, no overwrite, owner isolation, the read-only period after a subscription ends,
   and function privileges. `cloudClient.test.ts` covers the browser side against a fake client.
+- `tests/supabase/schemaGuard.test.ts` fails if any `public` table lacks row-level security, if an API role can
+  call a function that is not on its allowlist, or if new tables are exposed without an explicit grant.
 - `tests/supabase/supabaseConfig.test.ts` also asserts that no frontend source references a secret key
   and that `.env.example` has no secret `VITE_` variable.
 

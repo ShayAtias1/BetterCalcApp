@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { loadPdfBlob } from '../db/database';
-import { pdfjsLib } from '../lib/pdfjsSetup';
+import { pdfjsLib, SAFE_PDF_OPTIONS } from '../lib/pdfjsSetup';
 import { parseLocalAiResult } from '../lib/localAiImport';
 import { subscribePdfBlobChanges } from '../lib/pdfBlobEvents';
 import { useAppStore } from '../store/appStore';
@@ -37,7 +37,7 @@ export default function LocalAiImportPanel() {
       if (!blob) throw new Error('The local PDF could not be found.');
       const bytes=await blob.arrayBuffer();
       const sourceHash=await hash(bytes);
-      task=pdfjsLib.getDocument({data:bytes});
+      task=pdfjsLib.getDocument({...SAFE_PDF_OPTIONS,data:bytes});
       const doc=await task.promise;
       const page=await doc.getPage(sourcePage), viewport=page.getViewport({scale:1});
       const resultBytes=await result.arrayBuffer();
