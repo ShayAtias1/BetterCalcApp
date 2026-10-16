@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { loadTrial, trialStatus, TRIAL_STORAGE_KEY, TRIAL_DAYS } from '../../src/lib/access/trial.ts';
+import { loadTrial, trialStatus, TRIAL_STORAGE_KEY, TRIAL_DAYS, TRIAL_NOT_BEFORE } from '../../src/lib/access/trial.ts';
 import { evaluateAccess, ACCESS_ENFORCEMENT_ENABLED, ACCOUNTS_ENABLED } from '../../src/lib/access/accessPolicy.ts';
 import { createAccessSync } from '../../src/lib/access/accessSync.ts';
 import { createStore } from 'zustand/vanilla';
@@ -77,9 +77,10 @@ test('accounts unavailable or still loading never restrict, even after the trial
   }
 });
 
-test('accounts and restrictions are off until explicitly approved', () => {
+test('restrictions stay off while accounts are being tested', () => {
   assert.equal(ACCESS_ENFORCEMENT_ENABLED, false);
-  assert.equal(ACCOUNTS_ENABLED, false);
+  assert.equal(ACCOUNTS_ENABLED, true);
+  assert.equal(TRIAL_NOT_BEFORE, null);
 });
 
 function sync(enforce: boolean, storage = memory(), now = T0) {

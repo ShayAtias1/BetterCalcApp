@@ -18,6 +18,7 @@ import { everything, hasAnyContent, type ExportContent } from '../lib/exportCont
 import { BrandHomeLink } from './BrandLogo';
 import NewComparisonDialog from './compare/NewComparisonDialog';
 import LanguageSwitch from './LanguageSwitch';
+import AccountMenu from './AccountMenu';
 import TopBarMenu, { type MenuId } from './TopBarMenu';
 import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import type { Comparison } from '../types/compare';
@@ -179,6 +180,7 @@ export default function ProjectOverview() {
         </div>
         <div className="top-bar-group grow" />
         <div className="top-bar-group output">
+          <AccountMenu />
           {layout === 'expanded' ? <LanguageSwitch /> : <TopBarMenu id="settings" openId={headerMenu} setOpenId={setHeaderMenu} icon="globe" label={t('app.language')} title={t('app.language')} variant="ghost">
             <LanguageSwitch labeled />
           </TopBarMenu>}

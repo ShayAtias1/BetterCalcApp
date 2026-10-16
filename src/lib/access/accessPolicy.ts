@@ -12,7 +12,7 @@ export const ACCESS_ENFORCEMENT_ENABLED = false;
  * handling and the guest trial. Off until explicitly approved; while off the app behaves exactly as it did
  * before accounts existed, the trial clock never starts and the Supabase client is never created.
  */
-export const ACCOUNTS_ENABLED = false;
+export const ACCOUNTS_ENABLED = true;
 
 /**
  * - full: registered (signed in); full manual access.

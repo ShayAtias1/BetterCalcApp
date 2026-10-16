@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { selectSaveState, useAppStore } from '../store/appStore';
 import QuantityExportActions from './QuantityExportActions';
 import LanguageSwitch from './LanguageSwitch';
+import AccountMenu from './AccountMenu';
 import GridMenuSection from './GridMenuSection';
 import TopBarMenu, { type MenuId } from './TopBarMenu';
 import Icon, { type IconName } from './Icon';
@@ -292,6 +293,7 @@ export default function TopBar({ domain, onDomainChange }: { domain?: WorkDomain
 
         {domain === 'room' && <AiMenu openId={openMenu} setOpenId={setOpenMenu} />}
 
+        <AccountMenu />
         <LanguageSwitch />
 
         {/* Export is the strongest action in the bar — the one filled control. */}

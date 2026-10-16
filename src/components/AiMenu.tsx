@@ -19,8 +19,8 @@ export default function AiMenu({ openId, setOpenId }: { openId: MenuId | null; s
   const setMode = useAiReviewMode((s) => s.setMode);
   const open = openId === 'ai';
   const pending = spaces.pending + openings.pending;
-  // Production builds have no detection tools, so the menu appears only when there is something to review.
-  if (!import.meta.env.DEV && !spaces.available && !openings.available) return null;
+  // Production builds have no detection tools yet: the menu is always there, shows saved results to review,
+  // and says the AI tools are coming soon.
 
   const row = (kind: AiReviewMode, title: string, progress: string, count: number, available: boolean) => (
     <div className={`ai-menu-row ${mode === kind ? 'active' : ''}`}>
@@ -54,9 +54,13 @@ export default function AiMenu({ openId, setOpenId }: { openId: MenuId | null; s
             {row('spaces', t('aiReviewWorkspace.title'), t('aiReviewWorkspace.progress', { resolved: spaces.resolved, total: spaces.total }), spaces.pending, spaces.available)}
             {row('openings', t('openingAiReview.title'), t('openingAiReview.progress', { resolved: openings.resolved, total: openings.total }), openings.pending, openings.available)}
           </div>
-          {import.meta.env.DEV && <div className="ai-menu-section ai-menu-run">
+          {import.meta.env.DEV ? <div className="ai-menu-section ai-menu-run">
             <p className="ai-menu-title">{t('aiMenu.runNew')}</p>
             <AiSpaceDetectionPanel />
+          </div> : <div className="ai-menu-section ai-menu-soon">
+            <p className="ai-menu-title">{t('acct.ai.title')} <span className="soon-badge">{t('acct.soon')}</span></p>
+            <p className="menu-hint">{t('acct.ai.soon')}</p>
+            <p className="menu-hint">{t('acct.ai.note')}</p>
           </div>}
         </div>
       </ResponsivePopover>}

@@ -67,6 +67,11 @@ export default function StartScreen() {
   };
 
   useEffect(refresh, []);
+  // A cloud restore adds projects from outside this screen.
+  useEffect(() => {
+    window.addEventListener('bettercalc:projects-changed', refresh);
+    return () => window.removeEventListener('bettercalc:projects-changed', refresh);
+  }, []);
 
   // Read-only check: never shows a permission prompt (the request happens after a project save).
   useEffect(() => {

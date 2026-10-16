@@ -9,6 +9,7 @@ import Icon, { type IconName } from '../Icon';
 import { BrandHomeLink } from '../BrandLogo';
 import ViewModeSwitch from './ViewModeSwitch';
 import LanguageSwitch from '../LanguageSwitch';
+import AccountMenu from '../AccountMenu';
 import { useT } from '../../i18n';
 
 export default function CompareTopBar({
@@ -238,6 +239,7 @@ export default function CompareTopBar({
           {t('revisionAi.topBarButton')}
         </button>
 
+        <AccountMenu />
         <LanguageSwitch />
 
         {/* Export is the strongest action in the bar — the one filled control. */}

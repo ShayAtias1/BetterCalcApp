@@ -10,20 +10,7 @@ const MIGRATIONS = new URL('../../supabase/migrations/', import.meta.url);
 const migrationSql = () =>
   readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).sort().map((f) => readFileSync(new URL(f, MIGRATIONS), 'utf8')).join('\n');
 
-const AUTH_STUB = `
-  create role anon nologin;
-  create role authenticated nologin;
-  create role service_role nologin bypassrls;
-  create schema auth;
-  create table auth.users (id uuid primary key default gen_random_uuid(), email text);
-  create function auth.uid() returns uuid language sql stable as
-    $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
-  grant usage on schema public, auth to anon, authenticated, service_role;
-  grant execute on function auth.uid() to anon, authenticated, service_role;
-  -- Supabase grants new public tables to the API roles by default; mirror it so the migration's revokes matter.
-  alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
-  alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
-`;
+import { AUTH_STUB } from './supabaseStub.ts';
 
 let db: PGlite;
 const A = '11111111-1111-1111-1111-111111111111';

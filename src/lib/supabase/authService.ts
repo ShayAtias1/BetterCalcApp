@@ -65,10 +65,10 @@ async function run(call: () => Promise<{ error: unknown }>): Promise<AuthResult>
 }
 
 /** Sends a one-time code. Creates the account on first use (free registration). */
-export function requestEmailCode(auth: AuthApi, rawEmail: string, captchaToken?: string): Promise<AuthResult> {
+export function requestEmailCode(auth: AuthApi, rawEmail: string, captchaToken?: string, fullName?: string): Promise<AuthResult> {
   const email = normalizeEmail(rawEmail);
   if (!email) return Promise.resolve({ ok: false, reason: 'invalid-email' });
-  return run(() => auth.signInWithOtp({ email, options: { shouldCreateUser: true, ...(captchaToken ? { captchaToken } : {}) } }));
+  return run(() => auth.signInWithOtp({ email, options: { shouldCreateUser: true, ...(captchaToken ? { captchaToken } : {}), ...(fullName?.trim() ? { data: { full_name: fullName.trim().slice(0, 80) } } : {}) } }));
 }
 
 export function confirmEmailCode(auth: AuthApi, rawEmail: string, rawCode: string): Promise<AuthResult> {

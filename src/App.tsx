@@ -31,6 +31,10 @@ import LanguageSwitch from './components/LanguageSwitch';
 import AccountMenu from './components/AccountMenu';
 import AuthDialog from './components/AuthDialog';
 import AccessNotices from './components/AccessNotices';
+import OnboardingDialog from './components/OnboardingDialog';
+import LegalDialog from './components/LegalDialog';
+import AccountPage, { CloudBackupHost } from './components/AccountPage';
+import { accountSync } from './store/accountStore';
 import { authStore } from './store/authStore';
 import { accessSync } from './lib/access/accessSync';
 import { ACCOUNTS_ENABLED } from './lib/access/accessPolicy';
@@ -291,7 +295,9 @@ export default function App() {
   useEffect(() => {
     if (!ACCOUNTS_ENABLED) return;
     void authStore.getState().init();
-    return accessSync.start();
+    const stopAccess = accessSync.start();
+    const stopAccount = accountSync.start();
+    return () => { stopAccess(); stopAccount(); };
   }, []);
-  return <WorkspaceLayoutProvider><AppContent /><MultiPlanAi /><BulkTakeoff /><AppDialogs /><AuthDialog /><AccessNotices /></WorkspaceLayoutProvider>;
+  return <WorkspaceLayoutProvider><AppContent /><MultiPlanAi /><BulkTakeoff /><AppDialogs /><AuthDialog /><OnboardingDialog /><LegalDialog /><AccountPage /><CloudBackupHost /><AccessNotices /></WorkspaceLayoutProvider>;
 }

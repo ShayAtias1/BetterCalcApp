@@ -29,7 +29,8 @@ export interface AuthState {
   /** The last account operation or session read failed because the network was unreachable. */
   networkIssue: boolean;
   init(): Promise<void>;
-  requestEmailCode(email: string): Promise<AuthResult>;
+  /** `fullName` is used only when this creates a new account (registration). */
+  requestEmailCode(email: string, fullName?: string): Promise<AuthResult>;
   confirmEmailCode(email: string, code: string): Promise<AuthResult>;
   signInWithGoogle(): Promise<AuthResult>;
   signOut(): Promise<AuthResult>;
@@ -90,7 +91,7 @@ export function createAuthStore(deps: AuthDeps) {
       return initialized;
     },
 
-    requestEmailCode: (email) =>
+    requestEmailCode: (email, fullName) =>
       withAuth(async (auth) => {
         let token: string | undefined;
         try {
@@ -98,7 +99,7 @@ export function createAuthStore(deps: AuthDeps) {
         } catch {
           return { ok: false, reason: 'captcha' };
         }
-        return requestEmailCode(auth, email, token);
+        return requestEmailCode(auth, email, token, fullName);
       }),
     confirmEmailCode: (email, code) => withAuth((auth) => confirmEmailCode(auth, email, code)),
     signInWithGoogle: () => withAuth((auth) => startGoogleSignIn(auth, deps.returnUrl())),
