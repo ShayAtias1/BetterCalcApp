@@ -220,3 +220,21 @@
 .ai-soon-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); margin-block-start: var(--s-5); }
 .ai-soon-actions .btn-primary, .ai-soon-actions .btn-secondary { block-size: 44px; padding-inline: var(--s-5); border-radius: var(--r-lg); font: 600 15px/1 var(--sans); }
 .ai-soon-actions .btn-ghost { margin-inline-start: auto; color: var(--text-2); font: 400 15px/1 var(--sans); }
+
+/* ---------------------------------------------------------------- touch and small screens */
+[data-touch-input='true'] .acct-segment button { min-height: 40px; }
+@media (max-width: 520px) {
+  /* The comparison table scrolls sideways on a phone with its feature column pinned, so every plan stays readable. */
+  .plans-matrix { grid-template-columns: 112px repeat(var(--cols), 100px); column-gap: 6px; min-inline-size: calc(112px + var(--cols) * 106px); }
+  .pm-label, .pm-cell { padding: var(--s-2); font-size: 12px; }
+  .pm-label { position: sticky; inset-inline-start: 0; z-index: 1; background: var(--bg-surface); }
+  .pm-plan { padding: var(--s-2); }
+  .pm-plan strong { font-size: 13px; }
+  /* Section titles stay in view while the plan columns scroll. */
+  .pm-group { padding-inline: var(--s-2); justify-self: start; inline-size: max-content; position: sticky; inset-inline-start: 0; z-index: 1; }
+}
+[data-touch-input='true'] .account-page input[type='checkbox'] { inline-size: 22px; block-size: 22px; flex: none; }
+[data-touch-input='true'] .account-page .btn-ghost.small { min-inline-size: 44px; }
+[data-touch-input='true'] .account-page :is(input:not([type='checkbox']), select, .btn-outline-danger, .btn-secondary, .btn-primary) { min-height: 44px; }
+[data-touch-input='true'] .account-page .link-button { display: inline-block; padding-block: 12px; }
+@media (max-width: 520px) { .cloud-backups .cloud-backup-name { flex-basis: 100%; } }

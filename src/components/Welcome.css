@@ -24,15 +24,17 @@
   --w-blue: #2563eb;
   --w-line: #dbe6fb;
   position: relative;
-  min-block-size: 100dvh;
+  block-size: 100dvh;
   display: grid;
   background: #fff;
   color: var(--text-h);
   font-family: var(--sans);
-  overflow: hidden;
+  /* Short screens (a phone on its side) scroll instead of clipping the card. */
+  overflow-x: hidden;
+  overflow-y: auto;
   isolation: isolate;
 }
-.welcome-bg { position: absolute; inset: 0; z-index: -1; }
+.welcome-bg { position: fixed; inset: 0; z-index: -1; }
 .welcome-grid {
   position: absolute; inset: 0;
   background-image: linear-gradient(#eef3fc 1px, transparent 1px), linear-gradient(90deg, #eef3fc 1px, transparent 1px);
@@ -48,11 +50,12 @@
 .wp-measured circle { fill: #fff; stroke: #93b4f5; stroke-width: 2; opacity: 0; animation: welcome-fade 0.6s ease forwards 3.8s; }
 .wp-labels text { fill: #93b4f5; font: 500 15px/1 ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: 0.04em; opacity: 0; animation: welcome-fade 0.9s ease forwards 3.6s; }
 
-.welcome-lang { position: absolute; inset-block-start: 16px; inset-inline-end: 16px; z-index: 2; }
+.welcome-lang { position: fixed; inset-block-start: 16px; inset-inline-end: 16px; z-index: 2; }
 
-.welcome-stage { display: grid; place-items: center; padding: 56px 20px; }
+.welcome-stage { display: flex; padding: 56px 20px; }
 .welcome-card {
   inline-size: min(440px, 100%);
+  margin: auto;
   display: flex; flex-direction: column; align-items: center; text-align: center;
   padding: 44px 36px 30px;
   border-radius: 20px;
@@ -120,7 +123,8 @@ html[dir='rtl'] .welcome-view { animation-name: welcome-view-rtl; }
 @keyframes welcome-view-rtl { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
 
 @media (max-width: 560px) {
-  .welcome-stage { padding: 64px 14px 28px; align-items: start; }
+  .welcome-stage { padding: 64px 14px 28px; }
+  .welcome-card { margin-block: 0 auto; }
   .welcome-card { padding: 34px 22px 24px; border-radius: 18px; }
   .welcome-card-form { padding-block-start: 20px; }
   .welcome-mark { inline-size: 128px; }
@@ -131,3 +135,5 @@ html[dir='rtl'] .welcome-view { animation-name: welcome-view-rtl; }
   .wp { stroke-dashoffset: 0; }
   .wp-room, .wp-measured circle, .wp-labels text { opacity: 1; }
 }
+
+[data-touch-input='true'] .welcome-back { min-block-size: 44px; }

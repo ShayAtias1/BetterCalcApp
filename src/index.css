@@ -5957,3 +5957,45 @@ html[dir='rtl'] .header-calibration-action + .header-calibration-action { border
 @media (max-width: 640px) {
   .projects-page .panel-head-actions { flex: 1 1 100%; min-inline-size: 0; }
 }
+
+/* ===========================================================================
+   Touch and small screens
+   ---------------------------------------------------------------------------
+   Comfortable targets where the last input was a finger, and phone fixes. Desktop layouts are not touched:
+   everything here is scoped to touch input or to narrow viewports.
+   =========================================================================== */
+.app-dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.storage-note:not(.storage-note-reminder) > span { flex: 1; min-width: 0; }
+
+[data-touch-input='true'] .language-switch button { height: 38px; padding-inline: 14px; }
+[data-touch-input='true'] .app-brand-link { position: relative; }
+[data-touch-input='true'] .app-brand-link::after { content: ''; position: absolute; inset: -9px -6px; }
+[data-touch-input='true'] :is(.tool-btn, .tool-dock .tool-btn) { min-width: 44px; min-height: 44px; }
+[data-touch-input='true'] .tool-btn:not(.tool-btn-labeled) { width: 44px; height: 44px; }
+[data-touch-input='true'] .app-dialog :is(.btn-primary, .btn-secondary, .btn-ghost, .modal-actions button, .app-dialog-actions button) { min-height: 44px; }
+[data-touch-input='true'] .app-dialog :is(input:not([type='checkbox']):not([type='radio']), select) { min-height: 44px; }
+[data-touch-input='true'] :is(.project-name-input, .acct-select, .account-nav-btn, .account-chip) { min-height: 44px; }
+[data-touch-input='true'] :is(.btn-ghost.small, .btn-secondary.small, .btn-primary.small) { min-height: 40px; }
+[data-touch-input='true'] .app-dialog input[type='checkbox'], [data-touch-input='true'] .welcome input[type='checkbox'] { inline-size: 22px; block-size: 22px; flex: none; }
+[data-touch-input='true'] .app-dialog .link-button, [data-touch-input='true'] .welcome .link-button { display: inline-block; padding-block: 10px; }
+[data-touch-input='true'] .access-notice button, [data-touch-input='true'] .app-notice-action { min-height: 40px; }
+[data-touch-input='true'] .qty-scope button, [data-touch-input='true'] .segmented-tabs button { min-height: 40px; }
+
+@media (max-width: 520px) {
+  dialog.app-dialog { padding: 18px 16px; }
+  /* The persistent header bleeds to the dialog edge, so its offsets follow the smaller padding. */
+  dialog.app-dialog .app-dialog-header { margin: -18px -16px var(--s-4); padding: 12px 16px; }
+  .app-dialog-actions, .app-dialog .modal-actions { justify-content: stretch; }
+  .app-dialog-actions > button, .app-dialog .modal-actions > button { flex: 1 1 0; }
+}
+[data-touch-input='true'] .changes-summary-item input[type='color'] { inline-size: 32px; block-size: 32px; }
+/* The older modal: never taller than the screen, scrolls inside, and has comfortable controls under a finger. */
+.modal { max-height: calc(100dvh - 32px); overflow-y: auto; box-sizing: border-box; }
+[data-touch-input='true'] .modal :is(.btn-primary, .btn-secondary, .btn-ghost, .modal-actions button) { min-height: 44px; }
+[data-touch-input='true'] .modal :is(input:not([type='checkbox']):not([type='radio']), select, textarea) { min-height: 44px; }
+[data-touch-input='true'] .modal input[type='checkbox'] { inline-size: 22px; block-size: 22px; flex: none; }
+@media (max-width: 520px) {
+  .modal { padding: 18px 16px; max-width: calc(100vw - 32px); }
+  .modal .modal-actions { flex-wrap: wrap; }
+}
+[data-touch-input='true'] .app-notice .btn-ghost.small { min-inline-size: 44px; min-height: 44px; }
