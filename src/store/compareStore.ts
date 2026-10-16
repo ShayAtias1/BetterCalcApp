@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { guardEdits, requireEditAccess } from '../lib/access/editGuard';
+import { canEditWork } from '../lib/workspaceCapabilities';
 import { withComparisonWallGeometry } from '../lib/revision/wallGeometry';
 import { prepareWallRegionMerge, type WallRegionRef, type WallMergeError, type WallGapPreview } from '../lib/revision/wallRegionMerge';
 import { v4 as uuid } from 'uuid';
@@ -79,7 +81,7 @@ async function ensureLinkedPlanIdle(planId: string) {
 
 async function restoreLinkedSwap(edge: LinkedSwapHistory, forward: boolean, current: Comparison, target: Comparison,
   get: () => CompareState, set: (patch: Partial<CompareState>) => void) {
-  if (linkedSwapBusy) return;
+  if (linkedSwapBusy || !requireEditAccess('edit')) return;
   linkedSwapBusy = true;
   try {
     await get().persist();
@@ -385,11 +387,15 @@ interface CompareState {
  * autosave route below, and the `*Quiet` variants that persist only when a drag ends.
  */
 function markDirty(set: (patch: Partial<CompareState>) => void) {
+  // A refused edit (see guardEdits) changed nothing, so it must not mark the comparison unsaved.
+  if (!canEditWork()) return;
   set({ dirty: true });
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 function scheduleSave(get: () => CompareState, set: (patch: Partial<CompareState>) => void) {
+  // Locked: nothing new to save, and an autosave already pending from earlier edits keeps its timer.
+  if (!canEditWork()) return;
   markDirty(set);
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
@@ -584,7 +590,7 @@ function keepAiResultsCurrent(before: Comparison, after: Comparison, pageKey: nu
   return changed ? { ...after, revisions } : after;
 }
 
-export const useCompareStore = create<CompareState>((set, get) => ({
+export const useCompareStore = create<CompareState>()(guardEdits<CompareState>('comparison')((set, get) => ({
   comparison: null,
   currentPageKey: 1,
   originalNumPages: 1,
@@ -1408,6 +1414,7 @@ export const useCompareStore = create<CompareState>((set, get) => ({
     scheduleSave(get, set);
   },
   swapRevisionChange: async (pageKey, changeId, confirmed = false) => {
+    if (!requireEditAccess('edit')) return false;
     if (linkedSwapBusy) return false;
     historyTracker.flush(get, set);
     const { comparison } = get();
@@ -1659,4 +1666,4 @@ export const useCompareStore = create<CompareState>((set, get) => ({
       set({ saving: false });
     }
   },
-}));
+})));

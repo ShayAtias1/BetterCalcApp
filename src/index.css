@@ -5945,3 +5945,14 @@ html[dir='rtl'] .header-calibration-action + .header-calibration-action { border
 .area-geometry-edge:hover > .area-geometry-add circle {
   pointer-events: all;
 }
+
+/* Accounts */
+.account-menu { display: flex; align-items: center; gap: 8px; }
+.account-email { max-inline-size: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auth-dialog label { display: grid; gap: 4px; margin-block: 8px; }
+.auth-google { inline-size: 100%; }
+.auth-or { text-align: center; margin: 8px 0; }
+.auth-error { color: var(--danger, #b3261e); margin: 8px 0 0; }
+.access-notice { position: fixed; inset-block-end: 16px; inset-inline: 16px; margin-inline: auto; max-inline-size: 640px; z-index: 50;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 8px;
+  background: var(--surface, #fff); border: 1px solid var(--border, #ccd); box-shadow: 0 4px 16px rgba(0, 0, 0, .15); }

@@ -28,6 +28,12 @@ import AdaptiveInspector from './components/AdaptiveInspector';
 import CompactPlanHeader from './components/CompactPlanHeader';
 import { WorkspaceLayoutProvider, useWorkspaceLayout } from './hooks/useWorkspaceLayout';
 import LanguageSwitch from './components/LanguageSwitch';
+import AccountMenu from './components/AccountMenu';
+import AuthDialog from './components/AuthDialog';
+import AccessNotices from './components/AccessNotices';
+import { authStore } from './store/authStore';
+import { accessSync } from './lib/access/accessSync';
+import { ACCOUNTS_ENABLED } from './lib/access/accessPolicy';
 import { useT } from './i18n';
 import type { PanelPart } from './components/PanelPart';
 import { useAiReviewMode, useAiReviewSync, useOpeningReviewSummary, useSpaceReviewSummary } from './components/aiReviewState';
@@ -221,6 +227,7 @@ function Home() {
         </div>
         <div className="top-bar-group grow" />
         <div className="top-bar-group output">
+          <AccountMenu />
           <LanguageSwitch />
         </div>
       </div>
@@ -280,5 +287,11 @@ function AppContent() {
 }
 
 export default function App() {
-  return <WorkspaceLayoutProvider><AppContent /><MultiPlanAi /><BulkTakeoff /><AppDialogs /></WorkspaceLayoutProvider>;
+  // Account state and the guest trial follow the session; neither reads or writes project data.
+  useEffect(() => {
+    if (!ACCOUNTS_ENABLED) return;
+    void authStore.getState().init();
+    return accessSync.start();
+  }, []);
+  return <WorkspaceLayoutProvider><AppContent /><MultiPlanAi /><BulkTakeoff /><AppDialogs /><AuthDialog /><AccessNotices /></WorkspaceLayoutProvider>;
 }

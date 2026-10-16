@@ -19,6 +19,7 @@ import {
   previewRevisionAi,
   submitRevisionAi,
 } from './aiClassify';
+import { requireEditAccess } from '../access/editGuard';
 import { commitApplication, editedSince, prepareApplication, revertApplication, type ApplicationPreview } from './apply';
 
 /**
@@ -496,6 +497,7 @@ export async function swapSelectedChange(pageKey: number, changeId: string): Pro
 }
 
 export async function applyApprovedChanges(): Promise<void> {
+  if (!requireEditAccess('edit')) return;
   if (useRevisionUi.getState().applying) return;
   const store = useCompareStore.getState();
   const comparison = store.comparison;
@@ -535,6 +537,7 @@ export async function applyApprovedChanges(): Promise<void> {
 }
 
 export async function revertRevisionApplication(applicationId: string): Promise<void> {
+  if (!requireEditAccess('edit')) return;
   const comparison = useCompareStore.getState().comparison;
   if (!comparison?.linkedPlanId) return;
   try {

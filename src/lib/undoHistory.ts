@@ -10,6 +10,8 @@
  *   so the "before" snapshot captured is the one from *before the whole burst*, not a mid-burst one.
  */
 
+import { canEditWork } from './workspaceCapabilities';
+
 const HISTORY_LIMIT = 50;
 const DEBOUNCE_MS = 600;
 
@@ -35,12 +37,15 @@ export function createHistoryTracker<T>() {
   }
 
   function push(get: () => HistorySlice<T>, set: (patch: Partial<HistorySlice<T>>) => void, before: T) {
+    // A refused edit (editing locked, see access/editGuard) leaves no undo step.
+    if (!canEditWork()) return;
     flush(get, set);
     const { history } = get();
     set({ history: [...history, before].slice(-HISTORY_LIMIT), future: [] });
   }
 
   function pushDebounced(get: () => HistorySlice<T>, set: (patch: Partial<HistorySlice<T>>) => void, before: T) {
+    if (!canEditWork()) return;
     if (pending === null) pending = before;
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => flush(get, set), DEBOUNCE_MS);

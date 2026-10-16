@@ -10,13 +10,14 @@ import { planBulkTakeoff, materializeBulkTakeoff, type BulkWorkConfig, type Bulk
 import { aiWarnings, aiCandidateTypeKey, aiCandidateLabel } from '../lib/localAiReview';
 import { candidateGeometryProblems, overlapNotes } from '../lib/ai/oneClick';
 import type { LocalAiMetadata } from '../lib/localAiImport';
-import { canAuthorTakeoff, canUseToolMode, canUseMarkupTool, canUseMeasureTool, isTouchInput, isPhoneWorkspace } from '../lib/workspaceCapabilities';
+import { canEditWork, canAuthorTakeoff, canUseToolMode, canUseMarkupTool, canUseMeasureTool, isTouchInput, isPhoneWorkspace } from '../lib/workspaceCapabilities';
 import { useFieldWorkflowStore } from './fieldWorkflowStore';
 import { concreteOf, rebarOf } from '../lib/structuralPlan';
 import { hasManualMark, nextAutoNumber } from '../lib/structuralMarks';
 import { withRenewedLayerIds } from '../lib/rebarMesh';
 import { editManualMeshLayout, renewManualMeshSheetIds, type ManualMeshEdit } from '../lib/manualMeshLayout';
 import { create } from 'zustand';
+import { guardEdits, requireEditAccess } from '../lib/access/editGuard';
 import { v4 as uuid } from 'uuid';
 import type { AreaCalcMode, AreaKind, AreaShape, Calibration, ExportRegion, Markup, MarkupTool, Measurement, MeasureTool, Opening, OpeningType, Point, Plan, Project, Room, ToolMode, WorkItem, WorkType } from '../types';
 import { DEFAULT_AREA_KIND_COLORS } from '../types';
@@ -605,6 +606,8 @@ interface AppState {
  * autosave schedule and persist only when the drag ends.
  */
 function markDirty(set: (patch: Partial<AppState>) => void) {
+  // A refused edit (see guardEdits) changed nothing, so it must not mark the plan unsaved.
+  if (!canEditWork()) return;
   set({ dirty: true });
 }
 
@@ -668,6 +671,8 @@ function commitStructuralZone(get: () => AppState, set: (patch: Partial<AppState
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 function scheduleSave(get: () => AppState, set: (patch: Partial<AppState>) => void) {
+  // Locked: nothing new to save, and an autosave already pending from earlier edits keeps its timer.
+  if (!canEditWork()) return;
   markDirty(set);
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
@@ -714,7 +719,7 @@ function ensureOverlayVisible(
   saveOverlayVisibility(next);
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
+export const useAppStore = create<AppState>()(guardEdits<AppState>('project')((set, get) => ({
   project: null,
   currentProject: null,
   projectPlans: [],
@@ -827,6 +832,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     return true;
   },
   createProject: async (name) => {
+    if (!requireEditAccess()) return;
     const now = Date.now();
     const project: Project = { id: uuid(), name, createdAt: now, updatedAt: now, planIds: [] };
     await dbSaveProject(project);
@@ -834,6 +840,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     await get().openProject(project.id);
   },
   renameProject: (name) => {
+    if (!requireEditAccess('edit')) return;
     const { currentProject } = get();
     if (!currentProject) return;
     const updated = { ...currentProject, name, updatedAt: Date.now() };
@@ -874,6 +881,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     return true;
   },
   addPlan: async (file, name) => {
+    if (!requireEditAccess()) return null;
     const { currentProject } = get();
     if (!currentProject) return null;
     const blob = await normalizePlanFile(file);
@@ -888,6 +896,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     return plan;
   },
   duplicatePlan: async (planId) => {
+    if (!requireEditAccess()) return null;
     const { currentProject, project } = get();
     if (!currentProject) return null;
     // Copy what the user sees: an open plan is saved first so the copy includes its latest edits.
@@ -914,6 +923,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     await get().refreshProjectPlans();
   },
   renamePlan: async (planId, name) => {
+    if (!requireEditAccess('edit')) return;
     if (get().project?.id === planId) {
       get().updateProjectMeta({ name });
       return;
@@ -924,6 +934,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     await get().refreshProjectPlans();
   },
   createComparison: async ({ name, apartmentNumber, original, revised, originalPlanId }) => {
+    if (!requireEditAccess()) return;
     const { currentProject } = get();
     if (!currentProject) return;
     // Same document and PDF layout the Compare start screen always created, plus its project.
@@ -963,6 +974,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     useCompareStore.getState().setComparison(comparison);
   },
   renameComparison: async (comparisonId, name) => {
+    if (!requireEditAccess('edit')) return;
     const comparison = await loadComparison(comparisonId);
     if (!comparison) return;
     await dbSaveComparison({ ...comparison, name, updatedAt: Date.now() });
@@ -2369,4 +2381,4 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ saving: false });
     }
   },
-}));
+})));

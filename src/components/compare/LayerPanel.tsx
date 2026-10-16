@@ -1,6 +1,7 @@
 import { promptDialog, confirmDialog } from '../../lib/appDialogs';
 import { useRef, useState } from 'react';
 import { useCompareStore } from '../../store/compareStore';
+import { requireEditAccess } from '../../lib/access/editGuard';
 import { deleteComparePdfBlob, saveComparePdfBlob } from '../../db/database';
 import { trackRevisionAdded } from '../../lib/analytics';
 import Icon from '../Icon';
@@ -93,7 +94,7 @@ export default function LayerPanel() {
   const activeRevision = comparison.revisions.find((r) => r.id === comparison.activeRevisionId) ?? comparison.revisions[0];
 
   const handleAddFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0 || !requireEditAccess('edit')) return;
     for (const file of Array.from(files)) {
       const id = addRevision(file.name);
       if (!id) continue;
@@ -103,6 +104,7 @@ export default function LayerPanel() {
   };
 
   const handleRemove = async (id: string) => {
+    if (!requireEditAccess('edit')) return;
     if (!await confirmDialog(t('compare.layers.removeConfirm'), { destructive: true })) return;
     removeRevision(id);
     await deleteComparePdfBlob(comparison.id, `revision:${id}`);

@@ -11,6 +11,8 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL?: string;
   /** Supabase PUBLISHABLE (anon) key. Public by design; the secret/service-role key must never be a VITE_ variable. */
   readonly VITE_SUPABASE_PUBLISHABLE_KEY?: string;
+  /** Cloudflare Turnstile PUBLIC site key (CAPTCHA is inactive until CAPTCHA_ENABLED is set). */
+  readonly VITE_TURNSTILE_SITE_KEY?: string;
 }
 
 /** Short git SHA of the build, injected by vite.config.ts (`app_version` in analytics). */

@@ -5,6 +5,10 @@ let workspaceWidth = typeof window === 'undefined' ? 1200 : window.innerWidth;
 let pointerType = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches ? 'touch' : 'mouse';
 export const setWorkspaceWidth = (width: number) => { workspaceWidth = width; };
 export const setWorkspacePointer = (type: string) => { pointerType = type || 'mouse'; };
+// Account access (guest trial ended): view and export stay available, creating and editing do not.
+let editingAllowed = true;
+export const setEditingAllowed = (allowed: boolean) => { editingAllowed = allowed; };
+export const canEditWork = () => editingAllowed;
 export const isPhoneWorkspace = () => workspaceWidth < 768;
 export const isTouchInput = () => pointerType !== 'mouse';
 export const canAuthorTakeoff = () => !isPhoneWorkspace();

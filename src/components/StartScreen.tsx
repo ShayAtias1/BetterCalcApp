@@ -1,4 +1,5 @@
 import { confirmDialog, notify } from '../lib/appDialogs';
+import { requireEditAccess } from '../lib/access/editGuard';
 import { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../store/appStore';
 import { deleteProject, listProjects, type ProjectWithPlans } from '../db/database';
@@ -132,7 +133,7 @@ export default function StartScreen() {
     });
 
   const handleImportFile = (file: File) =>
-    runBackupTask(async () => {
+    !requireEditAccess() ? Promise.resolve() : runBackupTask(async () => {
       const confirmLarge: ConfirmLarge = ({ bytes, freeBytes, lowStorage }) =>
         confirmDialog(
           lowStorage && freeBytes !== null

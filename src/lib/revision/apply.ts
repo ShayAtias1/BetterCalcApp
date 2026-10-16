@@ -1,4 +1,5 @@
 import { v4 as uuid } from 'uuid';
+import { canEditWork } from '../workspaceCapabilities';
 import type { PDFPageProxy } from 'pdfjs-dist';
 import type { Measurement, Plan, Point, ReportColumn, Room } from '../../types';
 import type { Comparison, RevisionLayer } from '../../types/compare';
@@ -505,6 +506,7 @@ export async function prepareApplication(comparison: Comparison, revisionId: str
 
 /** Writes the prepared application, refusing if the plan changed since the preview was made. */
 export async function commitApplication(preview: ApplicationPreview, revisionLabel: string): Promise<void> {
+  if (!canEditWork()) throw new Error('editing-locked');
   const current = await loadPlan(preview.plan.id);
   if (!current || current.updatedAt !== preview.plan.updatedAt) throw new Error('plan-changed');
   const version: PlanVersion = {
@@ -524,6 +526,7 @@ export async function commitApplication(preview: ApplicationPreview, revisionLab
  * is itself kept as a version, and the ledger records the revert.
  */
 export async function revertApplication(planId: string, applicationId: string): Promise<RevisionApplication> {
+  if (!canEditWork()) throw new Error('editing-locked');
   const plan = await loadPlan(planId);
   if (!plan) throw new Error('plan-missing');
   const app = plan.revisionApplications?.find((a) => a.id === applicationId && a.status === 'applied');
