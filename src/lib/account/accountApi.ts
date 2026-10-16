@@ -175,6 +175,12 @@ export function listPublicPlans(client: AccountClient): Promise<PlanSummary[]> {
   });
 }
 
+/** A plan's display name in the given language; the plan code while the plan is not published (or not found). */
+export function planName(code: string, plans: PlanSummary[], language: 'he' | 'en'): string {
+  const plan = plans.find((p) => p.code === code);
+  return plan ? (language === 'he' ? plan.nameHe : plan.nameEn) : code;
+}
+
 // ---------------------------------------------------------------- invoice details
 export interface BillingProfile { invoiceName: string; taxId: string; addressLine: string; city: string; postalCode: string }
 export const EMPTY_BILLING: BillingProfile = { invoiceName: '', taxId: '', addressLine: '', city: '', postalCode: '' };

@@ -47,6 +47,9 @@ function toCloudError(error: unknown): CloudBackupError {
   return new CloudBackupError('unknown', text);
 }
 
+/** Keeps a figure such as "18.0 MB" in its own left-to-right run inside Hebrew text. */
+export const ltr = (text: string): string => `\u2066${text}\u2069`;
+
 /** Exact enough to be honest at both ends: an empty cloud is not "1 MB", and a small backup is not rounded up to a megabyte. */
 export function formatBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;

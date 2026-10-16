@@ -8,6 +8,8 @@ import { authStore } from '../store/authStore';
 import { takeConsentPending } from '../store/accountUi';
 import AppModal from './AppModal';
 import { AgreeLabel } from './LegalDialog';
+import BrandLogo from './BrandLogo';
+import './Account.css';
 
 /** Set when the user chooses "later"; the step returns on the next visit. */
 let postponed = false;
@@ -54,14 +56,14 @@ export default function OnboardingDialog() {
   const later = () => { postponed = true; setHidden(true); };
   const valid = !!normalizeDisplayName(name) && agree;
   return (
-    <AppModal title={t('acct.onboardingTitle')} onCancel={later} showClose className="onboarding-dialog">
-      <p>{t('acct.onboardingIntro')}</p>
+    <AppModal title={t('acct.onboardingTitle')} onCancel={later} showClose className="onboarding-dialog auth-dialog" eyebrow={<div className="auth-brand"><BrandLogo /></div>}>
+      <p className="auth-lead">{t('acct.onboardingIntro')}</p>
       <form onSubmit={(e) => { e.preventDefault(); if (valid) void submit(name); }}>
-        <label>
+        <label className="auth-field">
           {t('acct.fullName')}
           <input className="app-dialog-input" autoComplete="name" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         </label>
-        <label className="auth-agree">
+        <label className="auth-field auth-agree">
           <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
           <AgreeLabel />
         </label>

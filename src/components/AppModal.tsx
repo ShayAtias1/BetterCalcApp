@@ -4,8 +4,10 @@ import Icon from './Icon';
 import './AppDialogs.css';
 
 /** HTML dialog renders in the top layer: background is inert, focus is trapped and restored. */
-export default function AppModal({ title, children, onCancel, wide = false, descriptionId, showClose = false, className = '' }: {
+export default function AppModal({ title, children, onCancel, wide = false, descriptionId, showClose = false, className = '', eyebrow }: {
   title: string; children: ReactNode; onCancel: () => void; wide?: boolean; descriptionId?: string; showClose?: boolean; className?: string;
+  /** Shown above the title (a brand mark, for example). */
+  eyebrow?: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -20,6 +22,7 @@ export default function AppModal({ title, children, onCancel, wide = false, desc
   return <dialog ref={ref} className={`app-dialog${wide ? ' app-dialog-wide' : ''} ${className}`} dir={language === 'he' ? 'rtl' : 'ltr'}
     aria-labelledby={titleId} aria-describedby={descriptionId} onCancel={e => { e.preventDefault(); onCancel(); }}
     onKeyDown={e => e.stopPropagation()} onKeyUp={e => e.stopPropagation()}>
+    {eyebrow}
     {showClose ? <header className="app-dialog-header">
       <h2 id={titleId}>{title}</h2>
       <button type="button" className="icon-btn app-dialog-close" aria-label={t('dialogs.close')} title={t('dialogs.close')} onClick={onCancel}>

@@ -7,6 +7,7 @@ import {
   CloudBackupError,
   deleteCloudBackup,
   formatBytes,
+  ltr,
   getCloudStatus,
   listCloudBackups,
   restoreCloudBackup,
@@ -17,6 +18,7 @@ import {
 } from '../lib/cloud/cloudBackup';
 import { useAppStore } from '../store/appStore';
 import AppModal from './AppModal';
+import './Account.css';
 
 /** Tells the project list to reload after a restore. */
 export const PROJECTS_CHANGED = 'bettercalc:projects-changed';
@@ -120,9 +122,9 @@ export default function CloudBackupDialog({ onClose }: { onClose: () => void }) 
       {status?.entitled && (
         <>
           {!status.canWrite && <p>{t('cloud.readOnly')}</p>}
-          <div className="cloud-usage">
-            <progress max={status.quotaBytes} value={Math.min(status.usedBytes, status.quotaBytes)} aria-label={t('cloud.usage', { used: formatBytes(status.usedBytes), quota: formatBytes(status.quotaBytes) })} />
-            <span>{t('cloud.usage', { used: formatBytes(status.usedBytes), quota: formatBytes(status.quotaBytes) })}</span>
+          <div className={`cloud-usage${status.usage === 'ok' ? '' : ' warn'}`}>
+            <progress max={status.quotaBytes} value={Math.min(status.usedBytes, status.quotaBytes)} aria-label={t('cloud.usage', { used: ltr(formatBytes(status.usedBytes)), quota: ltr(formatBytes(status.quotaBytes)) })} />
+            <span>{t('cloud.usage', { used: ltr(formatBytes(status.usedBytes)), quota: ltr(formatBytes(status.quotaBytes)) })}</span>
           </div>
           {status.usage === 'warning' && <p className="cloud-warning" role="status">{t('cloud.warning', { percent })}</p>}
           {status.usage === 'full' && <p className="cloud-warning" role="alert">{t('cloud.full')}</p>}
@@ -157,7 +159,7 @@ export default function CloudBackupDialog({ onClose }: { onClose: () => void }) 
                 {backups.map((b) => (
                   <li key={b.id}>
                     <span className="cloud-backup-name">{b.name}</span>
-                    <span className="muted">{formatBytes(b.sizeBytes)} · {formatDate(b.createdAt)}</span>
+                    <span className="muted"><bdi>{formatBytes(b.sizeBytes)}</bdi> · <bdi>{formatDate(b.createdAt)}</bdi></span>
                     <button type="button" className="btn-secondary" disabled={!!busy} onClick={() => void restore(b)}>{t('cloud.restore')}</button>
                     {status.canWrite && <button type="button" className="btn-secondary" disabled={!!busy} onClick={() => void remove(b)}>{t('cloud.delete')}</button>}
                   </li>

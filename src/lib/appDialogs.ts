@@ -15,7 +15,8 @@ export interface DialogRequest extends DialogOptions {
   initialValue?: string;
   resolve: (value: string | boolean | null) => void;
 }
-interface Notice { id: number; message: string; }
+export interface NoticeAction { label: string; run: () => void; }
+interface Notice { id: number; message: string; action?: NoticeAction; }
 let nextId = 0;
 export const useAppDialogs = create<{ queue: DialogRequest[]; notices: Notice[] }>(() => ({ queue: [], notices: [] }));
 function request(kind: DialogRequest['kind'], message: string, options: DialogOptions, initialValue?: string) {
@@ -52,8 +53,8 @@ export function noticeDuration(message: string): number {
   return Math.min(12_000, 4_000 + message.length * 50);
 }
 
-export function notify(message: string): void {
-  useAppDialogs.setState(s => ({ notices: [...s.notices, { id: ++nextId, message }] }));
+export function notify(message: string, action?: NoticeAction): void {
+  useAppDialogs.setState(s => ({ notices: [...s.notices, { id: ++nextId, message, action }] }));
 }
 export function dismissNotice(id: number): void {
   useAppDialogs.setState(s => ({ notices: s.notices.filter(n => n.id !== id) }));

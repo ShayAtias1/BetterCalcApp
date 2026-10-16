@@ -4,6 +4,9 @@ import AiSpaceDetectionPanel from './AiSpaceDetectionPanel';
 import { type MenuId } from './TopBarMenu';
 import { useAiReviewMode, useOpeningReviewSummary, useSpaceReviewSummary, type AiReviewMode } from './aiReviewState';
 import { useT } from '../i18n';
+import { useAccountUi } from '../store/accountUi';
+import { LockIcon } from './AiComingSoonDialog';
+import './Account.css';
 
 /**
  * The header's AI menu: reviewing saved results (free, nothing is sent) above running a new detection
@@ -18,6 +21,7 @@ export default function AiMenu({ openId, setOpenId }: { openId: MenuId | null; s
   const mode = useAiReviewMode((s) => s.mode);
   const setMode = useAiReviewMode((s) => s.setMode);
   const open = openId === 'ai';
+  const setAiSoonOpen = useAccountUi((s) => s.setAiSoonOpen);
   const pending = spaces.pending + openings.pending;
   // Production builds have no detection tools yet: the menu is always there, shows saved results to review,
   // and says the AI tools are coming soon.
@@ -58,9 +62,15 @@ export default function AiMenu({ openId, setOpenId }: { openId: MenuId | null; s
             <p className="ai-menu-title">{t('aiMenu.runNew')}</p>
             <AiSpaceDetectionPanel />
           </div> : <div className="ai-menu-section ai-menu-soon">
-            <p className="ai-menu-title">{t('acct.ai.title')} <span className="soon-badge">{t('acct.soon')}</span></p>
-            <p className="menu-hint">{t('acct.ai.soon')}</p>
-            <p className="menu-hint">{t('acct.ai.note')}</p>
+            <p className="ai-menu-title">{t('acct.aiRunNew')}</p>
+            <p className="menu-hint">{t('acct.aiRunNote')} · {t('acct.aiClickHint')}</p>
+            <div className="ai-menu-locked">
+              {(['aiRowSpaces', 'aiRowClick', 'aiRowOpenings', 'aiRowMulti'] as const).map((key) => (
+                <button key={key} type="button" className="ai-menu-locked-row" onClick={() => { setOpenId(null); setAiSoonOpen(true); }}>
+                  <span>{t(`acct.${key}`)}</span><span className="soon-badge"><LockIcon />{t('acct.soon')}</span>
+                </button>
+              ))}
+            </div>
           </div>}
         </div>
       </ResponsivePopover>}

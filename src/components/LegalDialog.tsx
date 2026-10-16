@@ -2,6 +2,7 @@ import { useLanguage, useT } from '../i18n';
 import { LEGAL_TEXTS, type LegalKind } from '../lib/legal/legalDocs';
 import { useAccountUi } from '../store/accountUi';
 import AppModal from './AppModal';
+import './Account.css';
 
 /** Terms of use / privacy policy viewer. Shows a plain notice while the legally reviewed text is not published. */
 export default function LegalDialog() {

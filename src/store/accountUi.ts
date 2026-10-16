@@ -9,6 +9,8 @@ export const useAccountUi = create<{
   section: AccountSection;
   legal: LegalKind | null;
   cloudOpen: boolean;
+  aiSoonOpen: boolean;
+  setAiSoonOpen(open: boolean): void;
   openPage(section?: AccountSection): void;
   closePage(): void;
   openLegal(kind: LegalKind): void;
@@ -19,6 +21,8 @@ export const useAccountUi = create<{
   section: 'profile',
   legal: null,
   cloudOpen: false,
+  aiSoonOpen: false,
+  setAiSoonOpen: (aiSoonOpen) => set({ aiSoonOpen }),
   openPage: (section = 'profile') => set({ pageOpen: true, section }),
   closePage: () => set({ pageOpen: false }),
   openLegal: (legal) => set({ legal }),

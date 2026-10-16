@@ -8,6 +8,8 @@ import {
   getAccountOverview,
   getCommercialFlags,
   getProfile,
+  listPublicPlans,
+  type PlanSummary,
   updateDisplayName,
   type AccountClient,
   type AccountOverview,
@@ -26,6 +28,8 @@ export interface AccountState {
   flags: CommercialFlags;
   profile: Profile | null;
   overview: AccountOverview | null;
+  /** The published plans, to show a subscription's name instead of its code. Empty until plans are published. */
+  plans: PlanSummary[];
   /** Signed in, profile loaded, and the name/consent step is not done yet. */
   needsOnboarding: boolean;
   loading: boolean;
@@ -48,6 +52,7 @@ export function createAccountStore(deps: AccountDeps) {
     flags: FLAGS_OFF,
     profile: null,
     overview: null,
+    plans: [],
     needsOnboarding: false,
     loading: false,
     loadFailed: false,
@@ -62,9 +67,9 @@ export function createAccountStore(deps: AccountDeps) {
         const flags = await getCommercialFlags(client);
         if (id !== loadId) return;
         if (!signedIn) return set({ flags, profile: null, overview: null, needsOnboarding: false, loading: false, loadFailed: false });
-        const [profile, overview] = await Promise.all([getProfile(client), getAccountOverview(client)]);
+        const [profile, overview, plans] = await Promise.all([getProfile(client), getAccountOverview(client), listPublicPlans(client).catch(() => [] as PlanSummary[])]);
         if (id !== loadId) return;
-        set({ flags, profile, overview, needsOnboarding: !!profile && !profile.onboardingCompleted, loading: false, loadFailed: false });
+        set({ flags, profile, overview, plans, needsOnboarding: !!profile && !profile.onboardingCompleted, loading: false, loadFailed: false });
       } catch {
         if (id === loadId) set({ loading: false, loadFailed: true });
       }
@@ -99,7 +104,7 @@ export function createAccountStore(deps: AccountDeps) {
         if (status === 'signedIn') void store.getState().refresh();
         else {
           loadId += 1;
-          store.setState({ profile: null, overview: null, needsOnboarding: false, loadFailed: false, loading: false });
+          store.setState({ profile: null, overview: null, plans: [], needsOnboarding: false, loadFailed: false, loading: false });
           if (status === 'signedOut') void store.getState().refresh(); // flags only, for the Coming Soon states
         }
       };

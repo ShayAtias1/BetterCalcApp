@@ -33,6 +33,7 @@ import AuthDialog from './components/AuthDialog';
 import AccessNotices from './components/AccessNotices';
 import OnboardingDialog from './components/OnboardingDialog';
 import LegalDialog from './components/LegalDialog';
+import AiComingSoonDialog from './components/AiComingSoonDialog';
 import AccountPage, { CloudBackupHost } from './components/AccountPage';
 import { accountSync } from './store/accountStore';
 import { authStore } from './store/authStore';
@@ -299,5 +300,5 @@ export default function App() {
     const stopAccount = accountSync.start();
     return () => { stopAccess(); stopAccount(); };
   }, []);
-  return <WorkspaceLayoutProvider><AppContent /><MultiPlanAi /><BulkTakeoff /><AppDialogs /><AuthDialog /><OnboardingDialog /><LegalDialog /><AccountPage /><CloudBackupHost /><AccessNotices /></WorkspaceLayoutProvider>;
+  return <WorkspaceLayoutProvider><AppContent /><MultiPlanAi /><BulkTakeoff /><AppDialogs /><AuthDialog /><OnboardingDialog /><LegalDialog /><AiComingSoonDialog /><AccountPage /><CloudBackupHost /><AccessNotices /></WorkspaceLayoutProvider>;
 }

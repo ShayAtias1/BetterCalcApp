@@ -4,6 +4,7 @@ import { authStore } from '../store/authStore';
 import { accessSync } from '../lib/access/accessSync';
 import { ACCESS_ENFORCEMENT_ENABLED, ACCOUNTS_ENABLED } from '../lib/access/accessPolicy';
 import { useAccessPrompt } from '../lib/access/editGuard';
+import './Account.css';
 
 /** Non-blocking notices: an expired sign-in, and (only while restrictions are enforced) the ended trial. */
 export default function AccessNotices() {

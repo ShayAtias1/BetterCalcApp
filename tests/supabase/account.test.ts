@@ -201,3 +201,27 @@ test('a normalized subscription event maps one-to-one to the database call', () 
   const args = subscriptionRpcArgs('acme', { type: 'subscription.updated', eventRef: 'e', userId: 'u', planCode: 'pro', status: 'active', interval: 'month', customerRef: 'c', subscriptionRef: 's', periodStart: '2026-10-01T00:00:00Z', periodEnd: '2026-11-01T00:00:00Z', cancelAtPeriodEnd: false });
   assert.deepEqual(Object.keys(args), ['p_user', 'p_plan', 'p_status', 'p_interval', 'p_provider', 'p_customer_ref', 'p_subscription_ref', 'p_period_start', 'p_period_end', 'p_cancel_at_period_end']);
 });
+
+test('a notice can carry one action, and figures stay in their own left-to-right run', async () => {
+  const { notify, useAppDialogs, dismissNotice } = await import('../../src/lib/appDialogs.ts');
+  const { ltr } = await import('../../src/lib/cloud/cloudBackup.ts');
+  let ran = 0;
+  notify('signed out', { label: 'Sign in', run: () => { ran += 1; } });
+  notify('plain');
+  const [withAction, plain] = useAppDialogs.getState().notices.slice(-2);
+  assert.equal(withAction.action?.label, 'Sign in');
+  withAction.action?.run();
+  assert.equal(ran, 1);
+  assert.equal(plain.action, undefined);
+  useAppDialogs.getState().notices.forEach((n) => dismissNotice(n.id));
+  assert.equal(ltr('18.0 MB'), '⁦18.0 MB⁩');
+});
+
+test('a subscription shows its published plan name, and its code until the plan is published', async () => {
+  const { planName } = await import('../../src/lib/account/accountApi.ts');
+  const plans = [{ code: 'pro', nameHe: 'מקצועי', nameEn: 'Pro', descriptionHe: null, descriptionEn: null, monthlyCredits: 0, storageQuotaBytes: 0 }];
+  assert.equal(planName('pro', plans, 'he'), 'מקצועי');
+  assert.equal(planName('pro', plans, 'en'), 'Pro');
+  assert.equal(planName('hidden-plan', plans, 'en'), 'hidden-plan');
+  assert.equal(planName('pro', [], 'en'), 'pro');
+});

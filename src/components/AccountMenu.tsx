@@ -1,30 +1,54 @@
 import { useId, useRef, useState } from 'react';
 import { useStore } from 'zustand';
-import { useT } from '../i18n';
+import { useLanguage, useT } from '../i18n';
 import { authStore } from '../store/authStore';
 import { accountStore } from '../store/accountStore';
 import { useAccountUi, type AccountSection } from '../store/accountUi';
 import { useAccessPrompt } from '../lib/access/editGuard';
 import { accessSync } from '../lib/access/accessSync';
 import { ACCESS_ENFORCEMENT_ENABLED, ACCOUNTS_ENABLED } from '../lib/access/accessPolicy';
-import { initialsOf } from '../lib/account/accountApi';
+import { initialsOf, planName } from '../lib/account/accountApi';
 import { confirmDialog, notify } from '../lib/appDialogs';
 import ResponsivePopover from './ResponsivePopover';
+import './Account.css';
 
 /** Signs out after the confirmation. Projects stay in this browser either way. */
 export async function confirmSignOut(t: ReturnType<typeof useT>): Promise<void> {
-  if (!await confirmDialog(t('acct.signOutConfirm'), { confirmLabel: t('account.signOut') })) return;
+  if (!await confirmDialog(t('acct.signOutConfirm'), { title: t('acct.signOutTitle'), confirmLabel: t('account.signOut'), destructive: true })) return;
   if ((await authStore.getState().signOut()).ok) {
     useAccountUi.getState().closePage();
-    notify(t('acct.signedOut'));
+    notify(t('acct.signedOutNote'), { label: t('account.signIn'), run: () => useAccessPrompt.getState().show('account') });
   }
+}
+
+/** The account's display name and avatar, from the profile when it is loaded. */
+export function useAccountIdentity() {
+  const user = useStore(authStore, (s) => s.user);
+  const profile = useStore(accountStore, (s) => s.profile);
+  const name = profile?.displayName ?? null;
+  return { name, email: user?.email ?? null, initials: initialsOf(name, user?.email ?? null) };
+}
+
+/** Plan and credits summary line for the menu: no subscription exists yet, and AI credits are coming soon. */
+function PlanLines() {
+  const t = useT();
+  const overview = useStore(accountStore, (s) => s.overview);
+  const plans = useStore(accountStore, (s) => s.plans);
+  const language = useLanguage();
+  const plan = overview?.subscription ? planName(overview.subscription.planCode, plans, language) : t('acct.noPlanShort');
+  return (
+    <div className="account-plan-line">
+      <span>{t('acct.planLine', { plan })}</span>
+      <span>{t('acct.creditsLineSoon')}</span>
+    </div>
+  );
 }
 
 /** The same account actions as plain menu items, for the compact header's settings menu. */
 export function AccountMenuItems() {
   const t = useT();
   const status = useStore(authStore, (s) => s.status);
-  const user = useStore(authStore, (s) => s.user);
+  const { email } = useAccountIdentity();
   const show = useAccessPrompt((s) => s.show);
   const openPage = useAccountUi((s) => s.openPage);
   const setCloudOpen = useAccountUi((s) => s.setCloudOpen);
@@ -32,7 +56,7 @@ export function AccountMenuItems() {
   if (status !== 'signedIn') return <button type="button" className="menu-item" onClick={() => show('account')}>{t('account.signIn')}</button>;
   return (
     <>
-      <span className="muted account-email" dir="ltr">{user?.email}</span>
+      <span className="muted account-email" dir="ltr">{email}</span>
       <button type="button" className="menu-item" onClick={() => openPage('profile')}>{t('acct.menuProfile')}</button>
       <button type="button" className="menu-item" onClick={() => openPage('subscription')}>{t('acct.menuSubscription')}</button>
       <button type="button" className="menu-item" onClick={() => setCloudOpen(true)}>{t('acct.menuCloud')}</button>
@@ -43,15 +67,14 @@ export function AccountMenuItems() {
 
 /**
  * The top-bar account control: a sign-in button for guests (with the trial status once restrictions are
- * enforced) and, when signed in, an avatar menu with the account screens, cloud backup and sign-out.
+ * enforced) and, when signed in, a name chip whose menu holds the account screens, cloud backup and sign-out.
  * Renders nothing when accounts are not available, so a purely local build looks as before.
  */
 export default function AccountMenu() {
   const t = useT();
   const status = useStore(authStore, (s) => s.status);
-  const user = useStore(authStore, (s) => s.user);
-  const profile = useStore(accountStore, (s) => s.profile);
   const access = useStore(accessSync.store, (s) => s);
+  const { name, email, initials } = useAccountIdentity();
   const show = useAccessPrompt((s) => s.show);
   const openPage = useAccountUi((s) => s.openPage);
   const setCloudOpen = useAccountUi((s) => s.setCloudOpen);
@@ -72,26 +95,28 @@ export default function AccountMenu() {
     );
   }
 
-  const name = profile?.displayName ?? null;
   const go = (section: AccountSection) => { setOpen(false); openPage(section); };
   const items: Array<[AccountSection, string]> = [
-    ['profile', t('acct.menuProfile')], ['subscription', t('acct.menuSubscription')], ['plans', t('acct.menuPlans')], ['billing', t('acct.menuBilling')],
+    ['profile', t('acct.menuProfile')], ['subscription', t('acct.menuSubscription')], ['billing', t('acct.menuBilling')],
   ];
   return (
     <div className="account-menu">
-      <button ref={anchorRef} type="button" className="account-avatar" aria-haspopup="menu" aria-expanded={open} aria-label={t('account.menu')} title={name ?? user?.email ?? ''} onClick={() => setOpen(!open)}>
-        {initialsOf(name, user?.email ?? null)}
+      <button ref={anchorRef} type="button" className="account-chip" aria-haspopup="menu" aria-expanded={open} aria-label={t('account.menu')} title={name ?? email ?? ''} onClick={() => setOpen(!open)}>
+        <span className="account-avatar" aria-hidden="true">{initials}</span>
+        <span className="account-chip-name">{name ?? email}</span>
+        <span className="account-caret" aria-hidden="true">▾</span>
       </button>
       {open && (
-        <ResponsivePopover id={menuId} label={t('account.menu')} anchorRef={anchorRef} onClose={() => setOpen(false)} desktopMaxWidth={300}>
+        <ResponsivePopover id={menuId} label={t('account.menu')} anchorRef={anchorRef} onClose={() => setOpen(false)} desktopMaxWidth={320}>
           <div className="account-popover">
             <div className="account-identity">
-              {name && <strong>{name}</strong>}
-              <span className="muted" dir="ltr">{user?.email}</span>
+              <span className="account-avatar large" aria-hidden="true">{initials}</span>
+              <span>{name && <strong>{name}</strong>}<span className="muted" dir="ltr">{email}</span></span>
             </div>
+            <PlanLines />
             {items.map(([section, label]) => <button key={section} type="button" className="account-item" onClick={() => go(section)}>{label}</button>)}
             <button type="button" className="account-item" onClick={() => { setOpen(false); setCloudOpen(true); }}>{t('acct.menuCloud')}</button>
-            <button type="button" className="account-item" onClick={() => { setOpen(false); void confirmSignOut(t); }}>{t('account.signOut')}</button>
+            <button type="button" className="account-item danger" onClick={() => { setOpen(false); void confirmSignOut(t); }}>{t('account.signOut')}</button>
           </div>
         </ResponsivePopover>
       )}
