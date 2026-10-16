@@ -18,7 +18,6 @@ import {
   swapSelectedChange,
   focusChange,
   revertRevisionApplication,
-  runAiPageAnalysis,
   startManualChangeDrawing,
   useRevisionUi,
   visibleChanges,
@@ -28,6 +27,10 @@ import Icon from '../Icon';
 import AreaShapePicker from '../AreaShapePicker';
 import { OPENING_DEFAULT_SIZES } from '../../config/measurementDefaults';
 import { revisionTypeLabelKey } from './revisionTerminology';
+import { useAiAccountState } from '../../lib/access/useAiAccountState';
+import { useAccountUi } from '../../store/accountUi';
+import { LockIcon } from '../AiComingSoonDialog';
+import '../Account.css';
 import './RevisionDetect.css';
 
 function useActiveAnalysis(): { analysis: RevisionPageAnalysis | undefined; stale: boolean } {
@@ -569,15 +572,15 @@ function DetectTools({ readOnly }: { readOnly: boolean }) {
   const detecting = useRevisionUi((s) => s.detecting);
   const progress = useRevisionUi((s) => s.progress);
   const step = useRevisionUi((s) => s.step);
-  const aiBusy = useRevisionUi((s) => s.aiBusy);
-  const { analysis, stale } = useActiveAnalysis();
+  const { analysis } = useActiveAnalysis();
+  const { accountState } = useAiAccountState();
+  const setAiDialog = useAccountUi((s) => s.setAiDialog);
   if (!comparison) return null;
   const context = comparison.context ?? 'design';
   const index = comparison.revisions.findIndex((r) => r.id === comparison.activeRevisionId);
   const revision = comparison.revisions[index];
   const earlier = comparison.revisions.slice(0, Math.max(0, index));
   const q = analysis?.manualOnly ? undefined : analysis?.alignment;
-  const aiRunning = analysis?.ai?.status === 'PROCESSING';
 
   return (
     <div className="revision-tools">
@@ -603,8 +606,9 @@ function DetectTools({ readOnly }: { readOnly: boolean }) {
 
       <section className="revision-section">
         {!readOnly && (
-          <button className="btn-primary small" title={`${t('revisionAi.intro')}\n${t('revisionAi.page.intro')}`} disabled={detecting || aiBusy || aiRunning || !revision} onClick={() => void runAiPageAnalysis()}>
-            <Icon name="scan" size={13} /> {aiRunning ? t('revisionAi.page.running') : analysis?.ai?.task === 'page' && analysis.ai.status === 'COMPLETED' && !stale ? t('revisionAi.page.rerun') : t('revisionAi.page.run')}
+          // AI is not available yet: the action is locked and explains why (nothing runs, nothing is spent).
+          <button className="btn-primary small" title={`${t('revisionAi.intro')}\n${t('revisionAi.page.intro')}`} disabled={!revision} onClick={() => setAiDialog(accountState === 'guest' ? 'guest' : 'soon')}>
+            <Icon name="scan" size={13} /> {t('revisionAi.page.run')} <span className="soon-badge">{t('acct.soon')}<LockIcon /></span>
           </button>
         )}
         {detecting && step && (

@@ -34,13 +34,17 @@ function GoogleMark() {
  */
 export default function AuthDialog() {
   const t = useT();
-  const { open, reason, close } = useAccessPrompt();
+  const { open, reason, mode, close } = useAccessPrompt();
   if (!ACCOUNTS_ENABLED || !open) return null;
-  return <AuthForm key="auth" reason={reason} onClose={close} t={t} />;
+  return <AuthForm key="auth" reason={reason} initialMode={mode} onClose={close} t={t} />;
 }
 
-function AuthForm({ reason, onClose, t }: { reason: PromptReason; onClose: () => void; t: ReturnType<typeof useT> }) {
-  const [mode, setMode] = useState<Mode>('signIn');
+/**
+ * `inline` renders the same form (same logic, same fields) as a panel inside the welcome screen instead of a modal;
+ * the welcome screen then owns the logo, the Back button and the way back to the guest start.
+ */
+export function AuthForm({ reason, initialMode, onClose, t, inline = false }: { reason: PromptReason; initialMode: Mode; onClose: () => void; t: ReturnType<typeof useT>; inline?: boolean }) {
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [step, setStep] = useState<Step>('start');
   const [name, setName] = useState('');
   const [agree, setAgree] = useState(false);
@@ -81,9 +85,8 @@ function AuthForm({ reason, onClose, t }: { reason: PromptReason; onClose: () =>
   const lead = reason === 'edit' ? t('account.reasonEdit') : reason === 'create' ? t('account.reasonCreate') : t('account.reasonAccount');
   const problemText = problem === 'need-name' ? t('acct.needName') : problem === 'need-agree' ? t('acct.needAgree') : problem ? t(`account.errors.${problem}`) : null;
 
-  return (
-    <AppModal title={creating ? t('acct.createTitle') : t('acct.signInTitle')} onCancel={onClose} showClose className="auth-dialog"
-      eyebrow={<div className="auth-brand"><BrandLogo /></div>}>
+  const body = (
+    <>
       <p className="auth-lead">{lead}</p>
       {step === 'start' ? (
         <>
@@ -117,7 +120,7 @@ function AuthForm({ reason, onClose, t }: { reason: PromptReason; onClose: () =>
             {creating ? t('acct.haveAccount') : t('acct.noAccount')}{' '}
             <button type="button" className="link-button" onClick={() => switchTo(creating ? 'signIn' : 'create')}>{creating ? t('acct.signInTab') : t('acct.registerLink')}</button>
           </p>
-          {!creating && reason === 'account' && (
+          {!creating && !inline && reason === 'account' && (
             <p className="auth-continue">
               <button type="button" className="link-button" onClick={onClose}>{t('acct.continueWithout')}</button>
               <span className="muted">{t('acct.withoutNote')}</span>
@@ -139,6 +142,14 @@ function AuthForm({ reason, onClose, t }: { reason: PromptReason; onClose: () =>
           </div>
         </form>
       )}
+    </>
+  );
+  const title = creating ? t('acct.createTitle') : t('acct.signInTitle');
+  if (inline) return <div className="auth-inline"><h2>{title}</h2>{body}</div>;
+  return (
+    <AppModal title={title} onCancel={onClose} showClose className="auth-dialog"
+      eyebrow={<div className="auth-brand"><BrandLogo /></div>}>
+      {body}
     </AppModal>
   );
 }

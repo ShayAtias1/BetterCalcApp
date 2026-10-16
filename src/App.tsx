@@ -30,6 +30,9 @@ import { WorkspaceLayoutProvider, useWorkspaceLayout } from './hooks/useWorkspac
 import LanguageSwitch from './components/LanguageSwitch';
 import AccountMenu from './components/AccountMenu';
 import AuthDialog from './components/AuthDialog';
+import { useStore } from 'zustand';
+import WelcomeScreen from './components/WelcomeScreen';
+import { welcomeStep, welcomeStore } from './lib/access/welcome';
 import AccessNotices from './components/AccessNotices';
 import OnboardingDialog from './components/OnboardingDialog';
 import LegalDialog from './components/LegalDialog';
@@ -232,8 +235,8 @@ function Home() {
         </div>
         <div className="top-bar-group grow" />
         <div className="top-bar-group output">
-          <AccountMenu />
           <LanguageSwitch />
+          <AccountMenu />
         </div>
       </div>
 
@@ -283,11 +286,15 @@ function AppContent() {
   const plan = useAppStore((s) => s.project);
   const currentProject = useAppStore((s) => s.currentProject);
   const comparison = useCompareStore((s) => s.comparison);
+  const welcome = welcomeStep({ accountsEnabled: ACCOUNTS_ENABLED, authStatus: useStore(authStore, (s) => s.status), seen: welcomeStore((s) => s.seen) });
   useUnsavedChangesGuard();
   if (restoring) return <div className="workspace home" role="status">{t('common.loading')}</div>;
   if (plan) return <Workspace />;
   if (comparison) return <CompareWorkspace />;
   if (currentProject) return <ProjectOverview />;
+  // The entrance, only where the Projects page would otherwise open and only until a way in is chosen.
+  if (welcome === 'wait') return <div className="workspace home" role="status">{t('common.loading')}</div>;
+  if (welcome === 'show') return <WelcomeScreen />;
   return <Home />;
 }
 

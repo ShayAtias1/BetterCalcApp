@@ -8,6 +8,7 @@ import {
   getAccountOverview,
   getCommercialFlags,
   getProfile,
+  writeCachedName,
   listPublicPlans,
   type PlanSummary,
   updateDisplayName,
@@ -32,6 +33,8 @@ export interface AccountState {
   plans: PlanSummary[];
   /** Signed in, profile loaded, and the name/consent step is not done yet. */
   needsOnboarding: boolean;
+  /** Registration is complete but no display name was ever saved: the user is asked to add it. */
+  needsName: boolean;
   loading: boolean;
   /** The last load failed (offline or server error). */
   loadFailed: boolean;
@@ -45,6 +48,8 @@ export interface AccountDeps {
   loadClient: () => Promise<AccountClient | null>;
 }
 
+const storage = () => (typeof localStorage === 'undefined' ? null : localStorage);
+
 export function createAccountStore(deps: AccountDeps) {
   let loadId = 0;
 
@@ -54,6 +59,7 @@ export function createAccountStore(deps: AccountDeps) {
     overview: null,
     plans: [],
     needsOnboarding: false,
+    needsName: false,
     loading: false,
     loadFailed: false,
 
@@ -66,10 +72,11 @@ export function createAccountStore(deps: AccountDeps) {
       try {
         const flags = await getCommercialFlags(client);
         if (id !== loadId) return;
-        if (!signedIn) return set({ flags, profile: null, overview: null, needsOnboarding: false, loading: false, loadFailed: false });
+        if (!signedIn) return set({ flags, profile: null, overview: null, needsOnboarding: false, needsName: false, loading: false, loadFailed: false });
         const [profile, overview, plans] = await Promise.all([getProfile(client), getAccountOverview(client), listPublicPlans(client).catch(() => [] as PlanSummary[])]);
         if (id !== loadId) return;
-        set({ flags, profile, overview, plans, needsOnboarding: !!profile && !profile.onboardingCompleted, loading: false, loadFailed: false });
+        writeCachedName(storage(), deps.auth.getState().user?.id ?? '', profile?.displayName ?? null);
+        set({ flags, profile, overview, plans, needsOnboarding: !!profile && !profile.onboardingCompleted, needsName: !!profile && profile.onboardingCompleted && !profile.displayName, loading: false, loadFailed: false });
       } catch {
         if (id === loadId) set({ loading: false, loadFailed: true });
       }
@@ -87,8 +94,9 @@ export function createAccountStore(deps: AccountDeps) {
       const user = deps.auth.getState().user;
       if (!client || !user) return;
       const saved = await updateDisplayName(client, user.id, name);
+      writeCachedName(storage(), user.id, saved);
       const profile = get().profile;
-      if (profile) set({ profile: { ...profile, displayName: saved } });
+      if (profile) set({ profile: { ...profile, displayName: saved }, needsName: false });
     },
   }));
 
@@ -104,7 +112,8 @@ export function createAccountStore(deps: AccountDeps) {
         if (status === 'signedIn') void store.getState().refresh();
         else {
           loadId += 1;
-          store.setState({ profile: null, overview: null, plans: [], needsOnboarding: false, loadFailed: false, loading: false });
+          if (status === 'signedOut') writeCachedName(storage(), '', null);
+          store.setState({ profile: null, overview: null, plans: [], needsOnboarding: false, needsName: false, loadFailed: false, loading: false });
           if (status === 'signedOut') void store.getState().refresh(); // flags only, for the Coming Soon states
         }
       };

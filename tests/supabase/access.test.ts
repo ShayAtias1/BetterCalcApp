@@ -136,3 +136,15 @@ test('access code never touches project data', () => {
     assert.ok(!/db\/database|indexedDB|deleteDatabase|\.clear\(/.test(text), f);
   }
 });
+
+test('the AI header button state follows the account only, and the low-credit state waits for a decided threshold', async () => {
+  const { aiAccountState, LOW_CREDIT_THRESHOLD } = await import('../../src/lib/access/aiAccountState.ts');
+  const base = { accountsAvailable: true, auth: 'signedOut' as const, subscription: null, credits: 0 };
+  assert.equal(aiAccountState(base), 'guest');
+  assert.equal(aiAccountState({ ...base, auth: 'signedIn' }), 'free');
+  assert.equal(aiAccountState({ ...base, auth: 'signedIn', subscription: { status: 'canceled' } }), 'free');
+  assert.equal(aiAccountState({ ...base, auth: 'signedIn', subscription: { status: 'active' }, credits: 3 }), 'subscribed');
+  assert.equal(aiAccountState({ ...base, auth: 'signedIn', subscription: { status: 'active' }, credits: 3, lowThreshold: 5 }), 'low-credits');
+  assert.equal(aiAccountState({ ...base, accountsAvailable: false }), 'free'); // purely local build: nothing to sign in to
+  assert.equal(LOW_CREDIT_THRESHOLD, null);
+});

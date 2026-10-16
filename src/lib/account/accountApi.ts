@@ -53,6 +53,26 @@ export function initialsOf(name: string | null, email: string | null): string {
   return letters.join('').toUpperCase();
 }
 
+// ---------------------------------------------------------------- name shown before the profile has loaded
+const NAME_CACHE_KEY = 'bettercalc.profile-name';
+type NameStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+
+/** The last saved display name of this user on this device, so the header can show it at once on the next visit. */
+export function readCachedName(storage: NameStorage | null, userId: string): string | null {
+  try {
+    const parsed = JSON.parse(storage?.getItem(NAME_CACHE_KEY) ?? 'null') as { id?: unknown; name?: unknown } | null;
+    return parsed?.id === userId && typeof parsed.name === 'string' && parsed.name ? parsed.name : null;
+  } catch {
+    return null;
+  }
+}
+export function writeCachedName(storage: NameStorage | null, userId: string, name: string | null): void {
+  try {
+    if (name) storage?.setItem(NAME_CACHE_KEY, JSON.stringify({ id: userId, name }));
+    else storage?.removeItem(NAME_CACHE_KEY);
+  } catch { /* storage blocked: the header just waits for the profile */ }
+}
+
 // ---------------------------------------------------------------- switches
 export interface CommercialFlags {
   aiEnabled: boolean;

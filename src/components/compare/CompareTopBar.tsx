@@ -1,4 +1,7 @@
 import { CompareHeaderCalibration } from './CompareContextBar';
+import { useAiAccountState } from '../../lib/access/useAiAccountState';
+import { LockIcon } from '../AiComingSoonDialog';
+import '../Account.css';
 import { useEffect, useState } from 'react';
 import { compareScaleFor, selectCompareSaveState, useCompareStore } from '../../store/compareStore';
 import GridMenuSection from '../GridMenuSection';
@@ -22,6 +25,7 @@ export default function CompareTopBar({
   onDetectChanges: () => void;
 }) {
   const t = useT();
+  const { accountState } = useAiAccountState();
   const comparison = useCompareStore((s) => s.comparison);
   const setComparison = useCompareStore((s) => s.setComparison);
   const updateComparisonMeta = useCompareStore((s) => s.updateComparisonMeta);
@@ -231,15 +235,15 @@ export default function CompareTopBar({
 
         <button
           type="button"
-          className="top-bar-ai-btn"
+          className={`top-bar-ai-btn ai-state-${accountState}`}
           onClick={onDetectChanges}
           disabled={comparison.revisions.length === 0}
           title={t('revisionAi.intro')}
         >
           {t('revisionAi.topBarButton')}
+          {(accountState === 'guest' || accountState === 'free') && <LockIcon />}
         </button>
 
-        <AccountMenu />
         <LanguageSwitch />
 
         {/* Export is the strongest action in the bar — the one filled control. */}
@@ -312,6 +316,9 @@ export default function CompareTopBar({
               : t('compare.topBar.noRegionNote')}
           </p>
         </TopBarMenu>
+
+        {/* The account sits at the outermost edge of the bar, right after Export. */}
+        <AccountMenu />
       </div>
     </div>
   );

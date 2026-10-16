@@ -45,8 +45,14 @@ export interface AuthDeps {
   captchaToken?: () => Promise<string | undefined>;
 }
 
+const metaNameOf = (session: Session): string | null => {
+  const meta = session.user.user_metadata as { full_name?: unknown; name?: unknown } | undefined;
+  const raw = typeof meta?.full_name === 'string' ? meta.full_name : typeof meta?.name === 'string' ? meta.name : '';
+  return raw.trim() || null;
+};
+
 const toUser = (session: Session | null): AuthUser | null =>
-  session ? { id: session.user.id, email: session.user.email ?? null } : null;
+  session ? { id: session.user.id, email: session.user.email ?? null, metaName: metaNameOf(session) } : null;
 
 export function createAuthStore(deps: AuthDeps) {
   let initialized: Promise<void> | null = null;

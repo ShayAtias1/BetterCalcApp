@@ -7,7 +7,7 @@ import { useAccountUi, type AccountSection } from '../store/accountUi';
 import { useAccessPrompt } from '../lib/access/editGuard';
 import { accessSync } from '../lib/access/accessSync';
 import { ACCESS_ENFORCEMENT_ENABLED, ACCOUNTS_ENABLED } from '../lib/access/accessPolicy';
-import { initialsOf, planName } from '../lib/account/accountApi';
+import { initialsOf, planName, readCachedName } from '../lib/account/accountApi';
 import { confirmDialog, notify } from '../lib/appDialogs';
 import ResponsivePopover from './ResponsivePopover';
 import './Account.css';
@@ -21,12 +21,21 @@ export async function confirmSignOut(t: ReturnType<typeof useT>): Promise<void> 
   }
 }
 
-/** The account's display name and avatar, from the profile when it is loaded. */
+/**
+ * The account's display name and avatar. The saved name is shown as soon as it is known without waiting for the
+ * network: the profile when loaded, else this device's last saved copy, else the name in the session. While none of
+ * those exist `pending` is true and the header shows a placeholder, never the email standing in for a name.
+ */
 export function useAccountIdentity() {
   const user = useStore(authStore, (s) => s.user);
   const profile = useStore(accountStore, (s) => s.profile);
-  const name = profile?.displayName ?? null;
-  return { name, email: user?.email ?? null, initials: initialsOf(name, user?.email ?? null) };
+  const loadFailed = useStore(accountStore, (s) => s.loadFailed);
+  const settled = profile !== null || loadFailed;
+  // A failed or offline load must not turn the name into the email: the last saved copy and the session's name still apply.
+  const known = profile?.displayName ?? (user ? readCachedName(typeof localStorage === 'undefined' ? null : localStorage, user.id) ?? user.metaName : null);
+  const pending = !settled && !known;
+  const email = user?.email ?? null;
+  return { name: known, email, pending, initials: pending ? '' : initialsOf(known, email) };
 }
 
 /** Plan and credits summary line for the menu: no subscription exists yet, and AI credits are coming soon. */
@@ -74,7 +83,7 @@ export default function AccountMenu() {
   const t = useT();
   const status = useStore(authStore, (s) => s.status);
   const access = useStore(accessSync.store, (s) => s);
-  const { name, email, initials } = useAccountIdentity();
+  const { name, email, initials, pending } = useAccountIdentity();
   const show = useAccessPrompt((s) => s.show);
   const openPage = useAccountUi((s) => s.openPage);
   const setCloudOpen = useAccountUi((s) => s.setCloudOpen);
@@ -103,7 +112,7 @@ export default function AccountMenu() {
     <div className="account-menu">
       <button ref={anchorRef} type="button" className="account-chip" aria-haspopup="menu" aria-expanded={open} aria-label={t('account.menu')} title={name ?? email ?? ''} onClick={() => setOpen(!open)}>
         <span className="account-avatar" aria-hidden="true">{initials}</span>
-        <span className="account-chip-name">{name ?? email}</span>
+        <span className={`account-chip-name${pending ? ' skeleton' : ''}`}><bdi>{pending ? '' : (name ?? email)}</bdi></span>
         <span className="account-caret" aria-hidden="true">▾</span>
       </button>
       {open && (
@@ -111,7 +120,7 @@ export default function AccountMenu() {
           <div className="account-popover">
             <div className="account-identity">
               <span className="account-avatar large" aria-hidden="true">{initials}</span>
-              <span>{name && <strong>{name}</strong>}<span className="muted" dir="ltr">{email}</span></span>
+              <span>{name && <strong><bdi>{name}</bdi></strong>}<span className="muted" dir="ltr">{email}</span></span>
             </div>
             <PlanLines />
             {items.map(([section, label]) => <button key={section} type="button" className="account-item" onClick={() => go(section)}>{label}</button>)}

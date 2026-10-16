@@ -293,7 +293,6 @@ export default function TopBar({ domain, onDomainChange }: { domain?: WorkDomain
 
         {domain === 'room' && <AiMenu openId={openMenu} setOpenId={setOpenMenu} />}
 
-        <AccountMenu />
         <LanguageSwitch />
 
         {/* Export is the strongest action in the bar — the one filled control. */}
@@ -352,6 +351,9 @@ export default function TopBar({ domain, onDomainChange }: { domain?: WorkDomain
               : t('topBar.noRegionNote')}
           </p>
         </TopBarMenu>
+
+        {/* The account sits at the outermost edge of the bar, right after Export. */}
+        <AccountMenu />
       </div>
     </div>
   );

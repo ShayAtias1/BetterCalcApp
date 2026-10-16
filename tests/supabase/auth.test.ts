@@ -14,6 +14,7 @@ import {
 
 type Listener = (event: string, session: unknown) => void;
 const session = { user: { id: 'u1', email: 'a@b.co' }, access_token: 'SECRET' };
+const sessionWithName = { user: { id: 'u1', email: 'a@b.co', user_metadata: { full_name: '  שי אטיאס ' } }, access_token: 'SECRET' };
 
 function fakeAuth(over: Record<string, unknown> = {}) {
   const calls: Array<[string, unknown]> = [];
@@ -98,7 +99,7 @@ test('init restores a stored session and exposes only id and email', async () =>
   await store.getState().init();
   const s = store.getState();
   assert.equal(s.status, 'signedIn');
-  assert.deepEqual(s.user, { id: 'u1', email: 'a@b.co' });
+  assert.deepEqual(s.user, { id: 'u1', email: 'a@b.co', metaName: null });
   assert.ok(!JSON.stringify(s).includes('SECRET'));
 });
 
@@ -187,4 +188,11 @@ test('auth code never touches project data or other browser storage', () => {
     const text = readFileSync(file, 'utf8');
     assert.ok(!/db\/database|indexedDB|localStorage\.clear|sessionStorage\.clear|deleteDatabase/.test(text), file);
   }
+});
+
+test('the name the provider put in the session is available at once, trimmed and in full', async () => {
+  const { auth } = fakeAuth({ getSession: async () => ({ data: { session: sessionWithName }, error: null }) });
+  const store = makeStore(auth);
+  await store.getState().init();
+  assert.equal(store.getState().user?.metaName, 'שי אטיאס');
 });

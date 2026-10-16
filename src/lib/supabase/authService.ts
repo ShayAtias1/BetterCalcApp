@@ -24,6 +24,8 @@ export type AuthResult = { ok: true } | { ok: false; reason: AuthFailure };
 export interface AuthUser {
   id: string;
   email: string | null;
+  /** The name the sign-in provider or the registration form supplied (already in the session, no request needed). */
+  metaName: string | null;
 }
 
 export const OTP_LENGTH = 6;

@@ -225,3 +225,16 @@ test('a subscription shows its published plan name, and its code until the plan 
   assert.equal(planName('hidden-plan', plans, 'en'), 'hidden-plan');
   assert.equal(planName('pro', [], 'en'), 'pro');
 });
+
+test('the saved name is cached per user on this device and cleared on request', async () => {
+  const { readCachedName, writeCachedName } = await import('../../src/lib/account/accountApi.ts');
+  const data = new Map<string, string>();
+  const storage = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => void data.set(k, v), removeItem: (k: string) => void data.delete(k) };
+  assert.equal(readCachedName(storage, 'u1'), null);
+  writeCachedName(storage, 'u1', 'שי אטיאס');
+  assert.equal(readCachedName(storage, 'u1'), 'שי אטיאס');
+  assert.equal(readCachedName(storage, 'u2'), null); // never another user's name
+  writeCachedName(storage, 'u1', null);
+  assert.equal(readCachedName(storage, 'u1'), null);
+  assert.equal(readCachedName(null, 'u1'), null); // storage unavailable
+});

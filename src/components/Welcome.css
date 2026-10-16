@@ -1,0 +1,133 @@
+/* Welcome, sign in and registration: one white, minimal design with blue accents. Always light, in both OS themes. */
+.welcome {
+  /* The app's light tokens, pinned so the entrance never turns dark with the system theme. */
+  color-scheme: light;
+  --bg-stage: #ffffff;
+  --bg-surface: #ffffff;
+  --bg-subtle: #f6f7fa;
+  --text: #3a4050;
+  --text-h: #141824;
+  --text-2: #5b6170;
+  --muted: #6b7180;
+  --faint: #b9beca;
+  --border: #e4e7ee;
+  --divider: #edeff4;
+  --border-strong: #dde1e9;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-bg: #edf2fe;
+  --ai: #5536c7;
+  --ai-bg: #f6f4fe;
+  --ai-edge: #dcd3fa;
+  --danger: #b42318;
+  --danger-bg: rgba(180, 35, 24, 0.08);
+  --w-blue: #2563eb;
+  --w-line: #dbe6fb;
+  position: relative;
+  min-block-size: 100dvh;
+  display: grid;
+  background: #fff;
+  color: var(--text-h);
+  font-family: var(--sans);
+  overflow: hidden;
+  isolation: isolate;
+}
+.welcome-bg { position: absolute; inset: 0; z-index: -1; }
+.welcome-grid {
+  position: absolute; inset: 0;
+  background-image: linear-gradient(#eef3fc 1px, transparent 1px), linear-gradient(90deg, #eef3fc 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse at 50% 45%, #000 10%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 45%, #000 10%, transparent 70%);
+}
+.welcome-plan { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; }
+
+.wp { fill: none; stroke: var(--w-line); stroke-width: 1.4; stroke-linecap: square; stroke-dasharray: 1; stroke-dashoffset: 1; animation: welcome-draw 2.6s cubic-bezier(0.5, 0, 0.2, 1) forwards; animation-delay: var(--d, 0s); }
+.wp-wall { stroke-width: 3; stroke: #c9d9f7; }
+.wp-room { fill: rgba(37, 99, 235, 0.07); stroke: #93b4f5; stroke-width: 2; opacity: 0; animation: welcome-fade 1.2s ease forwards 3.4s; }
+.wp-measured circle { fill: #fff; stroke: #93b4f5; stroke-width: 2; opacity: 0; animation: welcome-fade 0.6s ease forwards 3.8s; }
+.wp-labels text { fill: #93b4f5; font: 500 15px/1 ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: 0.04em; opacity: 0; animation: welcome-fade 0.9s ease forwards 3.6s; }
+
+.welcome-lang { position: absolute; inset-block-start: 16px; inset-inline-end: 16px; z-index: 2; }
+
+.welcome-stage { display: grid; place-items: center; padding: 56px 20px; }
+.welcome-card {
+  inline-size: min(440px, 100%);
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: 44px 36px 30px;
+  border-radius: 20px;
+  background: #fff;
+  border: 1px solid var(--border);
+  box-shadow: 0 24px 60px rgba(20, 40, 90, 0.08);
+  animation: welcome-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.welcome-card-form { text-align: start; align-items: stretch; padding-block-start: 28px; }
+.welcome-card-form .welcome-mark { align-self: center; inline-size: 96px; margin-block: 4px 18px; }
+.welcome-mark { inline-size: 160px; block-size: auto; color: var(--w-blue); animation: welcome-logo 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both 0.1s; }
+
+.welcome-view { inline-size: 100%; display: flex; flex-direction: column; align-items: center; animation: welcome-view 0.38s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.welcome-card-form .welcome-view { align-items: stretch; }
+
+.welcome-card h1 { margin: 26px 0 10px; font: 700 26px/1.25 var(--sans); letter-spacing: -0.01em; color: var(--text-h); text-wrap: balance; }
+.welcome-sub { margin: 0; font: 400 15px/1.6 var(--sans); color: var(--text-2); max-inline-size: 36ch; }
+
+.welcome-actions { inline-size: 100%; display: grid; justify-items: center; gap: 8px; margin-block: 28px 0; }
+.welcome-btn { inline-size: 100%; max-inline-size: 220px; min-block-size: 40px; border-radius: 10px; font: 600 14px/1 var(--sans); cursor: pointer; border: 1px solid transparent; transition: transform 0.18s ease, box-shadow 0.25s ease, background 0.2s ease, border-color 0.2s ease; }
+.welcome-btn:hover { transform: translateY(-1px); }
+.welcome-btn:active { transform: none; }
+.welcome-btn:focus-visible { outline: 3px solid #bfd3fb; outline-offset: 2px; }
+.welcome-btn-outline { background: #fff; color: var(--w-blue); border-color: #bcd0f7; }
+.welcome-btn-outline:hover { background: var(--accent-bg); border-color: var(--w-blue); }
+.welcome-btn-primary { background: var(--w-blue); color: #fff; box-shadow: 0 8px 20px rgba(37, 99, 235, 0.25); }
+.welcome-btn-primary:hover { background: var(--accent-hover); box-shadow: 0 10px 24px rgba(37, 99, 235, 0.32); }
+.welcome-btn-ghost { background: transparent; color: var(--text-2); min-block-size: 40px; font-size: 14px; font-weight: 500; }
+.welcome-btn-ghost:hover { color: var(--text-h); background: var(--bg-subtle); }
+.welcome-note { margin: 18px 0 0; font: 400 12.5px/1.5 var(--sans); color: var(--muted); }
+
+.welcome-back { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px 6px 6px; margin-inline-start: -6px; border: 0; border-radius: 8px; background: transparent; color: var(--text-2); font: 500 14px/1 var(--sans); cursor: pointer; transition: background 0.2s ease, color 0.2s ease; }
+.welcome-back svg { inline-size: 18px; block-size: 18px; }
+html[dir='rtl'] .welcome-back { padding: 6px 6px 6px 10px; }
+html[dir='rtl'] .welcome-back svg { transform: scaleX(-1); }
+.welcome-back:hover { background: var(--bg-subtle); color: var(--text-h); }
+.welcome-back:focus-visible { outline: 3px solid #bfd3fb; outline-offset: 2px; }
+
+/* The existing authentication form, restyled to match: same fields and logic. */
+.auth-inline h2 { margin: 0 0 6px; font: 700 22px/1.3 var(--sans); color: var(--text-h); text-align: start; }
+.welcome .auth-lead { margin: 0 0 18px; font: 400 14px/1.55 var(--sans); color: var(--text-2); }
+.welcome .auth-field { gap: 6px; margin-block-end: 14px; font: 500 13px/1.4 var(--sans); color: var(--text-2); }
+.welcome .auth-field .muted { font: 400 12px/1.45 var(--sans); }
+.welcome .app-dialog-input { block-size: 46px; padding-inline: 14px; border: 1px solid var(--border-strong); border-radius: 12px; background: #fff; color: var(--text-h); font: 400 15px/1 var(--sans); box-sizing: border-box; }
+.welcome .app-dialog-input:focus { outline: none; border-color: var(--w-blue); box-shadow: 0 0 0 3px #dbe7fd; }
+.welcome .auth-google, .welcome .auth-submit { block-size: 50px; border-radius: 12px; font: 600 15px/1 var(--sans); }
+.welcome .auth-google { background: #fff; border: 1px solid var(--border-strong); color: var(--text-h); }
+.welcome .auth-google:hover:not(:disabled) { background: var(--bg-subtle); }
+.welcome .auth-submit { background: var(--w-blue); color: #fff; border: 0; box-shadow: 0 8px 20px rgba(37, 99, 235, 0.22); }
+.welcome .auth-submit:hover:not(:disabled) { background: var(--accent-hover); }
+.welcome .auth-submit:disabled { box-shadow: none; opacity: 0.55; }
+.welcome .auth-or { margin: 18px 0; font: 400 12.5px/1 var(--sans); }
+.welcome .auth-switch { margin-block-start: 18px; font: 400 14px/1.5 var(--sans); text-align: center; }
+.welcome .auth-note { background: var(--accent-bg); border: 0; color: var(--text-2); border-radius: 12px; font: 400 12.5px/1.5 var(--sans); }
+.welcome .auth-error { border-radius: 12px; font: 400 13px/1.45 var(--sans); }
+.welcome .link-button { color: var(--w-blue); font-weight: 600; }
+.welcome .auth-code-actions { margin-block-start: 14px; }
+
+@keyframes welcome-draw { to { stroke-dashoffset: 0; } }
+@keyframes welcome-fade { to { opacity: 1; } }
+@keyframes welcome-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes welcome-logo { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: none; } }
+@keyframes welcome-view { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+html[dir='rtl'] .welcome-view { animation-name: welcome-view-rtl; }
+@keyframes welcome-view-rtl { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 560px) {
+  .welcome-stage { padding: 64px 14px 28px; align-items: start; }
+  .welcome-card { padding: 34px 22px 24px; border-radius: 18px; }
+  .welcome-card-form { padding-block-start: 20px; }
+  .welcome-mark { inline-size: 128px; }
+  .welcome-card h1 { font-size: 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .welcome *, .welcome *::before, .welcome *::after { animation-duration: 0.01ms !important; animation-delay: 0s !important; transition: none !important; }
+  .wp { stroke-dashoffset: 0; }
+  .wp-room, .wp-measured circle, .wp-labels text { opacity: 1; }
+}

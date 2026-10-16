@@ -180,10 +180,10 @@ export default function ProjectOverview() {
         </div>
         <div className="top-bar-group grow" />
         <div className="top-bar-group output">
-          <AccountMenu />
           {layout === 'expanded' ? <LanguageSwitch /> : <TopBarMenu id="settings" openId={headerMenu} setOpenId={setHeaderMenu} icon="globe" label={t('app.language')} title={t('app.language')} variant="ghost">
             <LanguageSwitch labeled />
           </TopBarMenu>}
+          <AccountMenu />
         </div>
       </div>
 

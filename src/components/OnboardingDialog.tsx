@@ -20,7 +20,9 @@ let postponed = false;
  */
 export default function OnboardingDialog() {
   const t = useT();
-  const needs = useStore(accountStore, (s) => s.needsOnboarding);
+  const needsRegistration = useStore(accountStore, (s) => s.needsOnboarding);
+  const needsName = useStore(accountStore, (s) => s.needsName);
+  const needs = needsRegistration || needsName;
   const profile = useStore(accountStore, (s) => s.profile);
   const [name, setName] = useState('');
   const [agree, setAgree] = useState(false);
@@ -35,14 +37,15 @@ export default function OnboardingDialog() {
   // Decide once whether the registration form already covered this step.
   useEffect(() => {
     if (!needs || auto !== null) return;
-    setAuto(takeConsentPending() && !!normalizeDisplayName(known));
+    setAuto(needsRegistration && takeConsentPending() && !!normalizeDisplayName(known));
   }, [needs, known, auto]);
 
   const submit = async (value: string) => {
     setBusy(true);
     setError(null);
     try {
-      await accountStore.getState().submitOnboarding(value);
+      if (needsRegistration) await accountStore.getState().submitOnboarding(value);
+      else await accountStore.getState().saveName(value);
     } catch (e) {
       setError(t(`acct.errors.${e instanceof AccountError ? e.code : 'unknown'}`));
     } finally {
@@ -54,19 +57,21 @@ export default function OnboardingDialog() {
 
   if (!ACCOUNTS_ENABLED || !needs || hidden || auto !== false) return null;
   const later = () => { postponed = true; setHidden(true); };
-  const valid = !!normalizeDisplayName(name) && agree;
+  const valid = !!normalizeDisplayName(name) && (agree || !needsRegistration);
   return (
-    <AppModal title={t('acct.onboardingTitle')} onCancel={later} showClose className="onboarding-dialog auth-dialog" eyebrow={<div className="auth-brand"><BrandLogo /></div>}>
-      <p className="auth-lead">{t('acct.onboardingIntro')}</p>
+    <AppModal title={needsRegistration ? t('acct.onboardingTitle') : t('acct.nameOnlyTitle')} onCancel={later} showClose className="onboarding-dialog auth-dialog" eyebrow={<div className="auth-brand"><BrandLogo /></div>}>
+      <p className="auth-lead">{needsRegistration ? t('acct.onboardingIntro') : t('acct.nameOnlyIntro')}</p>
       <form onSubmit={(e) => { e.preventDefault(); if (valid) void submit(name); }}>
         <label className="auth-field">
           {t('acct.fullName')}
           <input className="app-dialog-input" autoComplete="name" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         </label>
-        <label className="auth-field auth-agree">
+        {needsRegistration && (
+          <label className="auth-field auth-agree">
           <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
           <AgreeLabel />
         </label>
+        )}
         {error && <p className="auth-error" role="alert">{error}</p>}
         <div className="app-dialog-actions">
           <button type="button" className="btn-secondary" disabled={busy} onClick={() => void authStore.getState().signOut()}>{t('account.signOut')}</button>

@@ -6,10 +6,11 @@ import { canEditWork } from '../workspaceCapabilities';
 export type PromptReason = 'edit' | 'create' | 'account';
 
 /** Whether the sign-in dialog is open. Opened by the account menu or by a blocked edit. */
-export const useAccessPrompt = create<{ open: boolean; reason: PromptReason; show(reason: PromptReason): void; close(): void }>((set) => ({
+export const useAccessPrompt = create<{ open: boolean; reason: PromptReason; mode: 'signIn' | 'create'; show(reason: PromptReason, mode?: 'signIn' | 'create'): void; close(): void }>((set) => ({
   open: false,
   reason: 'account',
-  show: (reason) => set({ open: true, reason }),
+  mode: 'signIn',
+  show: (reason, mode = 'signIn') => set({ open: true, reason, mode }),
   close: () => set({ open: false }),
 }));
 
