@@ -4,6 +4,7 @@ import Icon from './Icon';
 import { BrandHomeLink } from './BrandLogo';
 import TopBarMenu, { type MenuId } from './TopBarMenu';
 import LanguageSwitch from './LanguageSwitch';
+import { AccountMenuItems } from './AccountMenu';
 
 export default function AdaptiveHeader({ title, sheet, sheetCount, onSheet, onBack, saveState, calibrated, picker, view, more }: {
   title: string; sheet: number; sheetCount: number; onSheet: (sheet: number) => void;
@@ -24,7 +25,11 @@ export default function AdaptiveHeader({ title, sheet, sheetCount, onSheet, onBa
         </div>
         {more && <div className="menu-action-group" onClick={(event) => {
           if (event.target instanceof Element && event.target.closest('button.menu-item')) setMenu(null);
-        }}>{more}</div>}<LanguageSwitch labeled />
+        }}>{more}</div>}
+        <div className="menu-action-group" onClick={(event) => {
+          if (event.target instanceof Element && event.target.closest('button.menu-item')) setMenu(null);
+        }}><AccountMenuItems /></div>
+        <LanguageSwitch labeled />
       </TopBarMenu>
     </div>
     <div className="adaptive-sheet-bar">

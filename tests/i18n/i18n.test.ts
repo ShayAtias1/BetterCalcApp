@@ -161,3 +161,15 @@ test('an export is written in the language it is given, whatever the UI language
   // ... and the two languages really do differ.
   assert.notDeepEqual(heUnderHe, enUnderHe);
 });
+
+test('cloud backup counts agree with their nouns in both languages', () => {
+  assert.equal(translate('he', 'cloud.done', { count: 1 }), '1 פרויקט גובה בענן.');
+  assert.equal(translate('he', 'cloud.done', { count: 3 }), '3 פרויקטים גובו בענן.');
+  assert.match(translate('he', 'cloud.confirm', { count: 1, names: 'x' }), /^לגבות לענן 1 פרויקט\?/);
+  assert.match(translate('he', 'cloud.confirm', { count: 2, names: 'x' }), /^לגבות לענן 2 פרויקטים\?/);
+  assert.equal(translate('en', 'cloud.done', { count: 1 }), 'Backed up 1 project to the cloud.');
+  assert.equal(translate('en', 'cloud.done', { count: 2 }), 'Backed up 2 projects to the cloud.');
+  assert.match(translate('en', 'cloud.confirm', { count: 1, names: 'x' }), /^Back up 1 project to the cloud\?/);
+  assert.equal(translate('en', 'acct.plans.credits', { count: 1 }), '1 credit per month');
+  assert.equal(translate('he', 'acct.plans.credits', { count: 1 }), '1 קרדיט בחודש');
+});

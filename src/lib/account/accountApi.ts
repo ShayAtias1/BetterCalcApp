@@ -189,9 +189,10 @@ export function getBillingProfile(client: AccountClient): Promise<BillingProfile
 export function saveBillingProfile(client: AccountClient, userId: string, b: BillingProfile): Promise<void> {
   return guard(async () => {
     const orNull = (v: string) => v.trim() || null;
-    unwrap(await client.from('billing_profiles').upsert({
-      user_id: userId, invoice_name: orNull(b.invoiceName), tax_id: orNull(b.taxId), address_line: orNull(b.addressLine), city: orNull(b.city), postal_code: orNull(b.postalCode),
-    }, { onConflict: 'user_id' }));
+    const fields = { invoice_name: orNull(b.invoiceName), tax_id: orNull(b.taxId), address_line: orNull(b.addressLine), city: orNull(b.city), postal_code: orNull(b.postalCode) };
+    // Update first, then insert if there was no row. An upsert would also try to rewrite user_id, which clients may not change.
+    const updated = unwrap(await client.from('billing_profiles').update(fields).eq('user_id', userId).select('user_id')) as unknown[] | null;
+    if (!updated?.length) unwrap(await client.from('billing_profiles').insert({ user_id: userId, ...fields }));
   });
 }
 

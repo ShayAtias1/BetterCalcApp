@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cloudUsage,
+  formatBytes,
   deleteCloudBackup,
   getCloudStatus,
   listCloudBackups,
@@ -142,4 +143,12 @@ test('the cloud code never touches the project database directly', async () => {
   const text = readFileSync('src/lib/cloud/cloudBackup.ts', 'utf8');
   assert.ok(!/indexedDB|openDB|deleteProject|deleteDatabase|writeImportedProjects/.test(text));
   assert.ok(!/service_role|sb_secret_/.test(text));
+});
+
+test('storage sizes are shown honestly: nothing is rounded up to a megabyte', () => {
+  assert.equal(formatBytes(0), '0 KB');
+  assert.equal(formatBytes(1303), '2 KB');
+  assert.equal(formatBytes(5 * MB), '5.0 MB');
+  assert.equal(formatBytes(1536 * 1024), '1.5 MB');
+  assert.equal(formatBytes(1024 * MB), '1.0 GB');
 });

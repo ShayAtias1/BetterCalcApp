@@ -233,6 +233,8 @@ test('billing profile: the owner creates and edits their own invoice details onl
   await assert.rejects(as(B, () => db.exec(`insert into public.billing_profiles (user_id) values ('${A}')`)), /row-level security/);
   await assert.rejects(as(A, () => db.exec(`update public.billing_profiles set user_id = '${B}'`)), /permission denied/);
   await assert.rejects(as(A, () => db.exec("update public.billing_profiles set country = 'israel'")), /check constraint/);
+  // An upsert rewrites user_id too, which the client may not: the app updates, then inserts when no row exists.
+  await assert.rejects(as(A, () => db.exec(`insert into public.billing_profiles (user_id, city) values ('${A}', 'X') on conflict (user_id) do update set user_id = excluded.user_id, city = excluded.city`)), /permission denied/);
 });
 
 test('account overview reports balances and the latest subscription for the caller only', async () => {

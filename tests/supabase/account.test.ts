@@ -102,10 +102,28 @@ test('overview, usage history and deletion requests map plainly', async () => {
   assert.deepEqual(calls.calls.map(([n]) => n), ['rpc:request_account_deletion', 'rpc:cancel_account_deletion']);
 });
 
-test('invoice details are saved as the owner, with empty fields stored as null', async () => {
-  const { client, calls } = fakeClient();
-  await saveBillingProfile(client, 'u1', { invoiceName: ' Acme ', taxId: '', addressLine: '', city: 'Haifa', postalCode: '' });
-  assert.deepEqual(calls[0], ['upsert:billing_profiles', [{ user_id: 'u1', invoice_name: 'Acme', tax_id: null, address_line: null, city: 'Haifa', postal_code: null }, { onConflict: 'user_id' }]]);
+test('invoice details update the owner row, or insert it when none exists; never an upsert', async () => {
+  const calls: Calls = [];
+  const make = (existing: boolean) => ({
+    from: (table: string) => {
+      const chain: any = {
+        update: (patch: unknown) => { calls.push([`update:${table}`, patch]); return chain; },
+        eq: (col: string, val: unknown) => { calls.push([`eq:${col}`, val]); return chain; },
+        select: async () => ({ data: existing ? [{ user_id: 'u1' }] : [], error: null }),
+        insert: async (row: unknown) => { calls.push([`insert:${table}`, row]); return { data: null, error: null }; },
+        upsert: async () => { throw new Error('upsert must not be used'); },
+      };
+      return chain;
+    },
+    rpc: async () => ({ data: null, error: null }),
+  }) as unknown as AccountClient;
+  const form = { invoiceName: ' Acme ', taxId: '', addressLine: '', city: 'Haifa', postalCode: '' };
+  const fields = { invoice_name: 'Acme', tax_id: null, address_line: null, city: 'Haifa', postal_code: null };
+  await saveBillingProfile(make(true), 'u1', form);
+  assert.deepEqual(calls, [['update:billing_profiles', fields], ['eq:user_id', 'u1']]);
+  calls.length = 0;
+  await saveBillingProfile(make(false), 'u1', form);
+  assert.deepEqual(calls.at(-1), ['insert:billing_profiles', { user_id: 'u1', ...fields }]);
 });
 
 test('registration: the chosen name travels with the first code request, and only then', async () => {

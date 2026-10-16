@@ -3,10 +3,10 @@ import { formatDate, useT } from '../i18n';
 import { confirmDialog, notify } from '../lib/appDialogs';
 import { listProjects, type ProjectWithPlans } from '../db/database';
 import { getSupabase } from '../lib/supabase/client';
-import { toMegabytes } from '../lib/backup/backupLimits';
 import {
   CloudBackupError,
   deleteCloudBackup,
+  formatBytes,
   getCloudStatus,
   listCloudBackups,
   restoreCloudBackup,
@@ -20,8 +20,6 @@ import AppModal from './AppModal';
 
 /** Tells the project list to reload after a restore. */
 export const PROJECTS_CHANGED = 'bettercalc:projects-changed';
-
-const formatBytes = (bytes: number) => (bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${toMegabytes(bytes)} MB`);
 
 /**
  * Manual cloud backup of single projects: pick, approve, upload; list, restore as a new copy, delete the

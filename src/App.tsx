@@ -205,8 +205,8 @@ function Workspace() {
         </AdaptiveInspector>}
       </div>
       {!expanded && !reviewOnly && showObjects && domain === 'room' && <div className="ai-review-workspaces-row">
-        <AiReviewWorkspace key={planId} />
-        <AiOpeningsReviewWorkspace key={planId} />
+        <AiReviewWorkspace key={`${planId}:spaces`} />
+        <AiOpeningsReviewWorkspace key={`${planId}:openings`} />
       </div>}
       <QuantitiesPanel onMobileOpen={() => setDestination('quantities')} mobileOpen={destination === 'quantities'} onMobileClose={() => setDestination('plan')} />
       {layout === 'narrow' && <nav className="mobile-destinations" aria-label={t('adaptive.plan')}>

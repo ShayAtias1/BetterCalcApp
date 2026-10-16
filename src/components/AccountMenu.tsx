@@ -20,6 +20,27 @@ export async function confirmSignOut(t: ReturnType<typeof useT>): Promise<void> 
   }
 }
 
+/** The same account actions as plain menu items, for the compact header's settings menu. */
+export function AccountMenuItems() {
+  const t = useT();
+  const status = useStore(authStore, (s) => s.status);
+  const user = useStore(authStore, (s) => s.user);
+  const show = useAccessPrompt((s) => s.show);
+  const openPage = useAccountUi((s) => s.openPage);
+  const setCloudOpen = useAccountUi((s) => s.setCloudOpen);
+  if (!ACCOUNTS_ENABLED || status === 'unconfigured' || status === 'loading') return null;
+  if (status !== 'signedIn') return <button type="button" className="menu-item" onClick={() => show('account')}>{t('account.signIn')}</button>;
+  return (
+    <>
+      <span className="muted account-email" dir="ltr">{user?.email}</span>
+      <button type="button" className="menu-item" onClick={() => openPage('profile')}>{t('acct.menuProfile')}</button>
+      <button type="button" className="menu-item" onClick={() => openPage('subscription')}>{t('acct.menuSubscription')}</button>
+      <button type="button" className="menu-item" onClick={() => setCloudOpen(true)}>{t('acct.menuCloud')}</button>
+      <button type="button" className="menu-item" onClick={() => void confirmSignOut(t)}>{t('account.signOut')}</button>
+    </>
+  );
+}
+
 /**
  * The top-bar account control: a sign-in button for guests (with the trial status once restrictions are
  * enforced) and, when signed in, an avatar menu with the account screens, cloud backup and sign-out.
