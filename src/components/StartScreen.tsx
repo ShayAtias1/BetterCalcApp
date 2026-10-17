@@ -59,10 +59,15 @@ export default function StartScreen() {
   const fileInput = useRef<HTMLInputElement>(null);
   const [protection, setProtection] = useState<StorageProtection | null>(null);
   const [reminderTick, setReminderTick] = useState(0);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
 
   const refresh = () => {
     listProjects()
-      .then(setProjects)
+      .then((list) => {
+        setProjects(list);
+        // Drop selections of projects that no longer exist.
+        setSelected((prev) => (prev.size === 0 ? prev : new Set([...prev].filter((id) => list.some((p) => p.project.id === id)))));
+      })
       .finally(() => setLoading(false));
   };
 
@@ -91,6 +96,24 @@ export default function StartScreen() {
     const count = (entry?.plans.length ?? 0) + (entry?.comparisons.length ?? 0);
     if (!await confirmDialog(count > 0 ? t('startScreen.deleteConfirmWithContents') : t('startScreen.deleteConfirm'), { destructive: true })) return;
     await deleteProject(id);
+    refresh();
+  };
+
+  const toggleSelected = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+
+  const handleDeleteSelected = async () => {
+    const ids = projects.filter((p) => selected.has(p.project.id)).map((p) => p.project.id);
+    if (ids.length === 0) return;
+    const hasContents = projects.some((p) => selected.has(p.project.id) && p.plans.length + p.comparisons.length > 0);
+    const message = t(hasContents ? 'startScreen.bulkDeleteConfirmWithContents' : 'startScreen.bulkDeleteConfirm', { count: ids.length });
+    if (!await confirmDialog(message, { destructive: true, confirmLabel: t('startScreen.bulkDelete', { count: ids.length }) })) return;
+    for (const id of ids) await deleteProject(id);
+    setSelected(new Set());
     refresh();
   };
 
@@ -233,6 +256,24 @@ export default function StartScreen() {
       </div>
 
       <span className="section-label">{t('startScreen.savedProjects')}</span>
+      {selected.size > 0 && (
+        <div className="saved-list-bulkbar">
+          <label className="saved-list-selectall">
+            <input
+              type="checkbox"
+              checked={selected.size === projects.length}
+              ref={(el) => { if (el) el.indeterminate = selected.size > 0 && selected.size < projects.length; }}
+              onChange={() => setSelected(selected.size === projects.length ? new Set() : new Set(projects.map((p) => p.project.id)))}
+            />
+            {t('startScreen.selectAll')}
+          </label>
+          <span className="muted">{t('startScreen.selectedCount', { count: selected.size })}</span>
+          <button className="btn-outline-danger small" onClick={() => void handleDeleteSelected()}>
+            <Icon name="trash" />
+            {t('startScreen.bulkDelete', { count: selected.size })}
+          </button>
+        </div>
+      )}
       <SavedItemList
         items={items}
         icon="map"
@@ -249,6 +290,9 @@ export default function StartScreen() {
         onExport={(id) => void handleExport(id)}
         exportTitle={t('startScreen.backup.exportOne')}
         exportLabel={t('startScreen.backup.exportOneLabel')}
+        selectedIds={selected}
+        onToggleSelect={toggleSelected}
+        selectLabel={t('startScreen.select')}
       />
 
       {creating && (

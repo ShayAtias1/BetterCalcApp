@@ -5999,3 +5999,37 @@ html[dir='rtl'] .header-calibration-action + .header-calibration-action { border
   .modal .modal-actions { flex-wrap: wrap; }
 }
 [data-touch-input='true'] .app-notice .btn-ghost.small { min-inline-size: 44px; min-height: 44px; }
+
+/* Projects multi-selection and bulk delete */
+.saved-list-bulkbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  padding: var(--s-1) var(--s-3);
+  font: var(--t-meta);
+}
+.saved-list-selectall {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  cursor: pointer;
+}
+.saved-list-check {
+  flex: none;
+  inline-size: 18px;
+  block-size: 18px;
+  cursor: pointer;
+}
+.saved-list li.selected {
+  background: var(--bg-subtle);
+}
+
+.saved-list-bulkbar .btn-outline-danger {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--s-2);
+  white-space: nowrap;
+  inline-size: auto;
+}

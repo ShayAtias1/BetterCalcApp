@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 import { formatDate, useLanguage, useT } from '../i18n';
 import { authStore } from '../store/authStore';
-import { accountStore } from '../store/accountStore';
+import { accountStore, LEGAL_VERSION_PENDING } from '../store/accountStore';
 import { useAccountUi, type AccountSection } from '../store/accountUi';
 import { ACCOUNTS_ENABLED } from '../lib/access/accessPolicy';
 import { getSupabase } from '../lib/supabase/client';
@@ -104,7 +104,6 @@ export default function AccountPage() {
           ))}
           <hr />
           <button type="button" className="account-nav-btn danger" onClick={() => void confirmSignOut(t)}>{t('account.signOut')}</button>
-          <p className="muted account-local-note">{t('acct.localNote')}</p>
         </nav>
         <main className="account-main">
           {section === 'profile' && <ProfileSection />}
@@ -191,13 +190,8 @@ function ProfileSection() {
               <div className="acct-actions"><button type="submit" className="btn-primary" disabled={busy || !profile || !name.trim() || name.trim() === (profile?.displayName ?? '')}>{t('acct.profile.save')}</button></div>
             </form>
           </Card>
-          <Card title={t('acct.profile.signIn')}>
-            <div className="acct-row"><span>{t('acct.profile.methodRow')}</span><span>{t('acct.profile.signInInfo')}</span></div>
-            <div className="acct-row"><span>{t('acct.profile.signOutRow')}</span><button type="button" className="btn-outline-danger" onClick={() => void confirmSignOut(t)}>{t('account.signOut')}</button></div>
-          </Card>
           <Card title={t('acct.profile.preferences')}>
             <div className="acct-row"><span>{t('acct.profile.language')}</span><LanguageSwitch /></div>
-            <p className="acct-note">{t('acct.profile.languageHint')}</p>
           </Card>
           <Card title={t('acct.profile.data')}>
             <div className="acct-row"><span>{t('acct.profile.locationRow')}</span><span>{t('acct.profile.locationValue')}</span></div>
@@ -205,9 +199,13 @@ function ProfileSection() {
             <p className="acct-note">{t('acct.profile.dataInfo')}</p>
             <p className="acct-note">
               {profile?.termsAcceptedAt
-                ? t('acct.profile.consent', { version: profile.termsVersion ?? '', date: formatDate(profile.termsAcceptedAt, language) })
+                ? (profile.termsVersion && profile.termsVersion !== LEGAL_VERSION_PENDING
+                  ? t('acct.profile.consent', { version: profile.termsVersion, date: formatDate(profile.termsAcceptedAt, language) })
+                  : t('acct.profile.consentNoVersion', { date: formatDate(profile.termsAcceptedAt, language) }))
                 : t('acct.profile.noConsent')}
             </p>
+          </Card>
+          <Card title={t('acct.profile.deleteTitle')}>
             <div className="acct-row">
               <span>{t('acct.profile.deleteRow')}<br /><span className="acct-note">{t('acct.profile.deleteRowNote')}</span></span>
               {deletion === 'requested' ? <button type="button" className="btn-secondary" onClick={() => void cancelDeletion()}>{t('acct.profile.deleteCancel')}</button>

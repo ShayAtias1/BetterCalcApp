@@ -28,6 +28,9 @@ export default function SavedItemList({
   onExport,
   exportTitle,
   exportLabel,
+  selectedIds,
+  onToggleSelect,
+  selectLabel,
 }: {
   items: SavedItem[];
   /** Marks which product the row belongs to. */
@@ -43,6 +46,10 @@ export default function SavedItemList({
   exportTitle?: string;
   /** Visible text beside the export icon. */
   exportLabel?: string;
+  /** Optional multi-selection: rows get a checkbox; without it the list behaves as before. */
+  selectedIds?: ReadonlySet<string>;
+  onToggleSelect?: (id: string) => void;
+  selectLabel?: string;
 }) {
   const t = useT();
   if (loading) return <p className="muted saved-list-loading">{t('common.loading')}</p>;
@@ -59,7 +66,17 @@ export default function SavedItemList({
   return (
     <ul className="saved-list">
       {items.map((item) => (
-        <li key={item.id} onClick={() => onOpen(item.id)} title={openTitle}>
+        <li key={item.id} onClick={() => onOpen(item.id)} title={openTitle} className={selectedIds?.has(item.id) ? 'selected' : undefined}>
+          {onToggleSelect && (
+            <input
+              type="checkbox"
+              className="saved-list-check"
+              aria-label={`${selectLabel ?? ''} ${item.name}`.trim()}
+              checked={selectedIds?.has(item.id) ?? false}
+              onClick={(e) => e.stopPropagation()}
+              onChange={() => onToggleSelect(item.id)}
+            />
+          )}
           <Icon name={icon} />
           <span className="saved-list-text">
             <span className="saved-list-name" dir="auto">{item.name}</span>

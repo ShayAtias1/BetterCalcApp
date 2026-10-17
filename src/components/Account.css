@@ -75,7 +75,6 @@
 .account-nav-btn.active { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
 .account-nav-btn.danger { color: var(--danger); }
 .account-side hr { border: 0; border-block-start: 1px solid var(--divider); margin: var(--s-2) 0; inline-size: 100%; }
-.account-local-note { margin: var(--s-4) 0 0; font: var(--t-meta); }
 .account-main { display: grid; gap: var(--s-4); min-inline-size: 0; max-inline-size: 1080px; }
 .account-main h1 { margin: 0; font: 600 20px/1.3 var(--sans); color: var(--text-h); }
 .account-grid { display: grid; gap: var(--s-4); grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
@@ -153,7 +152,7 @@
   .account-nav-btn { white-space: nowrap; flex: none; }
   .account-side { scrollbar-width: none; }
   .account-side hr { display: none; }
-  .account-side-identity, .account-side hr, .account-local-note { display: none; }
+  .account-side-identity, .account-side hr { display: none; }
   .acct-fields { grid-template-columns: minmax(0, 1fr); }
   .account-chip-name { display: none; }
   .account-crumbs .account-back .btn-label, .account-crumb-sep { display: none; }
