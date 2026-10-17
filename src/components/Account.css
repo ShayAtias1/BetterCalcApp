@@ -210,19 +210,19 @@ a.link-button:hover { text-decoration: underline; }
 .ai-credit-chip { display: inline-grid; place-items: center; min-inline-size: 20px; block-size: 20px; padding-inline: 5px; border-radius: var(--r-pill); background: var(--warning-bg); color: var(--warning); font: var(--t-label); }
 .top-bar-ai-btn.ai-state-low-credits { border-color: var(--warning-edge); }
 
-/* AI locked-state dialogs (approved designs): a 40px lavender tile with the lock, a 22px title, a relaxed body, then buttons. */
-.ai-soon-dialog { width: min(460px, calc(100vw - 32px)); padding: 28px 28px 24px; text-align: start; }
-.ai-soon-icon { display: grid; place-items: center; inline-size: 40px; block-size: 40px; border-radius: var(--r-lg); background: var(--ai-bg); color: var(--ai); margin-block-end: var(--s-4); }
-.ai-soon-icon svg { inline-size: 20px; block-size: 20px; }
-.ai-soon-dialog h2 { font: 700 22px/1.3 var(--sans); color: var(--text-h); margin: 0 0 var(--s-4); }
-.ai-soon-body { margin: 0 0 var(--s-4); color: var(--text-2); font: 400 15px/1.7 var(--sans); }
-.ai-soon-body strong { color: var(--text-h); font-weight: 700; }
-.ai-soon-note { margin: 0 0 var(--s-4); padding: var(--s-3) var(--s-4); background: var(--bg-subtle); border-radius: var(--r-md); color: var(--text-2); font: 400 14px/1.5 var(--sans); }
-.ai-soon-plan { display: grid; gap: var(--s-1); margin: 0 0 var(--s-4); padding: var(--s-4); border: 1px solid var(--ai-edge); background: var(--bg-surface); border-radius: var(--r-lg); font: 400 14px/1.5 var(--sans); color: var(--text-h); }
-.ai-soon-plan-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
-.ai-soon-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); margin-block-start: var(--s-5); }
-.ai-soon-actions .btn-primary, .ai-soon-actions .btn-secondary { block-size: 44px; padding-inline: var(--s-5); border-radius: var(--r-lg); font: 600 15px/1 var(--sans); }
-.ai-soon-actions .btn-ghost { margin-inline-start: auto; color: var(--text-2); font: 400 15px/1 var(--sans); }
+/* Compact AI availability notice, using the shared modal and button styles. */
+.ai-soon-dialog { width: min(440px, calc(100vw - 32px)); padding: var(--s-5); text-align: start; }
+.ai-soon-icon { display: grid; place-items: center; inline-size: 32px; block-size: 32px; border-radius: var(--r-md); background: var(--ai-bg); color: var(--ai); margin-block-end: var(--s-3); }
+.ai-soon-icon svg { inline-size: 16px; block-size: 16px; }
+.ai-soon-dialog h2 { font: var(--t-title); font-size: 18px; color: var(--text-h); margin: 0 0 var(--s-2); }
+.ai-soon-body { margin: 0; color: var(--text-2); font: var(--t-body); line-height: 1.6; overflow-wrap: anywhere; }
+.ai-soon-body strong { color: var(--text-h); font-weight: 600; }
+.ai-soon-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-3) var(--s-4); margin-block-start: var(--s-5); }
+.ai-soon-actions .btn-primary { min-block-size: 36px; padding-inline: var(--s-4); flex: none; }
+.ai-soon-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); }
+.ai-soon-links .link-button { color: var(--text-2); font: var(--t-body); min-block-size: 36px; }
+.ai-soon-links .link-button:hover { color: var(--accent); }
+[data-touch-input='true'] .ai-soon-links .link-button { min-block-size: 44px; }
 
 /* ---------------------------------------------------------------- touch and small screens */
 [data-touch-input='true'] .acct-segment button { min-height: 40px; }
