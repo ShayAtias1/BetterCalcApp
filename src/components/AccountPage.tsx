@@ -7,10 +7,10 @@ import { useAccountUi, type AccountSection } from '../store/accountUi';
 import { ACCOUNTS_ENABLED } from '../lib/access/accessPolicy';
 import { getSupabase } from '../lib/supabase/client';
 import {
-  AccountError, cancelAccountDeletion, planName, EMPTY_BILLING, getBillingProfile, getDeletionStatus, listAiUsage, listPayments, listPublicPlans,
-  requestAccountDeletion, saveBillingProfile, type AccountClient, type AiUsageRow, type BillingProfile, type DeletionStatus, type PaymentRow, type PlanSummary,
+  AccountError, cancelAccountDeletion, planName, EMPTY_BILLING, getBillingProfile, getDeletionStatus, listAiUsage, listPayments,
+  requestAccountDeletion, saveBillingProfile, type AccountClient, type AiUsageRow, type BillingProfile, type DeletionStatus, type PaymentRow,
 } from '../lib/account/accountApi';
-import { formatBytes, ltr } from '../lib/cloud/cloudBackup';
+import PricingPreview from './PricingPreview';
 import { confirmDialog, notify } from '../lib/appDialogs';
 import LanguageSwitch from './LanguageSwitch';
 import BrandLogo from './BrandLogo';
@@ -64,8 +64,10 @@ export default function AccountPage() {
   const openPage = useAccountUi((s) => s.openPage);
   const close = useAccountUi((s) => s.closePage);
   const status = useStore(authStore, (s) => s.status);
+  const language = useLanguage();
+  const publicPreview = section === 'plans';
   const { name, email, initials } = useAccountIdentity();
-  useEffect(() => { if (open && status !== 'signedIn') close(); }, [open, status, close]);
+  useEffect(() => { if (open && status !== 'signedIn' && !publicPreview) close(); }, [open, status, publicPreview, close]);
   // Keep the current section visible in the phone's scrolling tab strip.
   useEffect(() => { if (open) document.querySelector('.account-nav-btn.active')?.scrollIntoView({ inline: 'nearest', block: 'nearest' }); }, [open, section]);
   useEffect(() => {
@@ -74,9 +76,9 @@ export default function AccountPage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, close]);
-  if (!ACCOUNTS_ENABLED || !open || status !== 'signedIn') return null;
+  if (!ACCOUNTS_ENABLED || !open || (status !== 'signedIn' && !publicPreview)) return null;
   return (
-    <div className="account-page" role="dialog" aria-modal="true" aria-label={t('acct.pageTitle')}>
+    <div className="account-page" dir={language === 'he' ? 'rtl' : 'ltr'} role="dialog" aria-modal="true" aria-label={t('acct.pageTitle')}>
       <header className="account-page-bar">
         <button type="button" className="app-brand app-brand-link" onClick={close} aria-label={t('acct.back')} title={t('acct.back')}><BrandLogo responsive /></button>
         {/* The same "Projects" control as the project screens: ghost button, exit icon, regular text colour. */}
@@ -92,24 +94,26 @@ export default function AccountPage() {
         <LanguageSwitch />
         <AccountMenu />
       </header>
-      <div className="account-page-body">
-        <nav className="account-side" aria-label={t('acct.pageTitle')}>
-          <div className="account-side-identity">
-            <span className="account-avatar large" aria-hidden="true">{initials}</span>
-            <span>{name && <strong><bdi>{name}</bdi></strong>}<span className="muted" dir="ltr">{email}</span></span>
-          </div>
-          {SECTIONS.map((s) => (
-            <button key={s} type="button" aria-current={section === s ? 'page' : undefined} className={`account-nav-btn${section === s ? ' active' : ''}`} onClick={() => openPage(s)}>
-              {t(`acct.${SECTION_LABEL[s]}`)}
-            </button>
-          ))}
-          <hr />
-          <button type="button" className="account-nav-btn danger" onClick={() => void confirmSignOut(t)}>{t('account.signOut')}</button>
-        </nav>
+      <div className={`account-page-body${status !== 'signedIn' ? ' pricing-guest-body' : ''}`}>
+        {status === 'signedIn' && (
+          <nav className="account-side" aria-label={t('acct.pageTitle')}>
+            <div className="account-side-identity">
+              <span className="account-avatar large" aria-hidden="true">{initials}</span>
+              <span>{name && <strong><bdi>{name}</bdi></strong>}<span className="muted" dir="ltr">{email}</span></span>
+            </div>
+            {SECTIONS.map((s) => (
+              <button key={s} type="button" aria-current={section === s ? 'page' : undefined} className={`account-nav-btn${section === s ? ' active' : ''}`} onClick={() => openPage(s)}>
+                {t(`acct.${SECTION_LABEL[s]}`)}
+              </button>
+            ))}
+            <hr />
+            <button type="button" className="account-nav-btn danger" onClick={() => void confirmSignOut(t)}>{t('account.signOut')}</button>
+          </nav>
+        )}
         <main className="account-main">
           {section === 'profile' && <ProfileSection />}
           {section === 'subscription' && <SubscriptionSection />}
-          {section === 'plans' && <PlansSection />}
+          {section === 'plans' && <PricingPreview />}
           {section === 'billing' && <BillingSection />}
         </main>
       </div>
@@ -264,118 +268,6 @@ function SubscriptionSection() {
         )}
         <p className="acct-note">{t('acct.subscription.usageNote')}</p>
       </Card>
-    </>
-  );
-}
-
-// ---------------------------------------------------------------- plans
-const Yes = () => <span className="acct-check" aria-label="✓">✓</span>;
-const No = () => <span className="acct-dash" aria-label="—">—</span>;
-
-/** One column of the comparison: a card header over the feature cells. */
-interface PlanColumn {
-  key: string;
-  name: string;
-  sub: ReactNode;
-  kind: 'guest' | 'free' | 'paid';
-  current: boolean;
-}
-
-function PlansSection() {
-  const t = useT();
-  const language = useLanguage();
-  const overview = useStore(accountStore, (s) => s.overview);
-  const [plans] = useAccountData<PlanSummary[]>(listPublicPlans);
-  const subscribedCode = overview?.subscription?.planCode ?? null;
-  const published = plans?.length ? plans : null;
-
-  // Paid columns are the published plans; while none is published two labelled placeholders show the structure.
-  const paid: PlanColumn[] = published
-    ? published.map((p) => ({
-        key: p.code, kind: 'paid', current: p.code === subscribedCode,
-        name: language === 'he' ? p.nameHe : p.nameEn,
-        sub: <span className="muted">{p.monthlyCredits > 0 ? `${t('acct.plans.credits', { count: p.monthlyCredits })} · ` : ''}{t('acct.plans.storage', { size: ltr(formatBytes(p.storageQuotaBytes)) })}</span>,
-      }))
-    : [
-        { key: 'a', kind: 'paid', current: false, name: t('acct.plans.paidA'), sub: <SoonBadge /> },
-        { key: 'b', kind: 'paid', current: false, name: t('acct.plans.paidB'), sub: <SoonBadge /> },
-      ];
-  const columns: PlanColumn[] = [
-    { key: 'guest', kind: 'guest', current: false, name: t('acct.plans.guestCol'), sub: <span className="muted">{t('acct.plans.noCost')}</span> },
-    { key: 'free', kind: 'free', current: !subscribedCode, name: t('acct.plans.accountCol'), sub: <span className="muted">{t('acct.plans.noCost')}</span> },
-    ...paid,
-  ];
-  const tools = ['rowFinishes', 'rowMeasure', 'rowCompare', 'rowExport'] as const;
-  const ai = ['rowSpaces', 'rowOpenings', 'rowMulti', 'rowCredits'] as const;
-  /** Free tools are for everyone; AI is coming soon for paid columns; cloud backup is the subscriber benefit. */
-  const cell = (col: PlanColumn, row: 'tool' | 'ai' | 'cloud') =>
-    row === 'tool' ? <Yes /> : row === 'ai' ? (col.kind === 'paid' ? <SoonBadge /> : <No />) : col.kind === 'paid' ? <Yes /> : <No />;
-  const span = columns.length + 1;
-
-  return (
-    <>
-      <h1>{t('acct.plans.title')}</h1>
-      <div className="account-grid plans-layout">
-        <Card title={t('acct.plans.compare')} aside={<div className="acct-segment" aria-hidden="true"><button type="button" disabled className="active">{t('acct.plans.monthly')}</button><button type="button" disabled>{t('acct.plans.yearly')}</button></div>}>
-          <div className="plans-scroll">
-            <div className="plans-matrix" style={{ ['--cols' as string]: columns.length }}>
-              <div className="pm-head-label" />
-              {columns.map((col) => (
-                <div key={col.key} className={`pm-plan${col.current ? ' current' : ''}${col.kind === 'paid' ? ' paid' : ''}`}>
-                  <strong>{col.name}</strong>
-                  {col.sub}
-                  {col.current && <span className="pm-current">{t('acct.plans.yourPlan')}</span>}
-                  {col.kind === 'paid' && <button type="button" className="btn-primary pm-cta" disabled title={t('acct.comingSoon')}>{t('acct.plans.upgradeBtn')}</button>}
-                </div>
-              ))}
-              <div className="pm-group" style={{ gridColumn: `1 / span ${span}` }}>{t('acct.plans.toolsHead')}</div>
-              {tools.map((k) => (
-                <div className="pm-row" key={k} role="row">
-                  <div className="pm-label">{t(`acct.plans.${k}`)}</div>
-                  {columns.map((col) => <div className="pm-cell" key={col.key}>{cell(col, 'tool')}</div>)}
-                </div>
-              ))}
-              <div className="pm-group" style={{ gridColumn: `1 / span ${span}` }}>{t('acct.plans.aiHead')}</div>
-              {ai.map((k) => (
-                <div className="pm-row" key={k} role="row">
-                  <div className="pm-label">{t(`acct.plans.${k}`)}</div>
-                  {columns.map((col) => <div className="pm-cell" key={col.key}>{cell(col, 'ai')}</div>)}
-                </div>
-              ))}
-              <div className="pm-group" style={{ gridColumn: `1 / span ${span}` }}>{t('acct.plans.otherHead')}</div>
-              <div className="pm-row" role="row">
-                <div className="pm-label">{t('acct.plans.rowCloud')}</div>
-                {columns.map((col) => <div className="pm-cell" key={col.key}>{cell(col, 'cloud')}</div>)}
-              </div>
-            </div>
-          </div>
-          <p className="acct-note">{published ? t('acct.plans.footnote') : `${t('acct.plans.soon')} ${t('acct.plans.footnote')}`}</p>
-        </Card>
-        <div className="account-stack">
-          <Card title={t('acct.plans.purchaseTitle')} aside={<SoonBadge />}>
-            <div className="pm-summary">
-              {(['rowPlan', 'rowCycle', 'rowPrice', 'rowTaxes'] as const).map((k) => <div className="acct-row" key={k}><span>{t(`acct.plans.${k}`)}</span><span className="muted">—</span></div>)}
-              <div className="acct-row total"><strong>{t('acct.plans.dueToday')}</strong><span className="muted">—</span></div>
-            </div>
-            <div className="pm-provider">{t('acct.plans.providerBox')}</div>
-            <label className="pm-autorenew"><input type="checkbox" disabled /><span>{t('acct.plans.autoRenew')}</span></label>
-            <button type="button" className="btn-primary" disabled>{t('acct.plans.purchaseContinue')}</button>
-            <p className="acct-note">{t('acct.plans.purchaseSoon')}</p>
-          </Card>
-          <Card title={t('acct.plans.upgradeTitle')} aside={<SoonBadge />}>
-            <div className="pm-compare">
-              <div><span className="muted">{t('acct.plans.today')}</span><strong>—</strong></div>
-              <span aria-hidden="true" className="pm-arrow">{language === 'he' ? '←' : '→'}</span>
-              <div className="after"><span className="muted">{t('acct.plans.afterUpgrade')}</span><strong>—</strong></div>
-            </div>
-            {(['rowProration', 'rowUnused', 'rowEffective'] as const).map((k) => <div className="acct-row" key={k}><span>{t(`acct.plans.${k}`)}</span><span className="muted">—</span></div>)}
-            <div className="acct-actions">
-              <button type="button" className="btn-primary" disabled>{t('acct.plans.confirmUpgrade')}</button>
-              <button type="button" className="btn-secondary" disabled>{t('acct.plans.cancel')}</button>
-            </div>
-          </Card>
-        </div>
-      </div>
     </>
   );
 }

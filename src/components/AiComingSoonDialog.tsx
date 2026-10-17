@@ -18,6 +18,7 @@ export default function AiComingSoonDialog() {
   const kind = useAccountUi((s) => s.aiDialog);
   const action = useAccountUi((s) => s.aiAction);
   const setDialog = useAccountUi((s) => s.setAiDialog);
+  const openPage = useAccountUi((s) => s.openPage);
   const showAuth = useAccessPrompt((s) => s.show);
   if (!kind) return null;
   const close = () => setDialog(null);
@@ -28,18 +29,21 @@ export default function AiComingSoonDialog() {
       {guest ? (
         <p id={descriptionId} className="ai-soon-body">{t('acct.aiGuestBody')}</p>
       ) : actionName ? (
-        <p id={descriptionId} className="ai-soon-body">{t('acct.aiSoonBodyPre')}<strong>{actionName}</strong>{t('acct.aiSoonBodyPost')}</p>
+        <p id={descriptionId} className="ai-soon-body"><strong>{actionName}</strong>{t('acct.aiSoonBodyPost')}</p>
       ) : (
         <p id={descriptionId} className="ai-soon-body">{t('acct.aiSoonBody')}</p>
       )}
       <div className="ai-soon-actions">
         <button type="button" className="btn-primary" autoFocus onClick={close}>{t('acct.aiSoonOk')}</button>
-        {guest && (
-          <div className="ai-soon-links">
-            <button type="button" className="link-button" onClick={() => { close(); showAuth('account', 'create'); }}>{t('acct.createTab')}</button>
-            <button type="button" className="link-button" onClick={() => { close(); showAuth('account', 'signIn'); }}>{t('account.signIn')}</button>
-          </div>
-        )}
+        <div className="ai-soon-links">
+          <button type="button" className="link-button" onClick={() => { close(); openPage('plans'); }}>{t('acct.aiViewPlans')}</button>
+          {guest && (
+            <>
+              <button type="button" className="link-button" onClick={() => { close(); showAuth('account', 'create'); }}>{t('acct.createTab')}</button>
+              <button type="button" className="link-button" onClick={() => { close(); showAuth('account', 'signIn'); }}>{t('account.signIn')}</button>
+            </>
+          )}
+        </div>
       </div>
     </AppModal>
   );
