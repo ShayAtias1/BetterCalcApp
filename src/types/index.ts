@@ -3,7 +3,7 @@
 import { MEASUREMENT_DEFAULTS } from '../config/measurementDefaults';
 import type { ConcreteElement, RebarItem } from './structural';
 import type { PlanOpening } from './openings';
-import type { RevisionApplication } from './revisionAnalysis';
+import type { RevisionApplication, RevisionBackdrop } from './revisionAnalysis';
 export type { PlanOpening, PlanOpeningKind, NewPlanOpening, PlanOpeningPatch, LegacyOpeningRef } from './openings';
 
 export type TilingCategory = 'regular' | 'as';
@@ -257,6 +257,8 @@ export interface Plan {
   workCatalog?: WorkCatalogSnapshot;
   /** Ledger of revision changes applied to this plan from Revision Compare. Absent until the first one. */
   revisionApplications?: RevisionApplication[];
+  /** The revision drawing displayed behind this plan (the latest application in force); the original PDF stays the coordinate reference. */
+  revisionBackdrop?: RevisionBackdrop;
 }
 
 export type ToolMode = 'select' | 'pan' | 'calibrate' | 'draw' | 'draw-rect' | 'measure' | 'export-region' | 'markup';

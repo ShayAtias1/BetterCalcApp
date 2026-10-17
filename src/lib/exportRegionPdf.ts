@@ -4,8 +4,7 @@ import { embedReportFonts } from './pdfText';
 import { saveAs } from 'file-saver';
 import type { ExportRegion, Plan } from '../types';
 import { DEFAULT_AREA_KIND_COLORS } from '../types';
-import { loadPdfPlanSource } from './planSource';
-import { loadPdfBlob } from '../db/database';
+import { exportCoverageWarning, loadPlanDrawing } from './revision/backdrop';
 import { polygonCentroid } from './geometry';
 import { drawMarkupOnCanvas, orderMarkups } from './drawMarkup';
 import { drawMeasurementOnCanvas } from './drawMeasurement';
@@ -30,7 +29,7 @@ async function renderRegionCanvas(
   language: Language
 ): Promise<HTMLCanvasElement | null> {
   const mult = 2;
-  const { source } = await loadPdfPlanSource(project.id, () => loadPdfBlob(project.id), pageNumber);
+  const source = await loadPlanDrawing(project, pageNumber);
   const planCanvas = document.createElement('canvas');
   const handle = source.render(planCanvas, mult);
   await handle.promise;
@@ -43,13 +42,31 @@ async function renderRegionCanvas(
   const rh = region ? Math.max(0, Math.min(region.height, nativeH - ry)) : nativeH;
   if (rw <= 0 || rh <= 0) return null;
 
+  // A revised drawing whose changes are not all in the quantities carries a banner above the plan.
+  const warning = exportCoverageWarning(project, pageNumber);
+  const bannerH = warning ? 28 * mult : 0;
   const canvas = document.createElement('canvas');
   canvas.width = rw * mult;
-  canvas.height = rh * mult;
+  canvas.height = rh * mult + bannerH;
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
 
-  ctx.drawImage(planCanvas, rx * mult, ry * mult, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(planCanvas, rx * mult, ry * mult, rw * mult, rh * mult, 0, bannerH, rw * mult, rh * mult);
+  if (warning) {
+    ctx.fillStyle = '#fef2f2';
+    ctx.fillRect(0, 0, canvas.width, bannerH);
+    ctx.fillStyle = '#b91c1c';
+    ctx.font = `bold ${11 * mult}px ${FONT}`;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = language === 'he' ? 'right' : 'left';
+    ctx.direction = language === 'he' ? 'rtl' : 'ltr';
+    ctx.fillText(exportContext(language).t('exports.common.drawingPartial', { ...warning }), language === 'he' ? canvas.width - 8 * mult : 8 * mult, bannerH / 2, canvas.width - 16 * mult);
+    ctx.direction = 'inherit';
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'start';
+    // Everything below is drawn in plan coordinates, below the banner.
+    ctx.translate(0, bannerH);
+  }
 
   if (showMarkings) {
     const rooms = project.rooms.filter((r) => r.pageNumber === pageNumber && r.points.length >= 3);

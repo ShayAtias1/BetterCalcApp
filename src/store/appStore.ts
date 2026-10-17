@@ -24,6 +24,7 @@ import { DEFAULT_AREA_KIND_COLORS } from '../types';
 import { MEASUREMENT_DEFAULTS, OPENING_DEFAULT_SIZES } from '../config/measurementDefaults';
 import {
   deleteComparison as dbDeleteComparison,
+  plansUsingRevision,
   loadComparison,
   saveComparePdfBlob,
   saveComparison as dbSaveComparison,
@@ -981,6 +982,8 @@ export const useAppStore = create<AppState>()(guardEdits<AppState>('project')((s
     await get().refreshProjectPlans();
   },
   deleteComparison: async (comparisonId) => {
+    // Never remove the files of a revision a plan is showing; the UI explains why.
+    if ((await plansUsingRevision(comparisonId)).length) return;
     await dbDeleteComparison(comparisonId);
     await get().refreshProjectPlans();
   },

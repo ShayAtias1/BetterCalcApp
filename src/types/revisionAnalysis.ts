@@ -272,6 +272,20 @@ export interface RevisionApplication {
 }
 
 /** A stored copy of a plan, taken before a revision application. */
+/**
+ * Display only: the revision drawing shown behind a plan's measurements. Coordinates stay in the
+ * plan's own (original) page space; each page keeps the alignment the quantities were derived with.
+ */
+export interface RevisionBackdrop {
+  comparisonId: string;
+  revisionId: string;
+  applicationId: string;
+  /** How many of the revision's changes the plan's quantities reflect (absent on older plans). */
+  coverage?: { applied: number; total: number };
+  /** Plan page number → the revised sheet and the alignment that maps it into the plan's page space. */
+  pages: Record<number, { revisedPageNumber: number; alignment: LayerTransform }>;
+}
+
 export interface PlanVersion {
   id: string;
   planId: string;

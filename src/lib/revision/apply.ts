@@ -4,15 +4,16 @@ import type { PDFPageProxy } from 'pdfjs-dist';
 import type { Measurement, Plan, Point, ReportColumn, Room } from '../../types';
 import type { Comparison, RevisionLayer } from '../../types/compare';
 import { IDENTITY_TRANSFORM } from '../../types/compare';
-import type { ComparisonContext, PlanVersion, RevisionApplication, RevisionChange } from '../../types/revisionAnalysis';
+import type { ComparisonContext, PlanVersion, RevisionApplication, RevisionBackdrop, RevisionChange } from '../../types/revisionAnalysis';
 import { loadComparePdfBlob, loadPdfBlob, loadPlan, loadPlanVersion, savePlanWithVersion } from '../../db/database';
 import { loadPdfPlanSource } from '../planSource';
 import { pdfFingerprint } from '../ai/preparePage';
-import { polygonAreaPx, polygonCentroid, distancePx, round, pxToMeters } from '../geometry';
+import { polygonAreaPx, polygonCentroid, polygonPerimeterPx, distancePx, round, pxToMeters } from '../geometry';
 import { traceRoomAtSeeds } from '../roomDetection';
 import { addPlanOpening, openingsOf, reviewPlanOpening, updatePlanOpening, withOpeningRoomChanges } from '../planOpenings';
 import { openingAccessDefault } from '../openingOptions';
 import { allocateWorkItem } from '../workAllocation';
+import { buildOpeningQuantityReport } from '../openingQuantityReport';
 import { buildPlanQuantityReport, reportColumnInfo, type CategoryAmount } from '../projectQuantities';
 import { OPENING_DEFAULT_SIZES } from '../../config/measurementDefaults';
 import { t } from '../../i18n';
@@ -95,24 +96,70 @@ function distanceToPolygonEdge(p: Point, poly: Point[]): number {
   return best;
 }
 
-/** Approximate intersection-over-union of two polygons by sampling their joint bounding box. */
-function polygonIou(a: Point[], b: Point[]): number {
+/** Joint-bounding-box sampling of two polygons: sampled cells inside each and inside both. */
+function polygonSamples(a: Point[], b: Point[]): { inter: number; union: number; onlyA: number; onlyB: number } {
   const xs = [...a, ...b].map((p) => p.x);
   const ys = [...a, ...b].map((p) => p.y);
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
   const n = 80;
   let inter = 0;
   let union = 0;
+  let onlyA = 0;
+  let onlyB = 0;
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) {
       const p = { x: x0 + ((i + 0.5) / n) * (x1 - x0), y: y0 + ((j + 0.5) / n) * (y1 - y0) };
       const ia = pointInPolygon(p, a);
       const ib = pointInPolygon(p, b);
       if (ia && ib) inter++;
+      else if (ia) onlyA++;
+      else if (ib) onlyB++;
       if (ia || ib) union++;
     }
   }
+  return { inter, union, onlyA, onlyB };
+}
+
+/** Approximate intersection-over-union of two polygons by sampling their joint bounding box. */
+function polygonIou(a: Point[], b: Point[]): number {
+  const { inter, union } = polygonSamples(a, b);
   return union ? inter / union : 0;
+}
+
+/** Share of the smaller polygon that lies inside the other: 1 when one contains the other. */
+function polygonOverlap(a: Point[], b: Point[]): number {
+  const { inter, onlyA, onlyB } = polygonSamples(a, b);
+  const smaller = Math.min(inter + onlyA, inter + onlyB);
+  return smaller ? inter / smaller : 0;
+}
+
+/** Outline moved outwards by `d` (inwards when negative), each corner along the bisector of its two edges. */
+function polygonOffset(poly: Point[], d: number): Point[] {
+  const n = poly.length;
+  let signed = 0;
+  for (let i = 0; i < n; i++) signed += poly[i].x * poly[(i + 1) % n].y - poly[(i + 1) % n].x * poly[i].y;
+  const o = signed >= 0 ? 1 : -1;
+  return poly.map((p, i) => {
+    const a = poly[(i + n - 1) % n];
+    const b = poly[(i + 1) % n];
+    const l1 = Math.hypot(p.x - a.x, p.y - a.y) || 1;
+    const l2 = Math.hypot(b.x - p.x, b.y - p.y) || 1;
+    const n1 = { x: (o * (p.y - a.y)) / l1, y: (-o * (p.x - a.x)) / l1 };
+    const n2 = { x: (o * (b.y - p.y)) / l2, y: (-o * (b.x - p.x)) / l2 };
+    const k = Math.max(1 + n1.x * n2.x + n1.y * n2.y, 0.25);
+    return { x: p.x + ((n1.x + n2.x) * d) / k, y: p.y + ((n1.y + n2.y) * d) / k };
+  });
+}
+
+/** The outline moved uniformly until it encloses `targetArea`; null when that does not converge. */
+function offsetToArea(poly: Point[], targetArea: number): Point[] | null {
+  let d = (targetArea - polygonAreaPx(poly)) / Math.max(1, polygonPerimeterPx(poly, true));
+  let out = polygonOffset(poly, d);
+  for (let i = 0; i < 3; i++) {
+    d += (targetArea - polygonAreaPx(out)) / Math.max(1, polygonPerimeterPx(out, true));
+    out = polygonOffset(poly, d);
+  }
+  return Math.abs(polygonAreaPx(out) - targetArea) <= targetArea * 0.002 ? out : null;
 }
 
 /** Interior seed points of a polygon, nearest the centroid first. */
@@ -160,8 +207,10 @@ export interface RoomUpdate {
   points: Point[];
 }
 
+export type DeltaColumn = ReportColumn | 'area:construction' | 'area:demolition' | 'count:doors' | 'count:windows';
+
 export interface QuantityDelta {
-  column: ReportColumn;
+  column: DeltaColumn;
   label: string;
   unitLabel: string;
   before: number;
@@ -203,6 +252,20 @@ export function quantityDeltas(before: Plan, after: Plan): QuantityDelta[] {
     const a = round(primary(ra.byCategory[column], info.unit), 2);
     if (a !== b) deltas.push({ column, label: info.label, unitLabel: info.unitLabel, before: b, after: a });
   }
+  // Demolition / construction area measurements and approved-opening counts are tallied apart from
+  // the room work items, so the preview reads them from their own sources.
+  const kindTotal = (plan: Plan, kind: 'construction' | 'demolition') =>
+    round((plan.measurements ?? []).filter((m) => m.tool === 'area' && m.areaKind === kind && typeof m.areaM2 === 'number').reduce((sum, m) => sum + (m.areaM2 ?? 0), 0), 2);
+  for (const kind of ['construction', 'demolition'] as const) {
+    const b = kindTotal(before, kind);
+    const a = kindTotal(after, kind);
+    if (a !== b) deltas.push({ column: `area:${kind}`, label: t(`areaKinds.${kind}`), unitLabel: 'm²', before: b, after: a });
+  }
+  const ob = buildOpeningQuantityReport(before);
+  const oa = buildOpeningQuantityReport(after);
+  for (const [column, key, b, a] of [['count:doors', 'doors', ob.doors, oa.doors], ['count:windows', 'windows', ob.windows, oa.windows]] as const) {
+    if (a !== b) deltas.push({ column, label: t(`openingQuantities.${key}`), unitLabel: '', before: b, after: a });
+  }
   return deltas;
 }
 
@@ -237,8 +300,9 @@ export async function prepareApplication(comparison: Comparison, revisionId: str
 
   const reviews: RevisionApplication['reviews'] = [];
   let next: Plan = { ...plan };
-  const addedItems: Measurement[] = [];
-  const removedItems: Measurement[] = [];
+  let addedItems: Measurement[] = [];
+  let removedItems: Measurement[] = [];
+  const removedBy = new Map<string, string>();
   const openingIds: string[] = [];
   let openingsAdded = 0;
   let openingsRemoved = 0;
@@ -247,6 +311,21 @@ export async function prepareApplication(comparison: Comparison, revisionId: str
   const mppOf = (page: number) => plan.pages[page]?.calibration?.metersPerPixel ?? 0;
   // Items use the comparison's wall height, the one its preview and Changes table were made with.
   const wallHeightM = comparison.wallHeightDefaultM;
+
+  const itemMeasurement = (item: ReturnType<typeof changeItems>[number], page: number, c: RevisionChange): Measurement => ({
+    id: uuid(),
+    pageNumber: page,
+    tool: 'area',
+    points: item.points,
+    areaKind: item.areaKind,
+    areaM2: item.areaM2,
+    calcMode: 'wall',
+    wallLengthM: item.wallLengthM,
+    wallHeightM: item.wallHeightM,
+    centerline: item.centerline,
+    revisionSource: { comparisonId: comparison.id, revisionId, changeId: c.id, applicationId },
+  });
+  const doorQueue: { c: RevisionChange; item: ReturnType<typeof changeItems>[number]; page: number }[] = [];
 
   // 1. Demolition / construction items (and, in a design revision, withdrawal of items a removed wall no longer needs).
   for (const c of changes) {
@@ -272,20 +351,10 @@ export async function prepareApplication(comparison: Comparison, revisionId: str
       continue;
     }
     for (const item of changeItems(c, context, mpp, wallHeightM)) {
+      // Door items are checked against the wall items of the whole application below.
+      if (item.source === 'door') { doorQueue.push({ c, item, page }); continue; }
       effective.add(c.id);
-      addedItems.push({
-        id: uuid(),
-        pageNumber: page,
-        tool: 'area',
-        points: item.points,
-        areaKind: item.areaKind,
-        areaM2: item.areaM2,
-        calcMode: 'wall',
-        wallLengthM: item.wallLengthM,
-        wallHeightM: item.wallHeightM,
-        centerline: item.centerline,
-        revisionSource: { comparisonId: comparison.id, revisionId, changeId: c.id, applicationId },
-      });
+      addedItems.push(itemMeasurement(item, page, c));
     }
     if (context === 'design' && wallsAllowed(c)) {
       const reach = 0.15 / mpp;
@@ -296,6 +365,7 @@ export async function prepareApplication(comparison: Comparison, revisionId: str
            (distancePx(m.centerline[0], w.centerline[1]) <= reach && distancePx(m.centerline[m.centerline.length - 1], w.centerline[0]) <= reach)));
         if (match && !removedItems.includes(match)) {
           removedItems.push(match);
+          removedBy.set(match.id, c.id);
           effective.add(c.id);
         }
       }
@@ -323,11 +393,16 @@ export async function prepareApplication(comparison: Comparison, revisionId: str
       }
     }
   }
-  const removedIds = new Set(removedItems.map((m) => m.id));
-  next = { ...next, measurements: [...(next.measurements ?? []).filter((m) => !removedIds.has(m.id)), ...addedItems] };
-
   // 2. Room boundaries: re-traced on the revised drawing for rooms next to an approved wall change.
   const roomUpdates: RoomUpdate[] = [];
+  /** Changes next to a room that could not be updated reliably: they are withheld whole, never half applied. */
+  const roomBlocked = new Set<string>();
+  const roomChangesOf = new Map<string, RevisionChange[]>();
+  const updatedRooms = new Map<string, Room>();
+  const fail = (roomChanges: RevisionChange[], review: RevisionApplication['reviews'][number]) => {
+    reviews.push(review);
+    for (const c of roomChanges) roomBlocked.add(c.id);
+  };
   const wallChanges = changes.filter((c) => !blocked.has(c.id) && ((c.category === 'wall' && wallsAllowed(c)) || c.ai?.category === 'room-boundary'));
   const pagesWithWalls = [...new Set(wallChanges.map(planPageOf))];
   let rooms = next.rooms;
@@ -336,8 +411,13 @@ export async function prepareApplication(comparison: Comparison, revisionId: str
     const mpp = mppOf(page);
     const reach = mpp > 0 ? 0.3 / mpp : 10;
     const touches = (c: RevisionChange, r: Room) => {
+      // A wall longer than the room touches it along its length, not only at its corners.
+      const along = (a: Point, b: Point): Point[] => {
+        const steps = Math.min(200, Math.ceil(distancePx(a, b) / Math.max(1, reach / 2)));
+        return Array.from({ length: steps + 1 }, (_, i) => ({ x: a.x + ((b.x - a.x) * i) / Math.max(1, steps), y: a.y + ((b.y - a.y) * i) / Math.max(1, steps) }));
+      };
       const pts: Point[] = [
-        ...c.walls.filter((w) => !w.placeholder).flatMap((w) => w.footprint),
+        ...c.walls.filter((w) => !w.placeholder).flatMap((w) => [...w.footprint, ...w.centerline.slice(1).flatMap((q, i) => along(w.centerline[i], q))]),
         ...[...c.addedSegments, ...c.removedSegments].flatMap((s) => [{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }, { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 }]),
       ];
       return pts.some((p) => pointInPolygon(p, r.points) || distanceToPolygonEdge(p, r.points) <= reach);
@@ -374,37 +454,110 @@ export async function prepareApplication(comparison: Comparison, revisionId: str
       // boundary convention (inner face, centre line…) is unknown and a re-trace would change it.
       const before = traceRoomAtSeeds(baseImage, s, seeds);
       if (!before || polygonIou(before, room.points) < 0.85) {
-        reviews.push({ changeId, roomId: room.id, reason: t('revisionAi.review.roomNotTraceable', { room: room.name }) });
+        fail(roomChanges, { changeId, roomId: room.id, reason: t('revisionAi.review.roomNotTraceable', { room: room.name }) });
         continue;
       }
-      const after = traceRoomAtSeeds(revImage, s, seeds);
+      // A moved wall can put the old centre on its far side: every seed must trace the same space, and
+      // the result is accepted only when it overlaps the room's old position (a grown or shrunk room
+      // still does; a neighbouring space does not).
+      let after: Point[] | null = null;
+      let traced = false;
+      for (const seed of seeds.slice(0, 8)) {
+        const candidate = traceRoomAtSeeds(revImage, s, [seed]);
+        if (!candidate) continue;
+        traced = true;
+        if (polygonOverlap(candidate, room.points) >= 0.7) { after = candidate; break; }
+      }
       if (!after) {
-        reviews.push({ changeId, roomId: room.id, reason: t('revisionAi.review.roomOpen', { room: room.name }) });
+        fail(roomChanges, { changeId, roomId: room.id, reason: t(traced ? 'revisionAi.review.roomUnverified' : 'revisionAi.review.roomOpen', { room: room.name }) });
         continue;
       }
-      const ratio = polygonAreaPx(after) / Math.max(1, polygonAreaPx(room.points));
+      // Both traces carry the same bias (wall dilation, pixel centres), so the change between them is
+      // reliable where either absolute area is not. The room keeps its own boundary convention and
+      // receives only that change: an edge that did not move stays where the user drew it.
+      const areaOld = polygonAreaPx(room.points);
+      const areaBefore = polygonAreaPx(before);
+      const areaAfter = polygonAreaPx(after);
+      const ratio = areaAfter / Math.max(1, areaBefore);
       if (Math.abs(ratio - 1) < 0.01) continue;
       const others = rooms.filter((o) => o.id !== room.id && o.pageNumber === page);
       if (others.some((o) => pointInPolygon(polygonCentroid(o.points), after))) {
-        reviews.push({ changeId, roomId: room.id, reason: t('revisionAi.review.roomMerged', { room: room.name }) });
+        fail(roomChanges, { changeId, roomId: room.id, reason: t('revisionAi.review.roomMerged', { room: room.name }) });
         continue;
       }
       if (ratio < 0.5 || ratio > 2) {
-        reviews.push({ changeId, roomId: room.id, reason: t('revisionAi.review.roomTooDifferent', { room: room.name }) });
+        fail(roomChanges, { changeId, roomId: room.id, reason: t('revisionAi.review.roomTooDifferent', { room: room.name }) });
         continue;
       }
-      const updated: Room = { ...room, points: after };
+      // The drawn boundary may differ from the traced one only by a small uniform margin; a larger gap
+      // means its convention is unknown and a carried-over change would not be trustworthy.
+      const points = offsetToArea(after, areaOld + (areaAfter - areaBefore));
+      const margin = Math.abs(areaOld - areaBefore) / Math.max(1, polygonPerimeterPx(before, true));
+      if (!points || margin > (mpp > 0 ? 0.1 / mpp : 5)) {
+        fail(roomChanges, { changeId, roomId: room.id, reason: t('revisionAi.review.roomNotTraceable', { room: room.name }) });
+        continue;
+      }
+      const updated: Room = { ...room, points };
       const overAllocated = room.workItems.some((item) => (allocateWorkItem(item, updated, next)?.over ?? 0) > 0);
       if (overAllocated) {
-        reviews.push({ changeId, roomId: room.id, reason: t('revisionAi.review.allocations', { room: room.name }) });
+        fail(roomChanges, { changeId, roomId: room.id, reason: t('revisionAi.review.allocations', { room: room.name }) });
         continue;
       }
       if (ratio < 0.8) reviews.push({ changeId, roomId: room.id, reason: t('revisionAi.review.roomSplit', { room: room.name }) });
-      roomUpdates.push({ roomId: room.id, name: room.name, beforeAreaM2: areaM2(room.points), afterAreaM2: areaM2(after), points: after });
+      roomUpdates.push({ roomId: room.id, name: room.name, beforeAreaM2: areaM2(room.points), afterAreaM2: areaM2(points), points });
       for (const c of roomChanges) effective.add(c.id);
+      roomChangesOf.set(room.id, roomChanges);
+      updatedRooms.set(room.id, updated);
       rooms = rooms.map((r) => (r.id === room.id ? updated : r));
     }
   }
+  // A room update traced on the revised drawing reflects every change next to it, so it cannot be
+  // split between them: when any of those changes is withheld, the update is dropped and the others
+  // are withheld with it, until the set is stable. Changes with no failed room are unaffected.
+  for (let dropped = true; dropped;) {
+    dropped = false;
+    for (const u of [...roomUpdates]) {
+      const touching = roomChangesOf.get(u.roomId) ?? [];
+      if (!touching.some((c) => roomBlocked.has(c.id))) continue;
+      roomUpdates.splice(roomUpdates.indexOf(u), 1);
+      updatedRooms.delete(u.roomId);
+      for (const c of touching) roomBlocked.add(c.id);
+      dropped = true;
+    }
+  }
+  rooms = next.rooms.map((r) => updatedRooms.get(r.id) ?? r);
+  for (const id of roomBlocked) {
+    blocked.add(id);
+    effective.delete(id);
+    reviews.push({ changeId: id, reason: t('revisionAi.review.roomChangeWithheld') });
+  }
+  addedItems = addedItems.filter((m) => !roomBlocked.has(m.revisionSource?.changeId ?? ''));
+  removedItems = removedItems.filter((m) => !roomBlocked.has(removedBy.get(m.id) ?? ''));
+
+  // Door items: a door lying in a wall item of the same kind already counted in this update, or one
+  // an earlier application already recorded, is not counted a second time.
+  const doorItemIds = new Set<string>();
+  for (const { c, item, page } of doorQueue.filter((q) => !blocked.has(q.c.id))) {
+    const mid = { x: (item.centerline[0].x + item.centerline[1].x) / 2, y: (item.centerline[0].y + item.centerline[1].y) / 2 };
+    const reach = 0.15 / mppOf(page);
+    const sameDoor = (m: Measurement) => m.pageNumber === page && m.areaKind === item.areaKind && !!m.centerline && m.centerline.length >= 2 &&
+      ((distancePx(m.centerline[0], item.centerline[0]) <= reach && distancePx(m.centerline[m.centerline.length - 1], item.centerline[1]) <= reach) ||
+       (distancePx(m.centerline[0], item.centerline[1]) <= reach && distancePx(m.centerline[m.centerline.length - 1], item.centerline[0]) <= reach));
+    const covered = addedItems.some((m) => m.pageNumber === page && m.areaKind === item.areaKind &&
+      (doorItemIds.has(m.id) ? sameDoor(m) : pointInPolygon(mid, m.points))) ||
+      (next.measurements ?? []).some((m) => !!m.revisionSource && !removedItems.includes(m) && sameDoor(m));
+    if (covered) {
+      if (!reviews.some((r) => r.changeId === c.id && r.reason === t('revisionAi.review.doorCovered'))) reviews.push({ changeId: c.id, reason: t('revisionAi.review.doorCovered') });
+      continue;
+    }
+    const m = itemMeasurement(item, page, c);
+    doorItemIds.add(m.id);
+    effective.add(c.id);
+    addedItems.push(m);
+  }
+  const removedIds = new Set(removedItems.map((m) => m.id));
+  next = { ...next, measurements: [...(next.measurements ?? []).filter((m) => !removedIds.has(m.id)), ...addedItems] };
+
   if (roomUpdates.length) next = withOpeningRoomChanges(next, rooms, now);
 
   // 3. Openings: new doors become draft openings for review; removed doors are withdrawn from the count.
@@ -486,7 +639,31 @@ export async function prepareApplication(comparison: Comparison, revisionId: str
     roomIds: roomUpdates.map((r) => r.roomId),
     reviews,
   };
-  next = { ...next, revisionApplications: [...(next.revisionApplications ?? []), application], updatedAt: now };
+  // The revised drawing shown behind the plan keeps the alignment these quantities were derived with.
+  const backdropPages: RevisionBackdrop['pages'] = {};
+  if (applied.length) {
+    // Every plan page gets the revised sheet with the same page mapping and alignment the quantities used;
+    // a sheet without its own record is the same-numbered sheet, unaligned, as everywhere else here.
+    const pageNumbers = new Set([...Object.keys(plan.pages), ...Object.entries(comparison.pages).map(([key, cp]) => cp?.originalPageNumber ?? key)].map(Number));
+    for (const pageNumber of pageNumbers) {
+      const entry = Object.entries(comparison.pages).find(([key, cp]) => (cp?.originalPageNumber ?? Number(key)) === pageNumber);
+      const rp = entry?.[1]?.revisions[revisionId];
+      backdropPages[pageNumber] = {
+        revisedPageNumber: rp?.revisedPageNumber ?? pageNumber,
+        alignment: revision.analysis?.pages[entry ? Number(entry[0]) : pageNumber]?.usedAlignment ?? rp?.alignment ?? IDENTITY_TRANSFORM,
+      };
+    }
+  }
+  // The drawing is the whole revised sheet; the quantities reflect only the changes applied so far.
+  const revisionChanges = Object.values(revision.analysis?.pages ?? {}).flatMap((p) => p.changes);
+  const reflected = new Set([...prior.map((p) => p.changeId), ...applied.map((c) => c.id)]);
+  const coverage = { applied: revisionChanges.filter((c) => reflected.has(c.id)).length, total: revisionChanges.length };
+  next = {
+    ...next,
+    revisionApplications: [...(next.revisionApplications ?? []), application],
+    ...(Object.keys(backdropPages).length ? { revisionBackdrop: { comparisonId: comparison.id, revisionId, applicationId, coverage, pages: backdropPages } } : {}),
+    updatedAt: now,
+  };
   return {
     plan,
     nextPlan: next,

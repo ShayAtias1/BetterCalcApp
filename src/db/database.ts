@@ -512,6 +512,15 @@ export async function loadComparison(id: string): Promise<Comparison | undefined
   return migrateComparison(db, raw);
 }
 
+/** Names of the plans whose shown drawing comes from this comparison (or one of its revisions). */
+export async function plansUsingRevision(comparisonId: string, revisionId?: string): Promise<string[]> {
+  const db = await getDb();
+  const plans = await db.getAll('projects');
+  return plans
+    .filter((p) => p.revisionBackdrop?.comparisonId === comparisonId && (!revisionId || p.revisionBackdrop.revisionId === revisionId))
+    .map((p) => p.name);
+}
+
 /** Deletes a comparison with all its PDFs, and takes it out of its project's comparison list. */
 export async function deleteComparison(id: string): Promise<void> {
   const db = await getDb();

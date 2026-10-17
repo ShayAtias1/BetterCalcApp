@@ -18,6 +18,8 @@ import { v4 as uuid } from 'uuid';
 import { isViewerRenderCancelled } from '../lib/pdfViewerSource';
 import { initialPdfScale } from '../lib/pdfRenderBudget';
 import { useMainPdfSource } from '../hooks/useMainPdfSource';
+import { useRevisionDrawing } from '../hooks/useRevisionDrawing';
+import { revisionCoverage } from '../lib/revision/backdrop';
 import { usePdfDetail } from '../hooks/usePdfDetail';
 import { useAppStore } from '../store/appStore';
 import { notePlanRendered, trackError } from '../lib/analytics';
@@ -272,9 +274,13 @@ export default function PdfViewer() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
-  const { planSource, sourceKey, loadError, setLoadError } = useMainPdfSource(
+  const { planSource: originalSource, sourceKey: originalKey, loadError, setLoadError } = useMainPdfSource(
     project?.id, project?.pdfFileName, currentPage, setNumPages, t('viewer.pdfLoadError'),
   );
+  // The original PDF stays the coordinate reference; an applied revision is drawn behind the same geometry.
+  const drawing = useRevisionDrawing(project, currentPage, originalSource);
+  const planSource = drawing.displaySource;
+  const sourceKey = `${originalKey}:${drawing.shown}`;
   const baseRasterScaleRef = useRef(0);
   const [renderedKey, setRenderedKey] = useState('');
   const focusRequest = usePlanFocusStore((s) => s.request);
@@ -1235,6 +1241,24 @@ export default function PdfViewer() {
         AI draft · Drag vertices · Edge + adds a vertex · Double-click vertex deletes · Esc deselects
       </div>}
       {loadError && <div className="viewer-error">{loadError}</div>}
+      {drawing.status !== 'none' && (
+        <div className="drawing-switch" role="group" aria-label={t('viewer.drawing.label')} data-plan-control
+          onMouseDown={(event) => event.stopPropagation()} onMouseUp={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
+          <div className="segmented-tabs small">
+            {(['revised', 'original'] as const).map((choice) => (
+              <button key={choice} type="button" className={drawing.choice === choice ? 'active' : ''}
+                aria-pressed={drawing.choice === choice} onClick={() => drawing.select(choice)}>
+                {t(`viewer.drawing.${choice}`)}
+              </button>
+            ))}
+          </div>
+          {drawing.status === 'missing' && drawing.choice === 'revised' && <span className="cal-hint-warning" role="alert">{t('viewer.drawing.missing')}</span>}
+          {drawing.shown === 'revised' && revisionCoverage(project) && (
+            <span className="cal-hint-warning" role="alert">{t('viewer.drawing.partial', { ...revisionCoverage(project)! })}</span>
+          )}
+        </div>
+      )}
       <div
         className="pdf-content"
         style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, width: pageSize.width, height: pageSize.height }}

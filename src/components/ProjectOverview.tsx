@@ -1,5 +1,6 @@
 import { PLAN_FILE_ACCEPT, planFileKind, PlanImportError } from '../lib/planFileImport';
-import { promptDialog, confirmDialog } from '../lib/appDialogs';
+import { promptDialog, confirmDialog, messageDialog } from '../lib/appDialogs';
+import { plansUsingRevision } from '../db/database';
 import { ProjectConcreteTable, ProjectRebarTable } from './ProjectStructuralTables';
 import { buildProjectStructural } from '../lib/structuralQuantities';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
@@ -155,6 +156,8 @@ export default function ProjectOverview() {
   };
 
   const onDeleteComparison = async (comparisonId: string, name: string) => {
+    const using = await plansUsingRevision(comparisonId);
+    if (using.length) { await messageDialog(t('projectOverview.deleteComparisonBlocked', { name, plans: using.join(', ') })); return; }
     if (!await confirmDialog(t('projectOverview.deleteComparisonConfirm', { name }), { destructive: true })) return;
     void deleteComparison(comparisonId);
   };

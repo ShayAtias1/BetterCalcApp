@@ -13,6 +13,7 @@ import { type ExportContent } from './exportContent';
 import { ReportWriter } from './pdfReportWriter';
 import { buildProjectSummaryRows, writeRoomSchedule, summaryHeaders, SUMMARY_WEIGHTS } from './quantitySchedulePdf';
 import { appendPlanDrawingPages, getExportablePageNumbers } from './exportQuantitiesPdf';
+import { exportCoverageWarning } from './revision/backdrop';
 import type { OverlayVisibility } from './overlayVisibility';
 import type { PdfDrawingOptions } from './pdfDrawingLayers';
 
@@ -63,6 +64,8 @@ export async function exportProjectToPdf(project: Project, plans: Plan[], conten
     }
     if (!content.finishes || summaryMode === 'empty' || report.summaries.length === 0) continue;
     w().section(t('exports.projectPdf.planSection', { name: report.plan.name }), 4);
+    const partial = getExportablePageNumbers(report.plan).map((n) => exportCoverageWarning(report.plan, n)).find(Boolean);
+    if (partial) w().note(t('exports.common.drawingPartial', { ...partial }));
     w().facts(t('exports.projectPdf.planFacts', { rooms: report.roomCount, calibrated: report.calibratedPageCount, status: planStatusText(report, t) }));
     writeRoomSchedule(w(), { plan: report.plan, summaries: report.summaries }, x);
     // The project summary already says it for several plans; a single plan says it here.

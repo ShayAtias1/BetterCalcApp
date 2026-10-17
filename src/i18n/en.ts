@@ -790,6 +790,7 @@ export const en: Dictionary = {
       opacity: 'Layer opacity',
       sourceColors: "Show in the plan's original colours",
       removeConfirm: 'Remove this revised plan from the comparison?',
+      removeBlocked: 'Cannot remove this revised plan: it supplies the revised drawing of {plans}. Revert the applied revision first.',
       renamePrompt: 'Revised plan name:',
       revisions: 'Revised Plans',
       empty: 'There is no revised plan to compare against the original yet.',
@@ -1105,6 +1106,7 @@ export const en: Dictionary = {
   },
 
   viewer: {
+    drawing: { label: 'Drawing shown', revised: 'Revised', original: 'Original', missing: 'The revised drawing is unavailable - showing the original, which does not match the updated quantities', partial: 'Not all changes shown in the drawing are in the quantities ({applied} of {total} applied)' },
     pdfLoadError: 'Error loading the PDF',
     deleteRoomConfirm: 'Delete "{name}"?',
     notDetected: 'Not detected',
@@ -1346,6 +1348,7 @@ export const en: Dictionary = {
     renamePlanPrompt: 'Plan name:',
     deletePlanConfirm: 'Delete the plan "{name}" and all of its measurements? This cannot be undone.',
     renameComparisonPrompt: 'Comparison name:',
+    deleteComparisonBlocked: 'Cannot delete "{name}": it supplies the revised drawing of {plans}. Revert the applied revision first.',
     deleteComparisonConfirm: 'Delete the comparison "{name}" with all of its revisions and markups? This cannot be undone.',
     projectName: 'Project name',
     backToProjects: 'Back to the project list',
@@ -1862,6 +1865,8 @@ export const en: Dictionary = {
       kindTotal: 'Total {kind}',
       grandTotal: 'Grand total',
       exportFailed: 'The export failed. Please try again.',
+      drawingMissing: 'Export stopped: the revised drawing is unavailable, so the plan would not match its updated quantities. Restore the revision file, or switch the viewer to Original.',
+      drawingPartial: 'Warning: the drawing shows revision changes that are not in these quantities ({applied} of {total} changes applied).',
     },
 
     // Concrete and rebar in the plan reports (Excel sheets and PDF sections).
@@ -2456,6 +2461,9 @@ export const en: Dictionary = {
       roomOpen: 'No closed boundary found for room "{room}" in the new revision',
       roomMerged: 'Room "{room}" merged with another room - manual update needed',
       roomTooDifferent: 'The area of room "{room}" changed too much - manual update needed',
+      roomUnverified: 'The new boundary of room "{room}" could not be matched to its old position - manual update needed',
+      roomChangeWithheld: 'This change was not applied: a room it affects could not be updated reliably - update the rooms manually, then apply it again',
+      doorCovered: 'A door quantity that a wall item in this update already includes was not counted again',
       allocations: 'Room "{room}" has manual quantity shares above the new quantity - not updated',
       roomSplit: 'Room "{room}" got much smaller - a new room may need to be added',
       openingFailed: 'The opening could not be created - add it manually',

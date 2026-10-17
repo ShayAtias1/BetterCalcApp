@@ -188,7 +188,7 @@ export default function CompareWorkspace() {
         setTab('detect');
         usePanelLayout.getState().setOpen('inspector', true);
         usePanelLayout.getState().setOpen('list', true);
-      }} /> : <CompareCompactHeader />}
+      }} /> : <CompareCompactHeader onExport={runExport} exporting={exporting} />}
       {layout !== 'expanded' && <div className="compact-workspace-actions">
         <span className="muted">{t('adaptive.browse')}</span>
         <button className="btn-ghost" onClick={() => setPanel(panel === 'items' ? 'plan' : 'items')}>{t('adaptive.view')}</button>

@@ -788,6 +788,7 @@ export const he = {
       opacity: 'שקיפות השכבה',
       sourceColors: 'הצג בצבע המקורי של התוכנית',
       removeConfirm: 'להסיר את התוכנית המעודכנת הזו מההשוואה?',
+      removeBlocked: 'לא ניתן להסיר את התוכנית המעודכנת: היא מספקת את השרטוט המעודכן של {plans}. יש לבטל קודם את הגרסה שהוחלה.',
       renamePrompt: 'שם התוכנית המעודכנת:',
       revisions: 'גרסאות מעודכנות',
       empty: 'אין עדיין תוכנית מעודכנת להשוואה מול המקור.',
@@ -1108,6 +1109,7 @@ export const he = {
 
   /** The plan canvas (both apps' viewers). */
   viewer: {
+    drawing: { label: 'השרטוט המוצג', revised: 'מעודכן', original: 'מקורי', missing: 'השרטוט המעודכן אינו זמין - מוצג השרטוט המקורי, שאינו תואם לכמויות המעודכנות', partial: 'לא כל השינויים שבשרטוט נכללים בכמויות ({applied} מתוך {total} הוחלו)' },
     pdfLoadError: 'שגיאה בטעינת ה-PDF',
     deleteRoomConfirm: 'למחוק את "{name}"?',
     notDetected: 'לא זוהה',
@@ -1349,6 +1351,7 @@ export const he = {
     renamePlanPrompt: 'שם התוכנית:',
     deletePlanConfirm: 'למחוק את התוכנית "{name}" ואת כל המדידות שבה? הפעולה בלתי הפיכה.',
     renameComparisonPrompt: 'שם ההשוואה:',
+    deleteComparisonBlocked: 'לא ניתן למחוק את "{name}": היא מספקת את השרטוט המעודכן של {plans}. יש לבטל קודם את הגרסה שהוחלה.',
     deleteComparisonConfirm: 'למחוק את ההשוואה "{name}" עם כל הגרסאות והסימונים שבה? הפעולה בלתי הפיכה.',
     projectName: 'שם הפרויקט',
     backToProjects: 'חזרה לרשימת הפרויקטים',
@@ -1869,6 +1872,8 @@ export const he = {
       kindTotal: 'סה"כ {kind}',
       grandTotal: 'סה"כ כללי',
       exportFailed: 'הייצוא נכשל. נא לנסות שוב.',
+      drawingMissing: 'הייצוא נעצר: השרטוט המעודכן אינו זמין ולכן התוכנית לא תתאים לכמויות המעודכנות. יש לשחזר את קובץ הגרסה או לעבור בתצוגה לשרטוט המקורי.',
+      drawingPartial: 'אזהרה: השרטוט מציג שינויי גרסה שאינם בכמויות אלה ({applied} מתוך {total} שינויים הוחלו).',
     },
 
     // Concrete and rebar in the plan reports (Excel sheets and PDF sections).
@@ -2466,6 +2471,9 @@ export const he = {
       roomOpen: 'לא נמצא גבול סגור לחדר "{room}" בגרסה החדשה',
       roomMerged: 'החדר "{room}" התאחד עם חדר אחר - נדרש עדכון ידני',
       roomTooDifferent: 'שטח החדר "{room}" השתנה מאוד - נדרש עדכון ידני',
+      roomUnverified: 'לא ניתן להתאים את הגבול החדש של החדר "{room}" למיקומו הקודם - נדרש עדכון ידני',
+      roomChangeWithheld: 'השינוי לא הוחל: לא ניתן היה לעדכן באופן אמין חדר שהוא משפיע עליו - עדכן את החדרים ידנית ואז החל שוב',
+      doorCovered: 'כמות דלת שכבר כלולה בפריט קיר בעדכון זה לא נספרה פעם נוספת',
       allocations: 'בחדר "{room}" חלוקות כמות ידניות שחורגות מהכמות החדשה - לא עודכן',
       roomSplit: 'החדר "{room}" קטן משמעותית - ייתכן שנוצר חדר חדש שיש להוסיף',
       openingFailed: 'לא ניתן היה ליצור את הפתח - יש להוסיפו ידנית',

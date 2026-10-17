@@ -8,5 +8,5 @@ import { t } from '../i18n';
  */
 export function notifyExportFailed(err: unknown): void {
   console.error('Export failed', err);
-  notify(t('exports.common.exportFailed'));
+  notify(t((err as { code?: string } | null)?.code === 'revision-drawing-missing' ? 'exports.common.drawingMissing' : 'exports.common.exportFailed'));
 }

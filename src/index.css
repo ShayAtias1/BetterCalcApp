@@ -6189,3 +6189,16 @@ html[dir='rtl'] .header-calibration-action + .header-calibration-action { border
   * { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
   *:hover { scrollbar-color: var(--scrollbar-thumb-hover) transparent; }
 }
+
+/* Original / revised drawing switch for a plan that received a revision from Revision Compare. */
+.pdf-viewport .drawing-switch {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: default;
+}

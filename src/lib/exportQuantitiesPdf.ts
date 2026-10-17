@@ -9,8 +9,7 @@ import { DEFAULT_AREA_KIND_COLORS } from '../types';
 import type { Language } from '../i18n';
 import { exportContext, type ExportContext } from './exportLanguage';
 import { labelDirection } from './textDirection';
-import { loadPdfPlanSource } from './planSource';
-import { loadPdfBlob } from '../db/database';
+import { exportCoverageWarning, loadPlanDrawing, RevisionDrawingMissingError } from './revision/backdrop';
 import { polygonCentroid } from './geometry';
 import { drawMarkupOnCanvas, orderMarkups } from './drawMarkup';
 import { drawMeasurementOnCanvas } from './drawMeasurement';
@@ -64,18 +63,22 @@ async function renderFramedPlanPage(
   overlays: OverlayVisibility,
   areaNumbers: Map<string, number>,
   language: Language
-): Promise<{ dataUrl: string; width: number; height: number; headerH: number } | null> {
+): Promise<{ dataUrl: string; width: number; height: number; headerH: number; warning: { applied: number; total: number } | null } | null> {
   let source;
   try {
-    ({ source } = await loadPdfPlanSource(project.id, () => loadPdfBlob(project.id), pageNumber));
-  } catch {
+    // The drawing the plan is shown with: the applied revision, or the original PDF.
+    source = await loadPlanDrawing(project, pageNumber);
+  } catch (error) {
+    // A page must not silently drop out, or fall back to the wrong drawing.
+    if (error instanceof RevisionDrawingMissingError) throw error;
     return null;
   }
+  const warning = exportCoverageWarning(project, pageNumber);
   const planCanvas = document.createElement('canvas');
   const handle = source.render(planCanvas, mult);
   await handle.promise;
 
-  const headerH = 60 * mult;
+  const headerH = (warning ? 76 : 60) * mult;
   const canvas = document.createElement('canvas');
   canvas.width = planCanvas.width;
   canvas.height = planCanvas.height + headerH;
@@ -154,7 +157,7 @@ async function renderFramedPlanPage(
     }
   }
 
-  return { dataUrl: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height, headerH };
+  return { dataUrl: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height, headerH, warning };
 }
 
 /** Page numbers with any exportable content (rooms, markups, or measurements), sorted ascending. */
@@ -203,6 +206,14 @@ export async function appendPlanDrawingPages(pdfDoc: PDFDocument, fonts: ReportF
       size: 12 * mult,
       color: '#8b8f99',
     });
+    if (framed.warning) {
+      pt.fillText(t('exports.common.drawingPartial', { ...framed.warning }), headerStart, 66 * mult, {
+        size: 11 * mult,
+        bold: true,
+        color: '#b91c1c',
+        maxWidth: framed.width - 32 * mult,
+      });
+    }
     drawLogo(pt, x.rtl ? 16 * mult : framed.width - 16 * mult - logoWidth(REPORT_LOGO_HEIGHT * mult), 14 * mult, REPORT_LOGO_HEIGHT * mult);
     added++;
     }
@@ -252,6 +263,8 @@ export async function exportQuantitiesToPdf(
       const uncalibrated = summaries.filter((s) => !s.pageCalibrated).length;
       if (uncalibrated > 0) w().note(t('exports.quantityPdf.uncalibratedNote', { count: uncalibrated }));
     }
+    const partial = pagesInScope.map((p) => exportCoverageWarning(project, p)).find(Boolean);
+    if (partial) w().note(t('exports.common.drawingPartial', { ...partial }));
     // Demolition / new construction areas, per sheet, in the same flow.
     for (const pageNumber of pagesInScope) {
       const pageAreas = allAreaMeasurements.filter((m) => m.pageNumber === pageNumber);

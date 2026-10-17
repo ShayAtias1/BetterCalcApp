@@ -1,8 +1,8 @@
-import { promptDialog, confirmDialog } from '../../lib/appDialogs';
+import { promptDialog, confirmDialog, messageDialog } from '../../lib/appDialogs';
 import { useRef, useState } from 'react';
 import { useCompareStore } from '../../store/compareStore';
 import { requireEditAccess } from '../../lib/access/editGuard';
-import { deleteComparePdfBlob, saveComparePdfBlob } from '../../db/database';
+import { deleteComparePdfBlob, plansUsingRevision, saveComparePdfBlob } from '../../db/database';
 import { trackRevisionAdded } from '../../lib/analytics';
 import Icon from '../Icon';
 import { useT } from '../../i18n';
@@ -105,6 +105,9 @@ export default function LayerPanel() {
 
   const handleRemove = async (id: string) => {
     if (!requireEditAccess('edit')) return;
+    // A revision whose drawing a plan shows cannot lose its file.
+    const using = await plansUsingRevision(comparison.id, id);
+    if (using.length) { await messageDialog(t('compare.layers.removeBlocked', { plans: using.join(', ') })); return; }
     if (!await confirmDialog(t('compare.layers.removeConfirm'), { destructive: true })) return;
     removeRevision(id);
     await deleteComparePdfBlob(comparison.id, `revision:${id}`);
