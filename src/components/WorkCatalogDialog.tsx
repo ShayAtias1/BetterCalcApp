@@ -9,6 +9,7 @@ import type { CalculationMethod, Plan, WorkCategory } from '../types';
 import AppModal from './AppModal';
 import Icon from './Icon';
 import './WorkCatalog.css';
+import Select from './Select';
 
 /**
  * Manages the local catalog as one expandable hierarchy: work category → its types / specifications.
@@ -58,9 +59,9 @@ export default function WorkCatalogDialog({ plan, onClose, initialCategoryId }: 
                 <input dir="auto" value={category.name} onChange={(e) => catalog.updateCategory(category.id, { name: e.target.value })} />
               </label>
               <label>{t('workCatalog.method')}
-                <select value={category.method} onChange={(e) => catalog.updateCategory(category.id, { method: e.target.value as CalculationMethod })}>
+                <Select value={category.method} onChange={(e) => catalog.updateCategory(category.id, { method: e.target.value as CalculationMethod })}>
                   {CALCULATION_METHODS.map((m) => <option key={m} value={m}>{methodName(m)}</option>)}
-                </select>
+                </Select>
               </label>
               {category.method === 'manualCount' && <label>{t('workCatalog.unitLabel')}
                 <input dir="auto" value={category.unitLabel ?? ''} placeholder={t('workCatalog.unitPlaceholder')} onChange={(e) => catalog.updateCategory(category.id, { unitLabel: e.target.value })} />
@@ -86,10 +87,10 @@ export default function WorkCatalogDialog({ plan, onClose, initialCategoryId }: 
                 <input dir="auto" aria-label={t('workCatalog.specification')} placeholder={t('workCatalog.specificationPlaceholder')} value={s.specification ?? ''} onChange={(e) => catalog.updateSpec(s.id, { specification: e.target.value })} />
                 {/* A type may measure differently from its category (e.g. ceiling paint under Paint). */}
                 <span className="work-catalog-spec-method">
-                  <select aria-label={t('workCatalog.itemMethod')} value={s.method ?? ''} onChange={(e) => catalog.updateSpec(s.id, { method: (e.target.value || undefined) as CalculationMethod | undefined })}>
+                  <Select aria-label={t('workCatalog.itemMethod')} value={s.method ?? ''} onChange={(e) => catalog.updateSpec(s.id, { method: (e.target.value || undefined) as CalculationMethod | undefined })}>
                     <option value="">{t('workCatalog.categoryMethod', { method: methodName(defaultMethod) })}</option>
                     {CALCULATION_METHODS.map((m) => <option key={m} value={m}>{methodName(m)}</option>)}
-                  </select>
+                  </Select>
                   {s.method === 'manualCount' && <input dir="auto" aria-label={t('workCatalog.unitLabel')} placeholder={t('workCatalog.unitPlaceholder')} value={s.unitLabel ?? ''} onChange={(e) => catalog.updateSpec(s.id, { unitLabel: e.target.value })} />}
                 </span>
                 <button type="button" className="icon-btn" title={t('workCatalog.duplicate')} aria-label={t('workCatalog.duplicate')} onClick={() => catalog.duplicateSpec(s.id, t('workCatalog.copyName', { name: s.name }))}>

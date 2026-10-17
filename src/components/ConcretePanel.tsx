@@ -16,6 +16,7 @@ import ExistingAreaPicker from './ExistingAreaPicker';
 import NumberField from './NumberField';
 import Icon from './Icon';
 import { InspectorCloseButton, InspectorEmpty, type PanelPart } from './PanelPart';
+import Select from './Select';
 
 /** A zone's spec line: grade · thickness (slab, cm) or height (m) · count (columns). */
 function concreteSpec(el: ConcreteElement, t: ReturnType<typeof useT>): string {
@@ -227,9 +228,9 @@ function ConcreteDetail({
       <div className="form-grid">
         <div className="form-row">
           <label>{t('concrete.kindPicker')}</label>
-          <select value={element.kind} onChange={(e) => onChangeKind(e.target.value as ConcreteKind)}>
+          <Select value={element.kind} onChange={(e) => onChangeKind(e.target.value as ConcreteKind)}>
             {CONCRETE_KINDS.map((kind) => <option key={kind} value={kind}>{t(`concrete.kinds.${kind}`)}</option>)}
-          </select>
+          </Select>
         </div>
         <div className="form-row">
           <label>{t('concrete.mark')}</label>

@@ -10,6 +10,7 @@ import { primaryReading, reportColumnInfo, roomCategoryQuantity } from '../lib/p
 import { buildConcreteItems, buildRebarLevelRows } from '../lib/structuralQuantities';
 import { concreteOf, rebarOf, rebarItemsOnPages } from '../lib/structuralPlan';
 import { markLabel } from '../lib/structuralMarks';
+import Select from './Select';
 
 interface ReviewItem {
   key: string;
@@ -120,13 +121,13 @@ export default function PhoneReview({ domain, quantities = false, onShowPlan }: 
   };
   return <div className="phone-review">
     <div className="phone-review-filters">
-      <label>{t('phoneReview.scope')}<select value={scope} onChange={(e) => setScope(e.target.value as typeof scope)}>
+      <label>{t('phoneReview.scope')}<Select value={scope} onChange={(e) => setScope(e.target.value as typeof scope)}>
         <option value="sheet">{t('phoneReview.currentSheet')}</option><option value="plan">{t('phoneReview.currentPlan')}</option><option value="project">{t('phoneReview.project')}</option>
-      </select></label>
+      </Select></label>
       <label>{t('phoneReview.search')}<input type="search" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
-      {domain === 'rebar' && <label>{t('phoneReview.type')}<select value={type} onChange={(e) => setType(e.target.value)}>
+      {domain === 'rebar' && <label>{t('phoneReview.type')}<Select value={type} onChange={(e) => setType(e.target.value)}>
         <option value="all">{t('adaptive.allRebar')}</option>{(['mesh', 'bars', 'individual', 'stirrup'] as const).map((kind) => <option key={kind} value={kind}>{t(labels[kind])}</option>)}
-      </select></label>}
+      </Select></label>}
     </div>
     {error && <p role="alert">{t('phoneReview.openFailed')}</p>}
     {items.length === 0 && <p className="muted">{t('phoneReview.empty')}</p>}

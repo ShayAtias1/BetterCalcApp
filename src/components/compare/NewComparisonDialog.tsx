@@ -4,6 +4,7 @@ import Icon from '../Icon';
 import { useT } from '../../i18n';
 import { useAppStore } from '../../store/appStore';
 import { loadPdfBlob } from '../../db/database';
+import Select from '../Select';
 
 export interface NewComparisonInput {
   name: string;
@@ -98,10 +99,10 @@ export default function NewComparisonDialog({
             {originalFile ? originalFile.name : t('compare.newComparison.pickPdf')}
           </button>
           {projectPlans.length > 0 && (
-            <select style={{ marginBlockStart: 8 }} value={originalPlanId ?? ''} onChange={(e) => { if (e.target.value) void pickPlan(e.target.value); }} title={t('revisionAi.newComparisonFromPlan')}>
+            <Select style={{ marginBlockStart: 8 }} value={originalPlanId ?? ''} onChange={(e) => { if (e.target.value) void pickPlan(e.target.value); }} title={t('revisionAi.newComparisonFromPlan')}>
               <option value="">{t('revisionAi.newComparisonFromPlan')}</option>
               {projectPlans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            </Select>
           )}
           <input
             ref={originalInputRef}

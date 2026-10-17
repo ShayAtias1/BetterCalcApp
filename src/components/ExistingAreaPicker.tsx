@@ -5,6 +5,7 @@ import type { Room } from '../types';
 import { apartmentNumbersInProject } from '../lib/apartmentDuplication';
 import { polygonAreaPx } from '../lib/geometry';
 import Icon from './Icon';
+import Select from './Select';
 
 /** A room can become a concrete zone only if it has a real outline. */
 const NO_ROOMS: Room[] = [];
@@ -69,7 +70,7 @@ export default function ExistingAreaPicker({
     <div className="concrete-from-rooms">
       <div className="form-row">
         <label>{t('concrete.copy.source')}</label>
-        <select
+        <Select
           value={source}
           onChange={(e) => {
             setSource(e.target.value);
@@ -93,7 +94,7 @@ export default function ExistingAreaPicker({
               ))}
             </optgroup>
           )}
-        </select>
+        </Select>
       </div>
       {source !== '' && (
         <p className="muted">

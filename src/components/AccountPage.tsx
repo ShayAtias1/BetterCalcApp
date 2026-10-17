@@ -18,6 +18,7 @@ import Icon from './Icon';
 import CloudBackupDialog from './CloudBackupDialog';
 import AccountMenu, { confirmSignOut, useAccountIdentity } from './AccountMenu';
 import './Account.css';
+import Select from './Select';
 
 const SECTIONS: AccountSection[] = ['profile', 'subscription', 'plans', 'billing'];
 const SECTION_LABEL: Record<AccountSection, 'menuProfile' | 'menuSubscription' | 'menuPlans' | 'menuBilling'> = {
@@ -252,7 +253,7 @@ function SubscriptionSection() {
           <p className="acct-note">{t('acct.subscription.costNote')}</p>
         </Card>
       </div>
-      <Card title={t('acct.subscription.history')} aside={<select className="acct-select" aria-label={t('acct.subscription.period')} defaultValue="current"><option value="current">{t('acct.subscription.period')}</option></select>}>
+      <Card title={t('acct.subscription.history')} aside={<Select className="acct-select" aria-label={t('acct.subscription.period')} defaultValue="current"><option value="current">{t('acct.subscription.period')}</option></Select>}>
         {!usage?.length ? <p className="acct-note">{t('acct.subscription.noHistory')}</p> : (
           <div className="acct-table-wrap">
             <table className="acct-table">

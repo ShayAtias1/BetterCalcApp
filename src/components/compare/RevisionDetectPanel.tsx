@@ -32,6 +32,7 @@ import { useAccountUi } from '../../store/accountUi';
 import { LockIcon } from '../AiComingSoonDialog';
 import '../Account.css';
 import './RevisionDetect.css';
+import Select from '../Select';
 
 function useActiveAnalysis(): { analysis: RevisionPageAnalysis | undefined; stale: boolean } {
   const comparison = useCompareStore((s) => s.comparison);
@@ -300,7 +301,7 @@ export function ChangeEditor({ change }: { change: RevisionChange }) {
     <div className="revision-editor" onClick={(e) => e.stopPropagation()}>
       <SwapVersionsButton change={change} />
       <label className="field-label" title={t(family === 'other' ? 'revisionAi.edit.otherHint' : family === 'wall' ? 'revisionAi.edit.wallPlanHint' : 'revisionAi.edit.planHint')}>{t('revisionAi.edit.type')}</label>
-      <select value={type} onChange={(e) => {
+      <Select value={type} onChange={(e) => {
         const nextType = e.target.value as RevisionEditType;
         apply((c) => retypeChange(c, nextType, mpp));
         useRevisionUi.setState({ editSide: 'both' });
@@ -309,7 +310,7 @@ export function ChangeEditor({ change }: { change: RevisionChange }) {
         if (familyOf(nextType) === 'wall' && missingSide) startManualChangeDrawing(nextType, { changeId: change.id, side: missingSide });
       }}>
         {EDIT_TYPES.map((x) => <option key={x} value={x}>{t(revisionTypeLabelKey(x, comparison?.context, language))}</option>)}
-      </select>
+      </Select>
       {sides.length === 2 && (
         <div className="segmented-tabs small">
           {(['both', 'removed', 'added'] as const).map((side) => (
@@ -375,11 +376,11 @@ export function ChangeEditor({ change }: { change: RevisionChange }) {
       </div>}
       {(isOpeningDifference(change) || change.doors.some(d => d.footprint)) && change.doors.map((d, index) => <div key={`impact-${index}`} className="revision-section">
         <strong className="field-label">{t(d.side === 'removed' ? 'revisionAi.before' : 'revisionAi.after')} · {index + 1}</strong>
-        <select aria-label={t('revisionAi.edit.type')} value={d.opening ?? ''}
+        <Select aria-label={t('revisionAi.edit.type')} value={d.opening ?? ''}
           onChange={e => { const kind = e.target.value as 'door' | 'window'; apply(c => ({ ...c, doors: c.doors.map((door,i) => i === index ? { ...door, opening: kind, impactVerified: false } : door) })); }}>
           <option value="" disabled>{t('revisionAi.categories.opening')}</option>
           <option value="door">{t('revisionAi.edit.door')}</option><option value="window">{t('revisionAi.edit.window')}</option>
-        </select>
+        </Select>
         <label className="revision-edit-height">{t('compare.openingImpact.thickness')}
           <input type="number" inputMode="decimal" min={0.1} step={0.5} dir="ltr" disabled={!mpp}
             value={mpp && openingWallThicknessPx(change, d) > 0 ? round(openingWallThicknessPx(change, d) * mpp * 100, 2) : ''}
@@ -415,13 +416,13 @@ function AddMissedChange() {
   return (
     <div className="revision-add-missed">
       <div className="revision-add-row">
-        <select value={type} onChange={(e) => {
+        <Select value={type} onChange={(e) => {
           const nextType = e.target.value as RevisionEditType;
           setType(nextType);
           startManualChangeDrawing(nextType);
         }} aria-label={t('revisionAi.edit.type')}>
           {EDIT_TYPES.map((x) => <option key={x} value={x}>{t(revisionTypeLabelKey(x, context, language))}</option>)}
-        </select>
+        </Select>
         <button className={placingType ? 'btn-primary small' : 'btn-secondary small'} aria-pressed={!!placingType}
           onClick={() => placingType ? useRevisionUi.setState({ placingType: null, placingWall: null }) : startManualChangeDrawing(type)}>
           <Icon name="plus" size={12} /> {placingType ? t('revisionAi.edit.cancelPlacing') : t('revisionAi.edit.addMissed')}
@@ -524,10 +525,10 @@ function ApplySection({ readOnly }: { readOnly: boolean }) {
       <h4>{t('revisionAi.apply.title')}</h4>
       <label className="field-label">{t('revisionAi.apply.plan')}</label>
       {plans.length === 0 ? <p className="muted">{t('revisionAi.apply.noPlans')}</p> : (
-        <select disabled={readOnly} value={linkedPlanId ?? ''} onChange={(e) => setLinkedPlanId(e.target.value || undefined)}>
+        <Select disabled={readOnly} value={linkedPlanId ?? ''} onChange={(e) => setLinkedPlanId(e.target.value || undefined)}>
           <option value="">{t('revisionAi.apply.choosePlan')}</option>
           {plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        </Select>
       )}
       {link === 'different-file' && <p className="cal-hint-warning revision-warning"><Icon name="alert" size={13} /> {t('revisionAi.apply.differentFile')}</p>}
       {link === 'missing' && <p className="cal-hint-warning revision-warning"><Icon name="alert" size={13} /> {t('revisionAi.apply.missing')}</p>}
@@ -596,10 +597,10 @@ function DetectTools({ readOnly }: { readOnly: boolean }) {
         {revision && (
           <>
             <label className="field-label">{t('revisionAi.base.label')}</label>
-            <select disabled={readOnly} value={revision.baseRevisionId ?? ''} onChange={(e) => setBase(revision.id, e.target.value || null)}>
+            <Select disabled={readOnly} value={revision.baseRevisionId ?? ''} onChange={(e) => setBase(revision.id, e.target.value || null)}>
               <option value="">{t('revisionAi.base.original')}</option>
               {earlier.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
-            </select>
+            </Select>
           </>
         )}
       </section>

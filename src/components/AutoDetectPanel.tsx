@@ -6,6 +6,7 @@ import { roomProfileLabel, ROOM_PROFILES, roomProfileName } from '../lib/roomPro
 import { aiCandidateLabel, aiCandidateTypeKey } from '../lib/localAiReview';
 import Icon from './Icon';
 import { useT } from '../i18n';
+import Select from './Select';
 
 /**
  * Auto detection is a *suggestion* workflow: detect → review → accept/reject.
@@ -168,10 +169,10 @@ export function DetectionReviewPanel() {
                   <div className="ai-review-type">
                   <label>
                     {t('aiReview.type')}
-                    <select value={aiCandidateTypeKey(c) ?? ''} disabled={reviewOnly} onChange={event => setCandidateType(c.id, event.target.value || null)}>
+                    <Select value={aiCandidateTypeKey(c) ?? ''} disabled={reviewOnly} onChange={event => setCandidateType(c.id, event.target.value || null)}>
                       <option value="">{t('aiReview.unknown')}</option>
                       {ROOM_PROFILES.map(profile => <option key={profile.key} value={profile.key}>{roomProfileName(profile, t)}</option>)}
-                    </select>
+                    </Select>
                   </label>
                   {aiCandidateTypeKey(c) && <button className="btn-secondary small" disabled={reviewOnly || c.semanticTypeConfirmed} onClick={() => confirmCandidateType(c.id)}>
                     {t(c.semanticTypeConfirmed ? 'aiReview.typeConfirmed' : 'aiReview.confirmType')}

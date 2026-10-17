@@ -26,6 +26,7 @@ import StirrupPlacements from './StirrupPlacements';
 import { resolveStirrupItem } from '../lib/stirrup';
 import { prepareStirrupShape } from '../lib/stirrupShape';
 import { drawnBarLength } from '../lib/straightBarsGeometry';
+import Select from './Select';
 
 type T = ReturnType<typeof useT>;
 
@@ -164,9 +165,9 @@ export default function RebarPanel({ readOnly = false, part }: { readOnly?: bool
           {t(value === 'all' ? 'adaptive.allRebar' : value === 'mesh' ? 'adaptive.mesh' : value === 'bars' ? 'adaptive.bars' : 'adaptive.stirrups')}
         </button>)}
       </div>}
-      {readOnly && <label className="adaptive-domain-picker">{t('workspace.tabs.rebar')}<select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
+      {readOnly && <label className="adaptive-domain-picker">{t('workspace.tabs.rebar')}<Select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
         <option value="all">{t('adaptive.allRebar')}</option><option value="mesh">{t('adaptive.mesh')}</option><option value="bars">{t('adaptive.bars')}</option><option value="stirrup">{t('adaptive.stirrups')}</option>
-      </select></label>}
+      </Select></label>}
       <div className="room-list">
         <span className="section-label">{t('rebar.items', { count: items.length })}</span>
         {items.length === 0 && (
@@ -228,13 +229,13 @@ function DiameterSelect({ value, onChange }: { value: number; onChange: (mm: num
   const t = useT();
   const standard = REBAR_DIAMETERS_MM as readonly number[];
   return (
-    <select value={value > 0 ? String(value) : ''} onChange={(e) => onChange(Number(e.target.value) || 0)}>
+    <Select value={value > 0 ? String(value) : ''} onChange={(e) => onChange(Number(e.target.value) || 0)}>
       <option value="">{t('rebar.chooseDiameter')}</option>
       {value > 0 && !standard.includes(value) && <option value={value}>{`Ø${value}`}</option>}
       {standard.map((d) => (
         <option key={d} value={d}>{`Ø${d}`}</option>
       ))}
-    </select>
+    </Select>
   );
 }
 
@@ -620,10 +621,10 @@ function BarsDetail({ bars }: { bars: RebarBars }) {
       {zone && <>
         <div className="form-row">
           <label>{t('rebar.spatial.direction')}</label>
-          <select value={zone.direction} onChange={(e) => updateItem(bars.id, { barsZone: { ...zone, direction: e.target.value as RebarLayerDirection } })}>
+          <Select value={zone.direction} onChange={(e) => updateItem(bars.id, { barsZone: { ...zone, direction: e.target.value as RebarLayerDirection } })}>
             <option value="long">{t('rebar.spatial.long')}</option>
             <option value="short">{t('rebar.spatial.short')}</option>
-          </select>
+          </Select>
         </div>
         <label className="wi-check">
           <input type="checkbox" checked={zone.lengthMode === 'manual'} onChange={(e) => updateItem(bars.id, { barsZone: { ...zone,

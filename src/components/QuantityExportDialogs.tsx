@@ -13,6 +13,7 @@ import { notifyExportFailed } from '../lib/exportFailure';
 import { withStructuralPages } from '../lib/structuralPlan';
 import { EXPORT_SECTIONS, everything, hasAnyContent, type ExportContent } from '../lib/exportContent';
 import { useLanguage, useT } from '../i18n';
+import Select from './Select';
 
 /** The workbook has no plan drawing, so no plan section. */
 const EXCEL_SECTIONS = ['finishes', 'concrete', 'rebar'] as const;
@@ -186,13 +187,13 @@ function ExcelDialog({ info, surface }: { info: Info; surface: 'topbar_menu' | '
                 <input type="radio" name="excel-export-mode" checked={state.mode === 'specific'} onChange={() => setState({ ...state, mode: 'specific' })} /> {t('quantityExport.specificPage')}
               </label>
               {state.mode === 'specific' && (
-                <select value={state.page} onChange={(e) => setState({ ...state, page: parseInt(e.target.value, 10) })}>
+                <Select value={state.page} onChange={(e) => setState({ ...state, page: parseInt(e.target.value, 10) })}>
                   {exportablePages.map((p) => (
                     <option key={p} value={p}>
                       {p === currentPage ? t('quantityExport.pageCurrent', { page: p }) : t('quantityExport.page', { page: p })}
                     </option>
                   ))}
-                </select>
+                </Select>
               )}
             </div>
             <div className="form-row">

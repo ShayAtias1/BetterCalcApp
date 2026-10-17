@@ -6,6 +6,7 @@ import { addPlanOpening, reviewPlanOpening } from '../lib/planOpenings';
 import { quantityOpeningInput } from '../lib/manualOpenings';
 import NumberField from './NumberField';
 import type { PlanOpening } from '../types';
+import Select from './Select';
 
 /** Unsaved input only: cancellation never creates or removes a persisted opening. */
 export default function QuantityOpeningForm({ onClose }: { onClose: () => void }) {
@@ -49,16 +50,16 @@ export default function QuantityOpeningForm({ onClose }: { onClose: () => void }
       <button type="button" className="icon-btn" aria-label={t('common.cancel')} onClick={onClose}>×</button>
     </div>
     <div className="form-grid">
-      <label className="form-row">{t('rooms.detail.apartment')}<select value={chosen} onChange={e=>{setApartment(e.target.value);setRoomId('');resetRoomReview();}}>
+      <label className="form-row">{t('rooms.detail.apartment')}<Select value={chosen} onChange={e=>{setApartment(e.target.value);setRoomId('');resetRoomReview();}}>
         {apartments.map(number=><option key={number} value={number}>{number ? t('rooms.apartment',{apartment:number}) : t('rooms.unassigned')}</option>)}
-      </select></label>
-      <label className="form-row">{t('openingTools.quantityRoom')}<select value={roomId} onChange={e=>{setRoomId(e.target.value);resetRoomReview();}}>
+      </Select></label>
+      <label className="form-row">{t('openingTools.quantityRoom')}<Select value={roomId} onChange={e=>{setRoomId(e.target.value);resetRoomReview();}}>
         <option value="">{t('openingTools.chooseRoom')}</option>
         {apartmentRooms.map(room=><option key={room.id} value={room.id}>{room.name || t('rooms.unnamed')}</option>)}
-      </select></label>
-      <label className="form-row">{t('openingTools.type')}<select value={kind} onChange={e=>{setKind(e.target.value as typeof kind);setWalkable(false);}}>
+      </Select></label>
+      <label className="form-row">{t('openingTools.type')}<Select value={kind} onChange={e=>{setKind(e.target.value as typeof kind);setWalkable(false);}}>
         {(['door','window','custom'] as const).map(type=><option key={type} value={type}>{t(`openingTypes.${type}`)}</option>)}
-      </select></label>
+      </Select></label>
       {(['widthM','heightM','sillHeightM','quantity'] as const).map((key,index)=><label key={key} className="form-row">{t(`openingQuantities.${(['width','height','base','quantity'] as const)[index]}`)}
         <NumberField value={dimensions[key] ?? undefined} step={key==='quantity'?'1':'0.01'} onChange={value=>setDimensions({...dimensions,[key]:value??null})}/>
       </label>)}

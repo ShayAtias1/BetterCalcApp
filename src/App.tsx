@@ -48,6 +48,7 @@ import { useAiReviewMode, useAiReviewSync, useOpeningReviewSummary, useSpaceRevi
 import { PanelResizer, PanelRestoreButtons } from './components/WorkspacePanels';
 import ViewerWidthWatcher from './components/ViewerWidthWatcher';
 import { usePanelGridStyle, usePanelLayout } from './components/panelLayout';
+import Select from './components/Select';
 
 /** The side panel's tabs: the active domain's objects (and openings, in finishes), then measurements and markups. */
 type PanelTab = 'objects' | 'openings' | 'measure' | 'markup';
@@ -190,10 +191,10 @@ function Workspace() {
           </aside>}
         </> : <AdaptiveInspector open={destination === 'items'} onClose={() => setDestination('plan')} title={t('adaptive.items')}>
           <label className="adaptive-domain-picker">{t('adaptive.domain')}
-            <select value={compactValue} onChange={(e) => chooseCompact(e.target.value as CompactDestination)}>
+            <Select value={compactValue} onChange={(e) => chooseCompact(e.target.value as CompactDestination)}>
               {(['rooms', 'concrete', 'rebar', 'measure', 'markup'] as const).filter((next) => !reviewOnly || (next !== 'measure' && next !== 'markup')).map((next) =>
                 <option key={next} value={next}>{t(`workspace.tabs.${next}`)}</option>)}
-            </select>
+            </Select>
           </label>
           {/* Page + calibration state sits under the tabs, so it is present in every tab. */}
           <PageStatusBar readOnly={reviewOnly} />

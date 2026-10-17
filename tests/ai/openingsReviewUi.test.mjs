@@ -140,7 +140,8 @@ test('opening review reuses room dock/editor and keeps review decisions explicit
     await dock.getByRole('button', { name: 'דחיית הפתח', exact: true }).click();
     assert.equal(await page.evaluate(() => window.reviewStore.getState().selectedOpeningId), 'uncertain');
     assert.equal(await dock.getByRole('button', { name: 'אישור', exact: true }).last().isDisabled(), true);
-    await dock.locator('.form-row').filter({ hasText: /^סוג פתח/ }).locator('select').selectOption('window');
+    await dock.locator('.form-row').filter({ hasText: /^סוג פתח/ }).getByRole('combobox').click();
+    await page.getByRole('option', { name: 'חלון', exact: true }).click();
     assert.equal(await dock.getByRole('button', { name: 'אישור', exact: true }).last().isDisabled(), true);
     await dock.getByRole('button', { name: 'בחירת נקודות קצה מחדש בתכנית', exact: true }).click();
     assert.equal(await page.evaluate(() => window.reviewStore.getState().openingPlacement.openingId), 'uncertain');

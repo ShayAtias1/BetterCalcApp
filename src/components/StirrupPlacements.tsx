@@ -7,6 +7,7 @@ import { round } from '../lib/geometry';
 import { cmToMeters, metersToCm } from '../lib/structuralUnits';
 import NumberField from './NumberField';
 import Icon from './Icon';
+import Select from './Select';
 
 export default function StirrupPlacements({ item }: { item: RebarStirrup }) {
   const t = useT();
@@ -28,10 +29,10 @@ export default function StirrupPlacements({ item }: { item: RebarStirrup }) {
   return <section className="rebar-level">
     <span className="section-label">{t('rebar.stirrup.placements')}</span>
     <div className="form-row"><label>{t('exports.structural.headers.page')}</label>
-      <select value={placementPage} onChange={(e) => setPlacementPage(Number(e.target.value))}>
+      <Select value={placementPage} onChange={(e) => setPlacementPage(Number(e.target.value))}>
         {Array.from({ length: Math.max(numPages, currentPage, 1) }, (_, index) => index + 1).map((page) =>
           <option key={page} value={page}>{t('concrete.page', { page })}</option>)}
-      </select>
+      </Select>
     </div>
     <button className="btn-ghost small" onClick={() => begin('line')}>{t('rebar.stirrup.addPlacement')} · {t('rebar.stirrup.line')}</button>
     <button className="btn-ghost small" onClick={() => begin('area')}>{t('rebar.stirrup.addPlacement')} · {t('rebar.stirrup.area')}</button>

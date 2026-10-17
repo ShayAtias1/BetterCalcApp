@@ -7,6 +7,7 @@ import { CHANGE_KINDS, changeMeasurements, changeNumbering, changeTotals } from 
 import { round } from '../../lib/geometry';
 import Icon from '../Icon';
 import { useT } from '../../i18n';
+import Select from '../Select';
 
 /** Never smaller than a header plus a couple of rows, never taller than leaving a strip of plan. */
 const MIN_HEIGHT = 160;
@@ -235,7 +236,7 @@ export default function ChangesPanel({ mobileOpen = false, onMobileClose }: { mo
                         {/* Reclassifying keeps the geometry and every derived quantity as they are. */}
                         <span className="changes-kind-cell">
                           <span className="color-dot" style={{ background: comparison.areaKindColors[m.areaKind!] }} />
-                          <select
+                          <Select
                             disabled={readOnly || !!m.revisionChangeId}
                             className="changes-kind-select"
                             value={m.areaKind}
@@ -248,7 +249,7 @@ export default function ChangesPanel({ mobileOpen = false, onMobileClose }: { mo
                                 {t(`areaKinds.${k}`)}
                               </option>
                             ))}
-                          </select>
+                          </Select>
                         </span>
                       </td>
                       <td className="num">{m.pageNumber}</td>

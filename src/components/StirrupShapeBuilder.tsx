@@ -12,6 +12,7 @@ import { round } from '../lib/geometry';
 import NumberField from './NumberField';
 import { moveCustomShapePoint, snapNewShapeEndpoint } from '../lib/stirrupShapeEditing';
 import type { ShapeDrawingMode } from '../lib/stirrupShapeEditing';
+import Select from './Select';
 
 export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
   const { touchInput, reviewOnly } = useWorkspaceLayout();
@@ -167,13 +168,13 @@ export default function StirrupShapeBuilder({ item }: { item: RebarStirrup }) {
   const activeSegment = selectedSegment === null ? undefined : model.segments[selectedSegment];
   return <section className="rebar-level" onKeyDown={(event) => { if (event.key === 'Escape') setExtension(null); }}>
     <span className="section-label">{t('rebar.stirrup.shape')}</span>
-    <select value={item.shape.template} onChange={(e) => {
+    <Select value={item.shape.template} onChange={(e) => {
       const template = e.target.value as StirrupTemplate;
       selectSegment(null); selectPoint(null);
       set(template === 'custom' ? { ...item.shape, template } : stirrupTemplate(template, model.widthM || 0.3, model.heightM || 0.5));
     }}>
       {(['rectangle', 'u', 'l', 'custom'] as const).map((template) => <option key={template} value={template} disabled={reviewOnly}>{t(`rebar.stirrup.templates.${template}`)}</option>)}
-    </select>
+    </Select>
     {touchInput && custom && !reviewOnly && <button className="btn-ghost" aria-pressed={touchEditing}
       onClick={() => { setTouchEditing(!touchEditing); drag.current = null; setPreview(null); setExtension(null); }}>{t(touchEditing ? 'adaptive.browse' : 'field.editShape')}</button>}
     <svg ref={svgRef} viewBox="0 0 110 110" width="100%" height="220" direction="ltr" aria-label={t('rebar.stirrup.shape')}

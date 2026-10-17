@@ -16,6 +16,7 @@ import Icon from './Icon';
 import { multiPlanAiCopy } from './multiPlanAiCopy';
 import { useMultiPlanAiDialog } from './multiPlanAiEntry';
 import './MultiPlanAi.css';
+import Select from './Select';
 
 type Inventory = Awaited<ReturnType<typeof inspectBatchPlans>>;
 export default function MultiPlanAi(){
@@ -186,7 +187,7 @@ export default function MultiPlanAi(){
         </>}
         {stage==='results'&&<>
           <StageHeading headingRef={headingRef} title={l.resultsTitle} description={l.resultsIntro}/>
-          {projectBatches.length>0&&<div className="mp-batch-picker"><label htmlFor="mp-batch-picker">{l.batches}</label><select id="mp-batch-picker" value={batch?.id??''} onChange={e=>{setBatchId(e.target.value);setStopping(false);setPlans([]);setReviews({});}}><option value="" disabled>{l.openBatch}</option>{projectBatches.map(b=><option key={b.id} value={b.id}>{new Date(b.createdAt).toLocaleString(language==='he'?'he-IL':'en-GB')} · {b.pages.length} {l.pages} · {b.state==='running'?l.processing:b.state==='paused'?l.paused:l.finished}</option>)}</select></div>}
+          {projectBatches.length>0&&<div className="mp-batch-picker"><label htmlFor="mp-batch-picker">{l.batches}</label><Select id="mp-batch-picker" value={batch?.id??''} onChange={e=>{setBatchId(e.target.value);setStopping(false);setPlans([]);setReviews({});}}><option value="" disabled>{l.openBatch}</option>{projectBatches.map(b=><option key={b.id} value={b.id}>{new Date(b.createdAt).toLocaleString(language==='he'?'he-IL':'en-GB')} · {b.pages.length} {l.pages} · {b.state==='running'?l.processing:b.state==='paused'?l.paused:l.finished}</option>)}</Select></div>}
           {!projectBatches.length&&<div className="mp-empty"><Icon name="layers" size={28}/><h3>{l.noBatches}</h3><p>{l.noBatchesHint}</p><button className="btn-primary" disabled={busy||!batchReady||globalRunning} onClick={newBatch}>{l.newBatch}</button></div>}
           {batch&&quantities&&<>
             <div className="mp-progress-counts" role="status"><ScopeCount value={batch.pages.length} label={l.scopePages}/><ScopeCount value={batch.pages.filter(p=>pageStatus(p)==='completed').length} label={l.completed}/><ScopeCount value={batch.pages.filter(p=>pageStatus(p)==='queued').length} label={l.queued}/><ScopeCount value={reviewCount} label={l.awaitingReview}/><ScopeCount value={batch.pages.filter(p=>pageStatus(p)==='failed').length} label={l.failed}/></div>

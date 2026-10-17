@@ -6033,3 +6033,159 @@ html[dir='rtl'] .header-calibration-action + .header-calibration-action { border
   white-space: nowrap;
   inline-size: auto;
 }
+
+/* Shared dropdown (Select.tsx): the field looks like the app's other inputs; the list floats above the page. */
+.bc-select {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.bc-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  inline-size: 100%;
+  min-block-size: 32px;
+  padding: 6px 10px;
+  font: inherit;
+  text-align: start;
+  color: var(--text-h);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.bc-select-trigger:hover:not(:disabled) { border-color: var(--accent); }
+.bc-select-trigger:focus-visible,
+.bc-select.is-open .bc-select-trigger {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.bc-select-trigger:disabled { opacity: 0.45; cursor: not-allowed; }
+.bc-select-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bc-select-chevron {
+  flex: none;
+  color: var(--muted);
+  transition: transform 0.2s ease;
+}
+.bc-select.is-open .bc-select-chevron { transform: rotate(180deg); color: var(--accent); }
+
+.bc-select-list {
+  position: fixed;
+  z-index: 1000;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(20, 24, 36, 0.16), 0 2px 6px rgba(20, 24, 36, 0.06);
+  transform-origin: top center;
+  animation: bc-select-in 0.14s ease-out;
+}
+@keyframes bc-select-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.bc-select-option {
+  display: flex;
+  align-items: center;
+  min-block-size: 36px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  color: var(--text-h);
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+.bc-select-option + .bc-select-option { margin-block-start: 2px; }
+.bc-select-option.is-active { background: var(--accent-bg); }
+.bc-select-option.is-selected,
+.bc-select-option.is-selected.is-active { background: var(--accent); color: #fff; }
+.bc-select-option.is-disabled { opacity: 0.45; cursor: not-allowed; }
+.bc-select-group {
+  padding: 8px 12px 4px;
+  font: var(--t-label);
+  color: var(--muted);
+}
+
+[data-touch-input='true'] .bc-select-trigger,
+[data-layout='compact'] .bc-select-trigger,
+[data-layout='narrow'] .bc-select-trigger { min-block-size: 44px; font-size: 16px; }
+[data-touch-input='true'] .bc-select-option { min-block-size: 44px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bc-select-list { animation: none; }
+  .bc-select-trigger, .bc-select-chevron, .bc-select-option { transition: none; }
+}
+
+/* Compact, field-less variants that used to restyle the native <select> through their own class. */
+.bc-select.compare-revision-select,
+.bc-select.changes-kind-select,
+.bc-select.acct-select {
+  inline-size: auto;
+  max-inline-size: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  block-size: auto;
+}
+.bc-select.compare-revision-select { max-inline-size: 160px; }
+.bc-select.compare-revision-select .bc-select-trigger,
+.bc-select.changes-kind-select .bc-select-trigger {
+  padding: 1px 6px;
+  min-block-size: 0;
+  border-color: transparent;
+  background: transparent;
+  font: var(--t-meta);
+  font-weight: 600;
+}
+.bc-select.compare-revision-select .bc-select-trigger:hover,
+.bc-select.changes-kind-select .bc-select-trigger:hover { border-color: var(--border-strong); background: var(--bg-surface); }
+.bc-select.acct-select .bc-select-trigger { block-size: 32px; font: var(--t-body); border-radius: var(--r-md); }
+.bc-select.work-item-add { margin-block-start: 6px; }
+.bc-select.work-item-add .bc-select-trigger {
+  min-block-size: 32px;
+  border: 1px dashed var(--border-dashed);
+  color: var(--accent);
+  font-weight: 600;
+}
+/* The room pickers draw their own ▾ next to the field; the shared one replaces it. */
+.room-workspace-select .menu-caret { display: none; }
+.room-workspace-select .bc-select-trigger { font-weight: 600; }
+.active-apartment-row .bc-select { flex: 1; }
+.selection-bar-rooms .bc-select { flex: 1; }
+.selection-bar-rooms .bc-select-trigger { min-block-size: 30px; font-size: 12px; padding-block: 2px; }
+
+/* ---------- Scrollbars: slim 6px, transparent track, blue-gray thumb that turns brand blue on hover ---------- */
+:root {
+  --scrollbar-thumb: #b4bfd3;
+  --scrollbar-thumb-hover: var(--accent);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --scrollbar-thumb: #4a5468; }
+}
+/* Chrome, Edge, Safari */
+*::-webkit-scrollbar { width: 6px; height: 6px; background: transparent; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-corner { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 999px; }
+*::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:active { background: var(--scrollbar-thumb-hover); }
+/* Firefox (the standard properties would override the rules above in Chrome, so only where they are not supported) */
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
+  *:hover { scrollbar-color: var(--scrollbar-thumb-hover) transparent; }
+}

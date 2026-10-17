@@ -9,6 +9,7 @@ import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { formatNumber, useT } from '../i18n';
 import { polygonAreaM2, round } from '../lib/geometry';
 import Icon from './Icon';
+import Select from './Select';
 
 /** Review content uses an opt-in window above its fixed launcher. */
 /** Without a part: the tablet/phone review window. With a part: one half of the desktop review workspace. */
@@ -88,7 +89,7 @@ export default function AiReviewWorkspace({part}:{part?:'queue'|'detail'}={}){
           </div>
           {!!selected.validationProblems?.length&&<div className="ai-review-hard-error" role="status"><strong>{t('aiReview.blocked')}</strong>{selected.validationProblems.map(problem=><p key={problem} dir="auto">{aiWarningText(problem,t)}</p>)}</div>}
           <div className="ai-review-type">
-            <label>{t('aiReview.type')}<select value={aiCandidateTypeKey(selected)??''} onChange={event=>actions().setDetectionCandidateType(selected.id,event.target.value||null)}><option value="">{t('aiReview.unknown')}</option>{ROOM_PROFILES.map(profile=><option key={profile.key} value={profile.key}>{roomProfileName(profile,t)}</option>)}</select></label>
+            <label>{t('aiReview.type')}<Select value={aiCandidateTypeKey(selected)??''} onChange={event=>actions().setDetectionCandidateType(selected.id,event.target.value||null)}><option value="">{t('aiReview.unknown')}</option>{ROOM_PROFILES.map(profile=><option key={profile.key} value={profile.key}>{roomProfileName(profile,t)}</option>)}</Select></label>
             {aiCandidateTypeKey(selected)&&<button className="btn-secondary small" disabled={selected.semanticTypeConfirmed} onClick={()=>actions().confirmDetectionCandidateType(selected.id)}>{t(selected.semanticTypeConfirmed?'aiReview.typeConfirmed':'aiReview.confirmType')}</button>}
           </div>
           <p className="muted">{t('aiReview.typeUnconfirmed')} {t('aiReview.noFinishes')}</p>
@@ -135,7 +136,7 @@ export default function AiReviewWorkspace({part}:{part?:'queue'|'detail'}={}){
       <section className="ai-review-section">
         <h4>{t('aiReview.type')}</h4>
         <div className="ai-review-type">
-          <select aria-label={t('aiReview.type')} value={aiCandidateTypeKey(selected)??''} onChange={event=>actions().setDetectionCandidateType(selected.id,event.target.value||null)}><option value="">{t('aiReview.unknown')}</option>{ROOM_PROFILES.map(profile=><option key={profile.key} value={profile.key}>{roomProfileName(profile,t)}</option>)}</select>
+          <Select aria-label={t('aiReview.type')} value={aiCandidateTypeKey(selected)??''} onChange={event=>actions().setDetectionCandidateType(selected.id,event.target.value||null)}><option value="">{t('aiReview.unknown')}</option>{ROOM_PROFILES.map(profile=><option key={profile.key} value={profile.key}>{roomProfileName(profile,t)}</option>)}</Select>
           {aiCandidateTypeKey(selected)&&<button className="btn-secondary small" disabled={selected.semanticTypeConfirmed} onClick={()=>actions().confirmDetectionCandidateType(selected.id)}>{t(selected.semanticTypeConfirmed?'aiReview.typeConfirmed':'aiReview.confirmType')}</button>}
         </div>
         <p className="muted">{t('aiReview.typeUnconfirmed')} {t('aiReview.noFinishes')}</p>

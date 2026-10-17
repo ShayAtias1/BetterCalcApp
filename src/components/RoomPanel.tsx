@@ -35,6 +35,7 @@ import { round } from '../lib/geometry';
 import AutoDetectPanel, { DetectionReviewPanel } from './AutoDetectPanel';
 import Icon from './Icon';
 import { InspectorCloseButton, InspectorEmpty, type PanelPart } from './PanelPart';
+import Select from './Select';
 
 const OPENING_TYPES: OpeningType[] = ['door', 'window', 'custom'];
 
@@ -135,18 +136,18 @@ function LegacyRoomOpenings({ readOnly }: { readOnly: boolean }) {
     <summary>{t('openingTools.roomQuantityRows')}</summary>
     <div className="form-row">
       <label htmlFor={`${id}-legacy-apartment`}>{t('rooms.detail.apartment')}</label>
-      <select id={`${id}-legacy-apartment`} value={apartment} onChange={event => {
+      <Select id={`${id}-legacy-apartment`} value={apartment} onChange={event => {
         setChosenApartment(event.target.value);
         setRoomId(null);
       }}>
         {apartments.map(number => <option key={number} value={number}>{number ? t('rooms.apartment', { apartment: number }) : t('rooms.unassigned')}</option>)}
-      </select>
+      </Select>
     </div>
     <div className="form-row">
       <label htmlFor={`${id}-legacy-room`}>{t('openingTools.quantityRoom')}</label>
-      <select id={`${id}-legacy-room`} value={room.id} onChange={event => setRoomId(event.target.value)}>
+      <Select id={`${id}-legacy-room`} value={room.id} onChange={event => setRoomId(event.target.value)}>
         {apartmentRooms.map(item => <option key={item.id} value={item.id}>{item.name || t('rooms.unnamed')}</option>)}
-      </select>
+      </Select>
     </div>
     <ReviewFields readOnly={readOnly}><OpeningsEditor openings={room.openings ?? []}
       onUpdate={(openingId, patch) => update(room.id, openingId, patch)}
@@ -316,7 +317,7 @@ function RoomsAndAreasPanel({ readOnly = false, part }: { readOnly?: boolean; pa
       <div className="active-apartment-row">
         <label htmlFor="active-apartment">{t('rooms.workingIn')}</label>
         <div className="room-workspace-select">
-        <select
+        <Select
           id="active-apartment"
           value={activeApartmentNumber}
           title={t('rooms.workingInHint')}
@@ -335,7 +336,7 @@ function RoomsAndAreasPanel({ readOnly = false, part }: { readOnly?: boolean; pa
             <option value={activeApartmentNumber}>{t('rooms.apartment', { apartment: activeApartmentNumber })}</option>
           )}
           <option value="__new__">{t('rooms.newApartment')}</option>
-        </select>
+        </Select>
         <span className="menu-caret" aria-hidden="true">▾</span>
         </div>
       </div>
@@ -345,7 +346,7 @@ function RoomsAndAreasPanel({ readOnly = false, part }: { readOnly?: boolean; pa
       <div className="active-apartment-row">
         <label htmlFor="new-room-template">{t('rooms.newRoomTemplate')}</label>
         <div className="room-workspace-select">
-        <select
+        <Select
           id="new-room-template"
           value={newRoomTemplate ?? ''}
           title={t('rooms.newRoomTemplateHint')}
@@ -357,7 +358,7 @@ function RoomsAndAreasPanel({ readOnly = false, part }: { readOnly?: boolean; pa
               {roomProfileName(p)}
             </option>
           ))}
-        </select>
+        </Select>
         <span className="menu-caret" aria-hidden="true">▾</span>
         </div>
       </div>
@@ -428,7 +429,7 @@ function RoomsAndAreasPanel({ readOnly = false, part }: { readOnly?: boolean; pa
             <button type="button" className="btn-ghost small selection-bar-cancel" onClick={() => setDeletionRoomIds([])}>{t('common.cancel')}</button>
           </div>
           <div className="selection-bar-row">
-            <select aria-label={t('rooms.detail.apartment')} value={selectionTarget} onChange={async (e) => {
+            <Select aria-label={t('rooms.detail.apartment')} value={selectionTarget} onChange={async (e) => {
               const value = e.target.value;
               if (value === '__new__') {
                 const next = await promptDialog(t('rooms.newApartmentPrompt'), '');
@@ -441,7 +442,7 @@ function RoomsAndAreasPanel({ readOnly = false, part }: { readOnly?: boolean; pa
                 <option value={selectionTarget}>{t('rooms.apartment', { apartment: selectionTarget })}</option>
               )}
               <option value="__new__">{t('rooms.newApartment')}</option>
-            </select>
+            </Select>
             <button className="btn-primary small" disabled={!selectionTarget.trim()} onClick={() => {
               assignRoomsToApartment(selectedDeletionIds, selectionTarget);
               setSelectionTarget('');
@@ -473,7 +474,7 @@ function RoomsAndAreasPanel({ readOnly = false, part }: { readOnly?: boolean; pa
               }}>{t('common.cancel')}</button>
             </div>
             <div className="selection-bar-row">
-              <select id="room-assignment-apartment" aria-label={t('rooms.detail.apartment')} value={assignmentTarget} onChange={async (e) => {
+              <Select id="room-assignment-apartment" aria-label={t('rooms.detail.apartment')} value={assignmentTarget} onChange={async (e) => {
                 const value = e.target.value;
                 if (value === '__new__') {
                   const next = await promptDialog(t('rooms.newApartmentPrompt'), '');
@@ -486,7 +487,7 @@ function RoomsAndAreasPanel({ readOnly = false, part }: { readOnly?: boolean; pa
                   <option value={assignmentTarget}>{t('rooms.apartment', { apartment: assignmentTarget })}</option>
                 )}
                 <option value="__new__">{t('rooms.newApartment')}</option>
-              </select>
+              </Select>
               <button className="btn-primary small" disabled={!assignmentTarget.trim() || selectedAssignmentIds.length === 0} onClick={() => {
                 assignRoomsToApartment(selectedAssignmentIds, assignmentTarget);
                 setAssignmentRoomIds([]);
@@ -705,7 +706,7 @@ function RoomDetail({
         {/* Type is a classification, not the name: picking one never rewrites the name above. */}
         <label htmlFor={`room-type-${room.id}`}>{t('rooms.detail.template')}</label>
         <div className="detail-field-with-action">
-          <select id={`room-type-${room.id}`} value={room.roomType ?? ''} onChange={(e) => onSetRoomType(e.target.value || null)}>
+          <Select id={`room-type-${room.id}`} value={room.roomType ?? ''} onChange={(e) => onSetRoomType(e.target.value || null)}>
             <option value="">{t('rooms.detail.noType')}</option>
             {/* A saved type that is not in the catalogue keeps its own option, so opening the picker never silently drops it. */}
             {room.roomType && !ROOM_PROFILES.some((p) => p.key === room.roomType) && (
@@ -716,7 +717,7 @@ function RoomDetail({
                 {roomProfileName(p)}
               </option>
             ))}
-          </select>
+          </Select>
           {/* Re-applying is explicit and replaces the list — picking a template never does it silently. */}
           {room.roomType && ROOM_PROFILES.some((p) => p.key === room.roomType) && room.workItems.length > 0 && (
             <button
@@ -768,10 +769,10 @@ function RoomDetail({
                     </button>
                   </div>
                   <p className="wi-allocation-warning" role="alert">{t('workCatalog.invalidMethod')}</p>
-                  <select aria-label={t('workCatalog.method')} value="" onChange={(e) => { if (isCalculationMethod(e.target.value)) onUpdateWorkItem(item.id, { method: e.target.value }); }}>
+                  <Select aria-label={t('workCatalog.method')} value="" onChange={(e) => { if (isCalculationMethod(e.target.value)) onUpdateWorkItem(item.id, { method: e.target.value }); }}>
                     <option value="">{t('workCatalog.method')}</option>
                     {CALCULATION_METHODS.map((m) => <option key={m} value={m}>{t(`workCatalog.methods.${m}`)}</option>)}
-                  </select>
+                  </Select>
                 </li>
               );
             }
@@ -914,7 +915,7 @@ function RoomDetail({
         {room.workItems.length === 0 && <p className="detail-note">{t('rooms.detail.noWorkItems')}</p>}
         {/* One dashed picker: built-in types, the user's categories, and the catalog manager. Any
             category can be added, more than once. */}
-        <select
+        <Select
           className="work-item-add"
           value=""
           aria-label={t('rooms.detail.addWorkType')}
@@ -940,7 +941,7 @@ function RoomDetail({
             {ownMethodItems.map((s) => <option key={s.id} value={`spec:${s.id}`}>{categoryName(s.categoryId)} › {s.name || t('workCatalog.unknownItem')} · {t(`workCatalog.methods.${s.method!}`)}</option>)}
           </optgroup>}
           <option value="__catalog__">{t('workCatalog.manage')}</option>
-        </select>
+        </Select>
         {catalogOpen && <WorkCatalogDialog plan={project} onClose={() => setCatalogOpen(false)} />}
       </div>
 
@@ -984,7 +985,7 @@ function OpeningsEditor({
         <ul className="opening-list">
           {openings.map((o) => (
             <li key={o.id}>
-              <select
+              <Select
                 value={o.type}
                 aria-label={t('rooms.openings.type')}
                 onChange={(e) => onUpdate(o.id, { type: e.target.value as OpeningType })}
@@ -994,7 +995,7 @@ function OpeningsEditor({
                     {t(`openingTypes.${type}`)}
                   </option>
                 ))}
-              </select>
+              </Select>
               <label>
                 <span>{t('rooms.openings.width')}</span>
                 <input type="number" step="0.05" min="0" value={o.widthM} onChange={(e) => onUpdate(o.id, { widthM: num(e.target.value) })} />
@@ -1068,13 +1069,13 @@ function DuplicateApartmentDialog({
         <h3>{t('rooms.duplicateDialog.title')}</h3>
         <div className="form-row">
           <label>{t('rooms.duplicateDialog.source')}</label>
-          <select value={source} onChange={(e) => setSource(e.target.value)}>
+          <Select value={source} onChange={(e) => setSource(e.target.value)}>
             {apartments.map((a) => (
               <option key={a} value={a}>
                 {t('rooms.apartment', { apartment: a })}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <p className="muted">{t('rooms.duplicateDialog.summary', { count: roomCount })}</p>
 

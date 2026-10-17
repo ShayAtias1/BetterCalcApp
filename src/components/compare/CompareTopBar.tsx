@@ -14,6 +14,7 @@ import ViewModeSwitch from './ViewModeSwitch';
 import LanguageSwitch from '../LanguageSwitch';
 import AccountMenu from '../AccountMenu';
 import { useT } from '../../i18n';
+import Select from '../Select';
 
 export default function CompareTopBar({
   onExport,
@@ -142,7 +143,7 @@ export default function CompareTopBar({
         <span className="compare-context-chip" title={t('compare.topBar.revisionContext')}>
           <span className="muted">{t('compare.topBar.revisionShort')}:</span>
           {comparison.revisions.length > 0 ? (
-            <select
+            <Select
               className="compare-revision-select"
               value={comparison.activeRevisionId}
               onChange={(e) => setActiveRevisionId(e.target.value)}
@@ -153,7 +154,7 @@ export default function CompareTopBar({
                   {r.label}
                 </option>
               ))}
-            </select>
+            </Select>
           ) : (
             <span className="cal-missing">{t('compare.topBar.noRevision')}</span>
           )}

@@ -2,6 +2,7 @@ import { selectCompareSaveState, useCompareStore } from '../../store/compareStor
 import { useT } from '../../i18n';
 import AdaptiveHeader from '../AdaptiveHeader';
 import ViewModeSwitch from './ViewModeSwitch';
+import Select from '../Select';
 
 export default function CompareCompactHeader() {
   const t = useT();
@@ -21,9 +22,9 @@ export default function CompareCompactHeader() {
   };
   return <AdaptiveHeader title={comparison.name} sheet={sheet} sheetCount={count} onSheet={setSheet}
     onBack={() => void close()} saveState={saveState} calibrated={!!comparison.pages[sheet]?.originalCalibration}
-    picker={<label className="adaptive-sheet-picker">{t('adaptive.revision')}<select value={comparison.activeRevisionId ?? ''} onChange={(e) => setRevision(e.target.value)}>
+    picker={<label className="adaptive-sheet-picker">{t('adaptive.revision')}<Select value={comparison.activeRevisionId ?? ''} onChange={(e) => setRevision(e.target.value)}>
       {comparison.revisions.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
-    </select></label>}
+    </Select></label>}
     view={<><ViewModeSwitch />
       <button className="menu-item" aria-pressed={annotations} onClick={() => useCompareStore.getState().toggleAnnotationsVisible()}>{t('workspace.tabs.markup')}</button>
       <button className="menu-item" aria-pressed={measurements} onClick={() => useCompareStore.getState().toggleMeasurementsVisible()}>{t('workspace.tabs.measure')}</button>

@@ -13,6 +13,7 @@ import { notify } from '../lib/appDialogs';
 import { useBulkTakeoffDialog } from './bulkTakeoffEntry';
 import AppModal from './AppModal';
 import './BulkTakeoff.css';
+import Select from './Select';
 
 const STEPS = ['selectRooms', 'chooseItems', 'configure', 'preview'] as const;
 const POLICIES: BulkConflictPolicy[] = ['add-missing', 'update-existing', 'skip-conflicts'];
@@ -108,15 +109,15 @@ function BulkWorkspace({ plan, initialPage, onClose }: { plan: Plan; initialPage
       <h3 id="bulk-step-title">{t(`bulkTakeoff.${STEPS[step]}`)}</h3>
       {step === 0 && <>
         <div className="bulk-filters">
-          <label>{t('bulkTakeoff.type')}<select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+          <label>{t('bulkTakeoff.type')}<Select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
             <option value="*">{t('bulkTakeoff.all')}</option>{types.map(type => <option key={type} value={type}>{roomProfileLabel(type, t) ?? t('rooms.detail.noType')}</option>)}
-          </select></label>
-          <label>{t('bulkTakeoff.apartment')}<select value={apartmentFilter} onChange={e => setApartmentFilter(e.target.value)}>
+          </Select></label>
+          <label>{t('bulkTakeoff.apartment')}<Select value={apartmentFilter} onChange={e => setApartmentFilter(e.target.value)}>
             <option value="*">{t('bulkTakeoff.all')}</option>{apartments.map(a => <option key={a} value={a}>{a || t('rooms.unassigned')}</option>)}
-          </select></label>
-          <label>{t('bulkTakeoff.page')}<select value={pageFilter} onChange={e => setPageFilter(e.target.value)}>
+          </Select></label>
+          <label>{t('bulkTakeoff.page')}<Select value={pageFilter} onChange={e => setPageFilter(e.target.value)}>
             <option value="*">{t('bulkTakeoff.all')}</option>{pages.map(page => <option key={page} value={page}>{page}</option>)}
-          </select></label>
+          </Select></label>
           <label>{t('bulkTakeoff.search')}<input value={search} onChange={e => setSearch(e.target.value)} /></label>
         </div>
         <div className="bulk-selection-actions">
@@ -143,14 +144,14 @@ function BulkWorkspace({ plan, initialPage, onClose }: { plan: Plan; initialPage
           const def = workItemDefinition(c)!;
           const key = bulkConfigKey(c);
           return <fieldset key={key}><legend>{labelOf(c)}</legend>
-            {c.type === 'tiling' && <label>{t('rooms.detail.tilingCategory')}<select value={c.tilingCategory ?? 'regular'} onChange={e => {
+            {c.type === 'tiling' && <label>{t('rooms.detail.tilingCategory')}<Select value={c.tilingCategory ?? 'regular'} onChange={e => {
               const category = e.target.value as 'regular' | 'as';
               const previousDefault = effectiveWastePercent({ ...c, id: '', wastePercent: undefined }, plan);
               patchConfig(key, { tilingCategory: category, ...(c.wastePercent === previousDefault ?
                 { wastePercent: effectiveWastePercent({ ...c, id: '', tilingCategory: category, wastePercent: undefined }, plan) } : {}) });
             }}>
               <option value="regular">{t('tilingCategories.regular')}</option><option value="as">{t('tilingCategories.as')}</option>
-            </select></label>}
+            </Select></label>}
             {def.height && <label>{c.type === 'custom' ? t('workCatalog.height') : t(`workTypeHeights.${c.type as Exclude<WorkType, 'tiling'>}`)}
               <input type="number" step="0.01" min={def.basis === 'floorAndUpturn' ? 0 : 0.01} value={Number.isFinite(c.heightM) ? c.heightM : ''} onChange={e => patchConfig(key, { heightM: e.target.valueAsNumber })} />
               <small>{t('bulkTakeoff.requiredHeight')}</small>

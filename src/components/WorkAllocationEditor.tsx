@@ -7,6 +7,7 @@ import { useWorkCatalog } from '../store/workCatalogStore';
 import type { Plan, Room, WorkAllocation, WorkCatalogSnapshot, WorkItem, WorkSpec } from '../types';
 import Icon from './Icon';
 import './WorkCatalog.css';
+import Select from './Select';
 
 /**
  * Splits one room work item's quantity between work items / specifications of its category. The
@@ -91,12 +92,12 @@ export default function WorkAllocationEditor({ plan, room, item, onChange }: {
   const allocated = result.baseline === null ? null : result.baseline - (result.unassigned ?? 0);
   const balanced = result.baseline !== null && result.over === 0 && (result.unassigned ?? 0) === 0;
   const addPicker = (
-    <select className="wi-allocation-add" value="" aria-label={t('workCatalog.addAllocation', { category: categoryName })} title={t('workCatalog.splitHint')}
+    <Select className="wi-allocation-add" value="" aria-label={t('workCatalog.addAllocation', { category: categoryName })} title={t('workCatalog.splitHint')}
       onChange={(e) => { if (e.target.value) void addLine(e.target.value); }}>
       <option value="">{t('workCatalog.addAllocation', { category: categoryName })}</option>
       {unused.map((s) => <option key={s.id} value={s.id}>{s.name || t('workCatalog.unknownItem')}{s.specification ? ` · ${s.specification}` : ''}</option>)}
       <option value="__new__">{t('workCatalog.newItemOption')}</option>
-    </select>
+    </Select>
   );
 
   // No split yet: one obvious action. With a split: calculated quantity → types → total, in one block.
@@ -115,12 +116,12 @@ export default function WorkAllocationEditor({ plan, room, item, onChange }: {
           const remainder = line && !line.manual;
           return (
             <li key={a.id} className={remainder ? 'is-remainder' : ''}>
-              <select className="wi-allocation-spec" value={a.specId} aria-label={t('workCatalog.itemName')} title={specById(a.specId)?.specification || undefined}
+              <Select className="wi-allocation-spec" value={a.specId} aria-label={t('workCatalog.itemName')} title={specById(a.specId)?.specification || undefined}
                 onChange={(e) => void setSpec(i, e.target.value)}>
                 {!specById(a.specId) && <option value={a.specId}>{nameOf(a.specId)}</option>}
                 {options.map((s) => <option key={s.id} value={s.id}>{s.name || t('workCatalog.unknownItem')}{s.specification ? ` · ${s.specification}` : ''}</option>)}
                 <option value="__new__">{t('workCatalog.newItemOption')}</option>
-              </select>
+              </Select>
               <input
                 className="wi-allocation-qty"
                 type="number"

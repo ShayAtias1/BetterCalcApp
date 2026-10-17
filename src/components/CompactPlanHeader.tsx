@@ -5,6 +5,7 @@ import { useT } from '../i18n';
 import AdaptiveHeader from './AdaptiveHeader';
 import GridMenuSection from './GridMenuSection';
 import QuantityExportActions from './QuantityExportActions';
+import Select from './Select';
 
 const overlayLabel = { finishes: 'workspace.tabs.rooms', concrete: 'workspace.tabs.concrete', rebar: 'workspace.tabs.rebar', measurements: 'workspace.tabs.measure', markups: 'workspace.tabs.markup' } as const;
 export default function CompactPlanHeader() {
@@ -22,9 +23,9 @@ export default function CompactPlanHeader() {
   if (!plan) return null;
   return <AdaptiveHeader title={plan.name} sheet={sheet} sheetCount={count} onSheet={onSheet}
     onBack={() => void closePlan()} saveState={saveState} calibrated={isPageCalibrated(plan, sheet)}
-    picker={<label className="adaptive-sheet-picker">{t('topBar.plans')}<select value={plan.id} onChange={(e) => void openPlan(e.target.value)}>
+    picker={<label className="adaptive-sheet-picker">{t('topBar.plans')}<Select value={plan.id} onChange={(e) => void openPlan(e.target.value)}>
       {plans.map((p) => <option key={p.id} value={p.id}>{p.id === plan.id ? plan.name : p.name}</option>)}
-    </select></label>}
+    </Select></label>}
     view={<>{OVERLAY_KEYS.map((key) => <button className="menu-item" key={key} aria-pressed={visible[key]} onClick={() => setVisible(key, !visible[key])}>
       {visible[key] ? '✓ ' : ''}{t(overlayLabel[key])}
     </button>)}<GridMenuSection /></>}

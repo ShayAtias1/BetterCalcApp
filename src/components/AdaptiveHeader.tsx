@@ -5,6 +5,7 @@ import { BrandHomeLink } from './BrandLogo';
 import TopBarMenu, { type MenuId } from './TopBarMenu';
 import LanguageSwitch from './LanguageSwitch';
 import { AccountMenuItems } from './AccountMenu';
+import Select from './Select';
 
 export default function AdaptiveHeader({ title, sheet, sheetCount, onSheet, onBack, saveState, calibrated, picker, view, more }: {
   title: string; sheet: number; sheetCount: number; onSheet: (sheet: number) => void;
@@ -37,9 +38,9 @@ export default function AdaptiveHeader({ title, sheet, sheetCount, onSheet, onBa
       <TopBarMenu id="plans" openId={menu} setOpenId={setMenu} label={`${t('adaptive.sheet')} ${sheet} / ${sheetCount}`} variant="ghost">
         {picker}
         <label className="adaptive-sheet-picker">{t('adaptive.sheets')}
-          <select value={sheet} onChange={(e) => { onSheet(Number(e.target.value)); setMenu(null); }}>
+          <Select value={sheet} onChange={(e) => { onSheet(Number(e.target.value)); setMenu(null); }}>
             {Array.from({ length: sheetCount }, (_, i) => <option key={i + 1} value={i + 1}>{t('adaptive.sheet')} {i + 1}</option>)}
-          </select>
+          </Select>
         </label>
       </TopBarMenu>
       <button className="icon-btn" disabled={sheet >= sheetCount} onClick={() => onSheet(sheet + 1)} aria-label={t('topBar.nextPage')}><Icon name="chevron-next" /></button>

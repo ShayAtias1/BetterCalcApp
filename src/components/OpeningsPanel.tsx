@@ -16,6 +16,7 @@ import { useOpeningPreset } from './openingPresetStore';
 import type { OpeningRoomSide } from '../types/openings';
 import { InspectorEmpty, type PanelPart } from './PanelPart';
 import './Openings.css';
+import Select from './Select';
 type TextKey = Exclude<keyof typeof import('../i18n/he').he.openingTools, 'additionalRooms' | `count_${string}`>;
 
 export default function OpeningsPanel({ readOnly = false, editorOnly = false, hideAiEditor = false, part }: { readOnly?: boolean; editorOnly?: boolean; hideAiEditor?: boolean; part?: PanelPart }) {
@@ -105,9 +106,9 @@ export default function OpeningsPanel({ readOnly = false, editorOnly = false, hi
   return <section className="openings-panel" aria-label={text('title')}>
     {showList && !readOnly && <div className="opening-creation-methods">
       <div className="opening-actions">
-          <select aria-label={text('type')} value={preset} onChange={e => setPreset(e.target.value as OpeningPreset)}>
+          <Select aria-label={text('type')} value={preset} onChange={e => setPreset(e.target.value as OpeningPreset)}>
             {openingPresets.map(p => <option key={p} value={p}>{text(p)}</option>)}
-          </select>
+          </Select>
           <button className="btn-primary" onClick={() => { setError(''); state.beginOpeningPlacement(preset); }}>{text('planMethod')}</button>
       </div>
       <button className="btn-secondary" onClick={() => {try {state.beginQuantityOpening(preset);setError('');} catch {setError(text('invalid'));}}}>{text('takeoffMethod')}</button>
@@ -192,16 +193,16 @@ export default function OpeningsPanel({ readOnly = false, editorOnly = false, hi
       </div>}
       <div className="opening-fields">
         <label className="form-row">{text('label')}<input value={o.label ?? ''} onChange={e => patch({ label: e.target.value })} /></label>
-        <label className="form-row">{text('type')}<select value={o.kind} onChange={e => patch({kind:e.target.value as PlanOpening['kind']})}>
+        <label className="form-row">{text('type')}<Select value={o.kind} onChange={e => patch({kind:e.target.value as PlanOpening['kind']})}>
           {openingKinds.map(kind => <option key={kind} value={kind}>{openingKindLabel(kind, t)}</option>)}
-        </select></label>
-        <label className="form-row">{text('mechanism')}<select value={o.mechanism} onChange={e => patch({ mechanism: e.target.value as PlanOpening['mechanism'] })}>
+        </Select></label>
+        <label className="form-row">{text('mechanism')}<Select value={o.mechanism} onChange={e => patch({ mechanism: e.target.value as PlanOpening['mechanism'] })}>
           {mechanismsForOpening(o.kind).map(m => <option key={m} value={m}>{openingMechanismLabel(m, t)}</option>)}
           {!mechanismsForOpening(o.kind).includes(o.mechanism) && <option value={o.mechanism}>{openingMechanismLabel(o.mechanism, t)}</option>}
-        </select></label>
-        <label className="form-row">{text('access')}<select value={o.walkableAccess} onChange={e => patch({ walkableAccess: e.target.value as PlanOpening['walkableAccess'] })}>
+        </Select></label>
+        <label className="form-row">{text('access')}<Select value={o.walkableAccess} onChange={e => patch({ walkableAccess: e.target.value as PlanOpening['walkableAccess'] })}>
           {(['supported','unsupported','unknown'] as const).map(v => <option key={v} value={v}>{text(v === 'unknown' ? 'unknownAccess' : v)}</option>)}
-        </select></label>
+        </Select></label>
       </div>
       <section className="opening-section">
         <h4>{text('dimensions')}</h4>
