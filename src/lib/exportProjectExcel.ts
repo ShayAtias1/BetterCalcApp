@@ -3,6 +3,7 @@ import { saveAs } from 'file-saver';
 import type { Plan, Project } from '../types';
 import type { Language } from '../i18n';
 import { exportContext } from './exportLanguage';
+import { addExcelNotice } from './legal/exportNotice';
 import { buildProjectQuantities } from './projectQuantities';
 import { addProjectStructuralSheets } from './exportStructuralExcel';
 import { buildProjectStructural, buildStructuralReport } from './structuralQuantities';
@@ -17,6 +18,7 @@ export async function exportProjectToExcel(project: Project, plans: Plan[], cont
   const workbook = buildProjectWorkbook(project, plans, language, content);
   // A selection with nothing to write would save a file Excel cannot open.
   if (workbook.worksheets.length === 0) throw new Error('The selected content has nothing to export.');
+  addExcelNotice(workbook, language, exportContext(language).rtl);
   const buffer = await workbook.xlsx.writeBuffer();
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, '_');
   saveAs(new Blob([buffer], { type: 'application/octet-stream' }), exportContext(language).t('exports.excel.projectFileName', { name: safeName }));

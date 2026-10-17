@@ -18,8 +18,19 @@ import {
   type Profile,
 } from '../lib/account/accountApi';
 
-/** Used as the accepted version until the terms and privacy texts are published. */
+/** Used as the accepted version until the terms and privacy texts are published (the server's own placeholder). */
 export const LEGAL_VERSION_PENDING = 'pending';
+
+/**
+ * Whether this account has accepted the version the server currently announces. A new version (set in Supabase when the
+ * texts are published) asks everyone again; the same completion step records it, with the server's own clock.
+ */
+export function hasAcceptedCurrentTerms(profile: Pick<Profile, 'onboardingCompleted' | 'termsVersion'> | null, flags: Pick<CommercialFlags, 'legalVersion'>): boolean {
+  if (!profile || !profile.onboardingCompleted) return false;
+  // Until the server announces a version nobody is asked again, including an account onboarded before versions were stored.
+  if (flags.legalVersion == null) return profile.termsVersion == null || profile.termsVersion === LEGAL_VERSION_PENDING;
+  return profile.termsVersion === flags.legalVersion;
+}
 
 /**
  * The signed-in user's account data and the server's commercial switches. Loaded after sign-in, cleared on
@@ -76,7 +87,7 @@ export function createAccountStore(deps: AccountDeps) {
         const [profile, overview, plans] = await Promise.all([getProfile(client), getAccountOverview(client), listPublicPlans(client).catch(() => [] as PlanSummary[])]);
         if (id !== loadId) return;
         writeCachedName(storage(), deps.auth.getState().user?.id ?? '', profile?.displayName ?? null);
-        set({ flags, profile, overview, plans, needsOnboarding: !!profile && !profile.onboardingCompleted, needsName: !!profile && profile.onboardingCompleted && !profile.displayName, loading: false, loadFailed: false });
+        set({ flags, profile, overview, plans, needsOnboarding: !!profile && !hasAcceptedCurrentTerms(profile, flags), needsName: !!profile && hasAcceptedCurrentTerms(profile, flags) && !profile.displayName, loading: false, loadFailed: false });
       } catch {
         if (id === loadId) set({ loading: false, loadFailed: true });
       }

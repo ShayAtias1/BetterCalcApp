@@ -542,6 +542,22 @@ export const he = {
     page: 'גיליון {page}',
   },
 
+  legalPage: {
+    draftTitle: 'טיוטה, טרם נבדקה משפטית',
+    draftBody: 'מסמך זה הוא טיוטה לבדיקת עורך דין ואינו הנוסח המחייב. פרטים המסומנים בצהוב טרם הושלמו על ידי בעל המוצר.',
+    confirm: 'יושלם על ידי בעל המוצר',
+    active: 'פעיל כעת',
+    soon: 'בקרוב',
+    back: 'חזרה לאפליקציה',
+    other: { terms: 'תנאי השימוש', privacy: 'מדיניות הפרטיות' },
+      },
+
+  guestAck: {
+    title: 'לפני שמתחילים',
+    body: 'BetterCalc היא כלי עזר לחישוב. התוצאות תלויות בתוכניות, בקני המידה ובהגדרות שלך ועלולות לכלול טעויות. עליך לבדוק את כל התוצאות לפני הסתמכות עליהן. BetterCalc אינה הנדסה, כמאות או מדידה מוסמכת.',
+    accept: 'אישור והמשך',
+  },
+
   welcome: {
     title: 'מתוכניות לכמויות. פשוט יותר.',
     subtitle: 'מדידה, חישוב כמויות והשוואת גרסאות במקום אחד.',
@@ -944,7 +960,7 @@ export const he = {
       orderWeight: 'להזמנה',
       status: 'מצב',
     },
-    basis: { exact: 'מדויק', includesEstimate: 'כולל אומדן', estimate: 'אומדן' },
+    basis: { exact: 'מחושב', includesEstimate: 'כולל אומדן', estimate: 'אומדן' },
     sheetsQty: '{count} {count|רשת|רשתות}',
     barsQty: '{count} {count|מוט|מוטות}',
     emptyConcrete: 'עדיין אין אזורי בטון. סמנו בטון בטאב בטון כדי לראות כאן את הכמויות.',
@@ -1903,7 +1919,7 @@ export const he = {
       levelBottom: 'תחתון',
       levelTop: 'עליון',
       basis: {
-        exact: 'מדויק',
+        exact: 'מחושב',
         estimate: 'הערכה',
         includesEstimate: 'כולל הערכה',
       },

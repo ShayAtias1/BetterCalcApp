@@ -37,13 +37,19 @@ import {
   type RoomTemplateKey,
   type UtmParams,
 } from './analyticsPrivacy';
-import { calendarDaysBetween, isReturning, loadLedger, markActive, markFirst, saveLedger, type Ledger } from './analyticsLedger';
+import { LEDGER_KEY, calendarDaysBetween, isReturning, loadLedger, markActive, markFirst, saveLedger, type Ledger } from './analyticsLedger';
 import { baselinePlanReadiness, calibratedPageCount, reportContents, takeQuantitiesReady, workTypesOf } from './analyticsMilestones';
 import { createOncePerKey } from './analyticsDedupe';
 import { buildRoomSummaries, isPageCalibrated } from './quantities';
 import { ROOM_PROFILES } from './roomProfiles';
 
 /** `?bc_internal=1` sets it, `?bc_internal=0` clears it. A flagged browser never sends anything. */
+/**
+ * Master switch. False for the Early Access launch: nothing is initialised, tracked or sent, and no device id is
+ * created. The rest of this module is kept intact; set to true (and the PostHog env values) to bring analytics back.
+ */
+export const ANALYTICS_ENABLED = false;
+
 const INTERNAL_KEY = 'bc_analytics_internal';
 const SESSION_UTM_KEY = 'bc_analytics_session_utm';
 /** Manual alignment counts once the revised layer has stopped moving for this long. */
@@ -100,6 +106,7 @@ function config(): { key: string; host: string } | null {
 }
 
 function decideMode(): Mode {
+  if (!ANALYTICS_ENABLED) return 'off';
   // Debug logs what would be sent and sends nothing, so it is safe anywhere, including `npm run dev`.
   if (import.meta.env.VITE_ANALYTICS_DEBUG === 'true') return 'debug';
   if (import.meta.env.DEV) return 'off';
@@ -152,6 +159,22 @@ function persistLedger(): void {
   if (ledger) saveLedger(localStore(), ledger);
 }
 
+/** While analytics is disabled, drop any device id / session data an earlier build left in this browser. */
+function removeStoredAnalyticsIds(): void {
+  try {
+    const local = localStore();
+    local?.removeItem(LEDGER_KEY);
+    sessionStore()?.removeItem(SESSION_UTM_KEY);
+    if (!local) return;
+    for (let i = local.length - 1; i >= 0; i--) {
+      const k = local.key(i);
+      if (k && /^ph_.*_posthog$/.test(k)) local.removeItem(k);
+    }
+  } catch {
+    // Blocked storage holds nothing to remove.
+  }
+}
+
 // ---------- init ----------
 
 /**
@@ -176,6 +199,7 @@ export function initAnalytics(): void {
     if (cleaned !== url.search) window.history.replaceState(window.history.state, '', `${url.pathname}${cleaned}${url.hash}`);
 
     mode = decideMode();
+    if (!ANALYTICS_ENABLED) removeStoredAnalyticsIds();
     if (mode === 'off') return;
 
     const now = Date.now();

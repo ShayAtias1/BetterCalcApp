@@ -120,7 +120,7 @@ test('rebar BOQ: Mesh per level (Top and Bottom are separate rows of one mark), 
   assert.deepEqual(t.rows[3].cells.slice(1, 7), ['Bars', 'Bars 01', '-', 'Ø16 · Length per bar: 6 m · Total length: 60 m', '10 bars', '-']);
   const total = t.rows.at(-1)!;
   assert.equal(total.cells[5], ''); // sheets and bars are different units: no combined quantity
-  assert.equal(total.cells[9], 'Exact');
+  assert.equal(total.cells[9], 'Calculated');
   assert.ok(!JSON.stringify(layout(p)).includes('Bar lines'));
   assert.ok(!JSON.stringify(layout(p, 'he')).includes('שורות זיון'));
   // the weight total is the sum of the rows

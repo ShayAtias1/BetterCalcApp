@@ -1,4 +1,5 @@
 import { openingPdfSchedule, type OpeningPdfOptions } from './openingQuantityReport';
+import { stampExportNotice } from './legal/pdfExportNotice';
 import { PDFDocument } from 'pdf-lib';
 import { embedReportFonts } from './pdfText';
 import { saveAs } from 'file-saver';
@@ -82,6 +83,7 @@ export async function exportProjectToPdf(project: Project, plans: Plan[], conten
   if (!content.finishes && !content.plan && !(content.concrete && structural.concrete) && !(content.rebar && structural.rebar)) throw new Error('The selected content has nothing to export.');
   if (pdfDoc.getPageCount() === 0) w();
 
+  stampExportNotice(pdfDoc, fonts, language);
   const bytes = await pdfDoc.save();
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, '_');
   saveAs(

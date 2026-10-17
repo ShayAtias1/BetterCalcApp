@@ -544,6 +544,22 @@ export const en: Dictionary = {
     page: 'Sheet {page}',
   },
 
+  legalPage: {
+    draftTitle: 'Draft, not yet legally reviewed',
+    draftBody: 'This document is a draft for review by a lawyer and is not the binding text. Details marked in yellow have not yet been completed by the product owner.',
+    confirm: 'To be completed by the owner',
+    active: 'Active now',
+    soon: 'Coming soon',
+    back: 'Back to the app',
+    other: { terms: 'Terms of Service', privacy: 'Privacy Policy' },
+  },
+
+  guestAck: {
+    title: 'Before you start',
+    body: 'BetterCalc is a calculation aid. Results depend on your plans, scales and settings and may contain errors. You must verify all results before relying on them. BetterCalc is not engineering, quantity-surveying or measurement certification.',
+    accept: 'Accept and continue',
+  },
+
   welcome: {
     title: 'From plans to quantities. Simpler.',
     subtitle: 'Measure, calculate quantities and compare revisions in one place.',
@@ -945,7 +961,7 @@ export const en: Dictionary = {
       orderWeight: 'To order',
       status: 'Status',
     },
-    basis: { exact: 'Exact', includesEstimate: 'Includes estimate', estimate: 'Estimate' },
+    basis: { exact: 'Calculated', includesEstimate: 'Includes estimate', estimate: 'Estimate' },
     sheetsQty: '{count} {count|sheet|sheets}',
     barsQty: '{count} {count|bar|bars}',
     emptyConcrete: 'No concrete zones yet. Mark concrete in the Concrete tab to see its quantities here.',
@@ -1896,7 +1912,7 @@ export const en: Dictionary = {
       levelBottom: 'Bottom',
       levelTop: 'Top',
       basis: {
-        exact: 'Exact',
+        exact: 'Calculated',
         estimate: 'Estimate',
         includesEstimate: 'Includes estimate',
       },

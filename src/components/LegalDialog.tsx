@@ -1,35 +1,17 @@
-import { useLanguage, useT } from '../i18n';
-import { LEGAL_TEXTS, type LegalKind } from '../lib/legal/legalDocs';
-import { useAccountUi } from '../store/accountUi';
-import AppModal from './AppModal';
-import './Account.css';
+import { useT } from '../i18n';
+import { LEGAL_PATH, type LegalKind } from '../lib/legal/legalDocs';
 
-/** Terms of use / privacy policy viewer. Shows a plain notice while the legally reviewed text is not published. */
-export default function LegalDialog() {
-  const t = useT();
-  const language = useLanguage();
-  const kind = useAccountUi((s) => s.legal);
-  const close = useAccountUi((s) => s.closeLegal);
-  if (!kind) return null;
-  const text = LEGAL_TEXTS[kind]?.[language];
-  return (
-    <AppModal title={kind === 'terms' ? t('acct.legalTitleTerms') : t('acct.legalTitlePrivacy')} onCancel={close} showClose wide className="legal-dialog">
-      {text ? <div className="legal-text">{text}</div> : <p>{t('acct.legalPending')}</p>}
-    </AppModal>
-  );
-}
-
-/** "I agree to the Terms of use and the Privacy policy" with both names opening their text. */
+/** "I agree to the Terms of use and the Privacy policy", both names linking to their public pages. */
 export function AgreeLabel({ kind = null }: { kind?: LegalKind | null }) {
   const t = useT();
-  const open = useAccountUi((s) => s.openLegal);
   void kind;
+  // The public pages open in a new tab so a half-filled form or the welcome screen stays as it is.
   return (
     <span>
       {t('acct.agree')}
-      <button type="button" className="link-button" onClick={() => open('terms')}>{t('acct.terms')}</button>
+      <a className="link-button" href={LEGAL_PATH.terms} target="_blank" rel="noopener noreferrer">{t('acct.terms')}</a>
       {t('acct.and')}
-      <button type="button" className="link-button" onClick={() => open('privacy')}>{t('acct.privacy')}</button>
+      <a className="link-button" href={LEGAL_PATH.privacy} target="_blank" rel="noopener noreferrer">{t('acct.privacy')}</a>
     </span>
   );
 }

@@ -3,6 +3,7 @@ import { saveAs } from 'file-saver';
 import type { Measurement } from '../types/compare';
 import { drawAreaMeasurementTable } from './areaMeasurementTable';
 import { embedReportFonts } from './pdfText';
+import { stampExportNotice } from './legal/pdfExportNotice';
 import type { Language } from '../i18n';
 import { exportContext } from './exportLanguage';
 
@@ -64,6 +65,7 @@ export async function exportCompositesAsPdf(
     }, language);
   }
 
+  stampExportNotice(pdfDoc, fonts ?? (await embedReportFonts(pdfDoc)), language);
   const bytes = await pdfDoc.save();
   const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], {
     type: 'application/pdf',

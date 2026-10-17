@@ -87,6 +87,10 @@
 .welcome-btn-ghost:hover { color: var(--text-h); background: var(--bg-subtle); }
 .welcome-note { margin: 18px 0 0; font: 400 12.5px/1.5 var(--sans); color: var(--muted); }
 
+.welcome-legal { display: flex; justify-content: center; gap: 8px; margin: 12px 0 0; font: 400 12.5px/1.5 var(--sans); color: var(--faint); }
+.welcome-legal a { color: var(--muted); text-decoration: none; }
+.welcome-legal a:hover { color: var(--w-blue); text-decoration: underline; }
+
 .welcome-back { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px 6px 6px; margin-inline-start: -6px; border: 0; border-radius: 8px; background: transparent; color: var(--text-2); font: 500 14px/1 var(--sans); cursor: pointer; transition: background 0.2s ease, color 0.2s ease; }
 .welcome-back svg { inline-size: 18px; block-size: 18px; }
 html[dir='rtl'] .welcome-back { padding: 6px 6px 6px 10px; }

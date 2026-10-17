@@ -165,7 +165,7 @@ test('plan Excel Rebar: Mesh per level and Bars as items; sheet count, size and 
     assert.equal(typeof r[10], 'number');
   }
   assert.equal(dir[9], 5);
-  assert.equal(bottom[11], 'Exact');
+  assert.equal(bottom[11], 'Calculated');
   // irregular: weight is an estimate (numeric, ≈ format), no sheet quantity or sheet data
   assert.deepEqual([irregular[5], irregular[6], irregular[7], irregular[11]], ['-', '-', '-', 'Estimate']);
   assert.equal(typeof irregular[8], 'number');
@@ -292,7 +292,7 @@ test('project PDF: Mesh levels and Straight Bars items with plan context, procur
   assert.deepEqual(straight.rows[0].cells.slice(0, 8), ['Plan A', '1', 'Bars', 'Bars 01', '16', '10', '6', '60']);
   assert.equal(straight.rows.length, 2);
   assert.equal(straight.rows.at(-1)!.cells[7], '60');
-  assert.equal(straight.rows.at(-1)!.cells[10], 'Exact');
+  assert.equal(straight.rows.at(-1)!.cells[10], 'Calculated');
   // Both product totals sum unrounded existing level weights; no quantities are lost.
   const levels = [a, b].flatMap((p) => buildStructuralReport(p).rebar!.levels);
   for (const [kind, table] of [['mesh', meshes], ['bars', straight]] as const) {
@@ -341,10 +341,10 @@ test('project PDF: directional and legacy Mesh reuse level rows; missing items s
   assert.equal(dir.cells[5], 'Long side Ø12 @ 20 | Short side Ø10 @ 15');
   assert.equal(meshes.rows.filter((r) => r.cells[3] === 'M-custom').length, 1);
   assert.equal(meshes.rows.find((r) => r.cells[3] === 'Mesh 03')!.cells[5], 'Ø12 @ 20 cm - Both directions');
-  assert.equal(meshes.rows.at(-1)!.cells[10], 'Exact · Missing data: 2'); // two bad levels of one item counted once
+  assert.equal(meshes.rows.at(-1)!.cells[10], 'Calculated · Missing data: 2'); // two bad levels of one item counted once
   assert.deepEqual(straight.rows[0].cells.slice(5, 8), ['3', '2.5', '7.5']);
   assert.equal(straight.rows.at(-1)!.cells[7], '7.5');
-  assert.equal(straight.rows.at(-1)!.cells[10], 'Exact · Missing data: 1');
+  assert.equal(straight.rows.at(-1)!.cells[10], 'Calculated · Missing data: 1');
   for (const [kind, table] of [['mesh', meshes], ['bars', straight]] as const) {
     const levels = [a, b].flatMap((p) => buildStructuralReport(p).rebar!.levels).filter((d) => d.kind === kind && d.netWeightKg !== null);
     for (const [field, column] of [['netWeightKg', 8], ['orderWeightKg', 9]] as const) {
@@ -362,6 +362,6 @@ test('project PDF: directional and legacy Mesh reuse level rows; missing items s
   const barsBlocks = buildProjectStructuralPdfLayout(buildProjectStructural([barsOnly]), x, [barsOnly]);
   const zeroBars = barsBlocks.find((b): b is Table => b.type === 'table')!;
   assert.deepEqual(zeroBars.rows[0].cells.slice(5, 10), ['0', '6', '0', '0', '0']);
-  assert.deepEqual(zeroBars.rows.at(-1)!.cells.slice(7, 11), ['0', '0', '0', 'Exact']);
+  assert.deepEqual(zeroBars.rows.at(-1)!.cells.slice(7, 11), ['0', '0', '0', 'Calculated']);
   assert.deepEqual(barsBlocks.filter((b) => b.type === 'section').map((b) => (b as { title: string }).title), ['Rebar - Bars']);
 });

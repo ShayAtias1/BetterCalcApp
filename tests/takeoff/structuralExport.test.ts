@@ -222,7 +222,7 @@ test('PDF layout: one BOQ per domain (items then a total row), ~ on estimates, d
   const byMark = (mark: string) => rebar.rows.find((r) => r.cells[2] === mark)!;
   assert.match(byMark('M01').cells[7], /^Required: ~ \d/); // the printed estimate is marked (mesh weights beside bars carry their label)
   assert.deepEqual([byMark('M01').cells[5], byMark('M01').cells[6], byMark('M01').cells[9]], ['-', '-', 'Estimate']); // free polygon: no sheet layout
-  assert.deepEqual([byMark('M02').cells[1], byMark('M02').cells[3], byMark('M02').cells[5], byMark('M02').cells[6], byMark('M02').cells[9]], ['Mesh', 'Bottom', '10 sheets', '6.00 × 2.50 m · 80 cm', 'Exact']);
+  assert.deepEqual([byMark('M02').cells[1], byMark('M02').cells[3], byMark('M02').cells[5], byMark('M02').cells[6], byMark('M02').cells[9]], ['Mesh', 'Bottom', '10 sheets', '6.00 × 2.50 m · 80 cm', 'Calculated']);
   assert.deepEqual([byMark('R01').cells[1], byMark('R01').cells[3], byMark('R01').cells[4], byMark('R01').cells[5]], ['Bars', '-', 'Ø16 · Length per bar: 6 m · Total length: 60 m', '10 bars']);
   assert.equal(byMark('M03').cells[9], 'Data missing');
   assert.deepEqual([rebar.rows.at(-1)!.cells[1], rebar.rows.at(-1)!.cells[5], rebar.rows.at(-1)!.cells[9]], ['Total', '', 'Includes estimate · Missing data: 1']);

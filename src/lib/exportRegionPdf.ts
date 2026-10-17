@@ -1,4 +1,6 @@
 import { PDFDocument } from 'pdf-lib';
+import { stampExportNotice } from './legal/pdfExportNotice';
+import { embedReportFonts } from './pdfText';
 import { saveAs } from 'file-saver';
 import type { ExportRegion, Plan } from '../types';
 import { DEFAULT_AREA_KIND_COLORS } from '../types';
@@ -111,7 +113,8 @@ async function addCanvasPage(pdfDoc: PDFDocument, canvas: HTMLCanvasElement) {
   page.drawImage(pngImage, { x: 0, y: 0, width: canvas.width, height: canvas.height });
 }
 
-async function savePdf(pdfDoc: PDFDocument, fileName: string) {
+async function savePdf(pdfDoc: PDFDocument, fileName: string, language: Language) {
+  stampExportNotice(pdfDoc, await embedReportFonts(pdfDoc), language);
   const bytes = await pdfDoc.save();
   const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], {
     type: 'application/pdf',
@@ -140,7 +143,8 @@ export async function exportPlanPageToPdf(
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, '_');
   await savePdf(
     pdfDoc,
-    region ? t('exports.planPdf.regionFileName', { name: safeName }) : t('exports.planPdf.pageFileName', { page: pageNumber, name: safeName })
+    region ? t('exports.planPdf.regionFileName', { name: safeName }) : t('exports.planPdf.pageFileName', { page: pageNumber, name: safeName }),
+    language
   );
 }
 
@@ -175,5 +179,5 @@ export async function exportAllPlanPagesToPdf(
   }
   if (added === 0) return;
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, '_');
-  await savePdf(pdfDoc, t('exports.planPdf.allPagesFileName', { name: safeName }));
+  await savePdf(pdfDoc, t('exports.planPdf.allPagesFileName', { name: safeName }), language);
 }

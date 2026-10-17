@@ -3,6 +3,7 @@ import { saveAs } from 'file-saver';
 import type { Measurement, Plan, ReportCategoryTotal, RoomQuantitySummary } from '../types';
 import type { Language } from '../i18n';
 import { exportContext } from './exportLanguage';
+import { addExcelNotice } from './legal/exportNotice';
 import { addStructuralSheets } from './exportStructuralExcel';
 import { buildStructuralReport, type StructuralReport } from './structuralQuantities';
 import { selectStructural, type ExportContent } from './exportContent';
@@ -27,6 +28,7 @@ export async function exportQuantitiesToExcel(
   const workbook = buildQuantitiesWorkbook(summaries, areaMeasurements, language, selectStructural(buildStructuralReport(project), content), content.finishes ? project : undefined, openingPages);
   // A selection with nothing to write (no finishes, no structural items on those pages) has no sheet to save.
   if (workbook.worksheets.length === 0) throw new Error('The selected content has nothing to export on the selected sheets.');
+  addExcelNotice(workbook, language, exportContext(language).rtl);
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/octet-stream' });
   const safeName = project.name.replace(/[\\/:*?"<>|]/g, '_');

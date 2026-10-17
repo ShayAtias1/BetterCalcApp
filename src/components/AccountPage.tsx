@@ -204,6 +204,10 @@ function ProfileSection() {
                   : t('acct.profile.consentNoVersion', { date: formatDate(profile.termsAcceptedAt, language) }))
                 : t('acct.profile.noConsent')}
             </p>
+            <p className="acct-note acct-legal-links">
+              <a href="/terms" target="_blank" rel="noopener noreferrer">{t('acct.terms')}</a>{' · '}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer">{t('acct.privacy')}</a>
+            </p>
           </Card>
           <Card title={t('acct.profile.deleteTitle')}>
             <div className="acct-row">

@@ -96,6 +96,11 @@ export default function WelcomeScreen() {
                   <button type="button" className="welcome-btn welcome-btn-ghost" onClick={markSeen}>{t('welcome.guest')}</button>
                 </div>
                 <p className="welcome-note">{t('welcome.localNote')}</p>
+                <p className="welcome-legal">
+                  <a href="/terms" target="_blank" rel="noopener noreferrer">{t('acct.terms')}</a>
+                  <span aria-hidden="true">·</span>
+                  <a href="/privacy" target="_blank" rel="noopener noreferrer">{t('acct.privacy')}</a>
+                </p>
               </>
             ) : (
               <AuthForm inline reason="account" initialMode={view} onClose={back} t={t} />

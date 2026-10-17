@@ -10,6 +10,7 @@ import './index.css'
 import './lib/pdfjsSetup'
 import { initAnalytics } from './lib/analytics'
 import App from './App.tsx'
+import LegalPage, { legalKindFromPath } from './components/LegalPage'
 import { isLanguage, syncDocumentLanguage, useLanguageStore, type Language } from './i18n'
 
 // Before the first render: consumes UTM / bc_internal params and strips them from the address bar.
@@ -40,8 +41,11 @@ const overrides = devOverrides();
 if (overrides.language) useLanguageStore.setState({ language: overrides.language });
 syncDocumentLanguage(overrides.direction);
 
+// /privacy and /terms are public pages: no welcome screen, sign-in or project storage is involved.
+const legalKind = legalKindFromPath(window.location.pathname);
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    {legalKind ? <LegalPage kind={legalKind} /> : <App />}
   </StrictMode>,
 )

@@ -2,6 +2,10 @@
 
 .link-button { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; }
 .link-button:hover { text-decoration: underline; }
+a.link-button { text-decoration: none; }
+a.link-button:hover { text-decoration: underline; }
+.acct-legal-links a { color: var(--accent); text-decoration: none; }
+.acct-legal-links a:hover { text-decoration: underline; }
 .soon-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: var(--r-pill); background: var(--warning-bg); color: var(--warning); font: var(--t-label); white-space: nowrap; }
 .acct-lock { inline-size: 14px; block-size: 14px; flex: none; }
 

@@ -1,6 +1,7 @@
 import { ReportWriter } from './pdfReportWriter';
 import { openingPdfSchedule, type OpeningPdfOptions } from './openingQuantityReport';
 import { PDFDocument } from 'pdf-lib';
+import { stampExportNotice } from './legal/pdfExportNotice';
 import { drawLogo, embedReportFonts, logoWidth, PdfPainter, REPORT_LOGO_HEIGHT, type ReportFonts } from './pdfText';
 import { saveAs } from 'file-saver';
 import type { Plan, ReportCategoryTotal, RoomQuantitySummary } from '../types';
@@ -279,6 +280,7 @@ export async function exportQuantitiesToPdf(
   // A selection that matches nothing on the chosen pages would save an empty file.
   if (pdfDoc.getPageCount() === 0) throw new Error('The selected content has nothing to export on the selected sheets.');
 
+  stampExportNotice(pdfDoc, fonts, language);
   const bytes = await pdfDoc.save();
   const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], {
     type: 'application/pdf',
