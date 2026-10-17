@@ -227,6 +227,8 @@ test('payments survive account deletion without the user link; subscriptions and
 });
 
 test('billing profile: the owner creates and edits their own invoice details only', async () => {
+  await db.exec("update public.commercial_settings set value = 'true' where key = 'payments_enabled'");
+  try {
   await as(A, () => db.exec(`insert into public.billing_profiles (user_id, invoice_name, tax_id) values ('${A}', 'Acme Ltd', '123')`));
   await as(A, () => db.exec("update public.billing_profiles set city = 'Haifa'"));
   assert.equal((await as(B, () => q('select * from public.billing_profiles'))).length, 0);
@@ -235,6 +237,16 @@ test('billing profile: the owner creates and edits their own invoice details onl
   await assert.rejects(as(A, () => db.exec("update public.billing_profiles set country = 'israel'")), /check constraint/);
   // An upsert rewrites user_id too, which the client may not: the app updates, then inserts when no row exists.
   await assert.rejects(as(A, () => db.exec(`insert into public.billing_profiles (user_id, city) values ('${A}', 'X') on conflict (user_id) do update set user_id = excluded.user_id, city = excluded.city`)), /permission denied/);
+  } finally { await db.exec("update public.commercial_settings set value = 'false' where key = 'payments_enabled'"); }
+});
+
+test('payment unavailability prevents invoice collection and editing while preserving existing data', async () => {
+  await db.exec(`insert into public.billing_profiles (user_id, invoice_name, tax_id) values ('${A}', 'Existing', '123')`);
+  await db.exec("update public.commercial_settings set value = 'false' where key = 'payments_enabled'");
+  await assert.rejects(as(B, () => db.exec(`insert into public.billing_profiles (user_id, invoice_name) values ('${B}', 'New')`)), /row-level security/);
+  await as(A, () => db.exec("update public.billing_profiles set invoice_name = 'Changed', tax_id = null"));
+  const stored = await as(A, () => q('select invoice_name, tax_id from public.billing_profiles'));
+  assert.deepEqual(stored, [{ invoice_name: 'Existing', tax_id: '123' }]);
 });
 
 test('account overview reports balances and the latest subscription for the caller only', async () => {

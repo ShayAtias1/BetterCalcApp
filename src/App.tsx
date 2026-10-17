@@ -32,10 +32,9 @@ import AccountMenu from './components/AccountMenu';
 import AuthDialog from './components/AuthDialog';
 import { useStore } from 'zustand';
 import WelcomeScreen from './components/WelcomeScreen';
-import GuestAckDialog from './components/GuestAckDialog';
+import LegalAccessGate from './components/LegalAccessGate';
 import { welcomeStep, welcomeStore } from './lib/access/welcome';
 import AccessNotices from './components/AccessNotices';
-import OnboardingDialog from './components/OnboardingDialog';
 import AiComingSoonDialog from './components/AiComingSoonDialog';
 import AccountPage, { CloudBackupHost } from './components/AccountPage';
 import { accountSync } from './store/accountStore';
@@ -308,5 +307,5 @@ export default function App() {
     const stopAccount = accountSync.start();
     return () => { stopAccess(); stopAccount(); };
   }, []);
-  return <WorkspaceLayoutProvider><AppContent /><MultiPlanAi /><BulkTakeoff /><AppDialogs /><AuthDialog /><OnboardingDialog /><GuestAckDialog /><AiComingSoonDialog /><AccountPage /><CloudBackupHost /><AccessNotices /></WorkspaceLayoutProvider>;
+  return <WorkspaceLayoutProvider><LegalAccessGate><AppContent /><MultiPlanAi /><BulkTakeoff /><AppDialogs /><AuthDialog /><AiComingSoonDialog /><AccountPage /><CloudBackupHost /><AccessNotices /></LegalAccessGate></WorkspaceLayoutProvider>;
 }

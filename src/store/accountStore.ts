@@ -1,6 +1,9 @@
 import { createStore } from 'zustand/vanilla';
 import type { StoreApi } from 'zustand/vanilla';
 import { getSupabase } from '../lib/supabase/client';
+import { cacheVerifiedConsent, clearVerifiedConsent, readVerifiedConsent } from '../lib/legal/verifiedConsent';
+import { LEGAL_DOC_VERSION } from '../lib/legal/legalDocs';
+import { clearPendingConsent, consentSessionStorage, hasPendingConsent } from '../lib/legal/pendingConsent';
 import { authStore, type AuthState } from './authStore';
 import {
   completeOnboarding,
@@ -12,6 +15,7 @@ import {
   listPublicPlans,
   type PlanSummary,
   updateDisplayName,
+  normalizeDisplayName,
   type AccountClient,
   type AccountOverview,
   type CommercialFlags,
@@ -25,16 +29,15 @@ export const LEGAL_VERSION_PENDING = 'pending';
  * Whether this account has accepted the version the server currently announces. A new version (set in Supabase when the
  * texts are published) asks everyone again; the same completion step records it, with the server's own clock.
  */
-export function hasAcceptedCurrentTerms(profile: Pick<Profile, 'onboardingCompleted' | 'termsVersion'> | null, flags: Pick<CommercialFlags, 'legalVersion'>): boolean {
-  if (!profile || !profile.onboardingCompleted) return false;
-  // Until the server announces a version nobody is asked again, including an account onboarded before versions were stored.
-  if (flags.legalVersion == null) return profile.termsVersion == null || profile.termsVersion === LEGAL_VERSION_PENDING;
-  return profile.termsVersion === flags.legalVersion;
+export function hasAcceptedCurrentTerms(profile: Pick<Profile, 'onboardingCompleted' | 'termsVersion' | 'termsAcceptedAt' | 'privacyAcceptedAt'> | null, flags: Pick<CommercialFlags, 'legalVersion'>, documentVersion = LEGAL_DOC_VERSION): boolean {
+  return !!profile?.onboardingCompleted && profile.termsAcceptedAt != null && Number.isFinite(profile.termsAcceptedAt)
+    && profile.privacyAcceptedAt != null && Number.isFinite(profile.privacyAcceptedAt) && profile.termsVersion === documentVersion
+    && (flags.legalVersion ?? LEGAL_VERSION_PENDING) === documentVersion;
 }
 
 /**
  * The signed-in user's account data and the server's commercial switches. Loaded after sign-in, cleared on
- * sign-out; a failed or offline load leaves the app fully usable (nothing here gates local work).
+ * sign-out. A failed verification preserves all local project data; the legal gate offers retry or guest access.
  */
 export interface AccountState {
   flags: CommercialFlags;
@@ -63,6 +66,7 @@ const storage = () => (typeof localStorage === 'undefined' ? null : localStorage
 
 export function createAccountStore(deps: AccountDeps) {
   let loadId = 0;
+  let inFlight: { identity: string; promise: Promise<void> } | null = null;
 
   const store = createStore<AccountState>()((set, get) => ({
     flags: FLAGS_OFF,
@@ -74,29 +78,75 @@ export function createAccountStore(deps: AccountDeps) {
     loading: false,
     loadFailed: false,
 
-    async refresh() {
-      const client = await deps.loadClient();
-      if (!client) return;
+    refresh() {
+      const session = deps.auth.getState();
+      const signedIn = session.status === 'signedIn';
+      const userId = signedIn ? session.user?.id ?? '' : '';
+      const identity = `${session.status}:${userId}`;
+      if (inFlight?.identity === identity) return inFlight.promise;
       const id = ++loadId;
-      set({ loading: true });
-      const signedIn = deps.auth.getState().status === 'signedIn';
-      try {
-        const flags = await getCommercialFlags(client);
-        if (id !== loadId) return;
-        if (!signedIn) return set({ flags, profile: null, overview: null, needsOnboarding: false, needsName: false, loading: false, loadFailed: false });
-        const [profile, overview, plans] = await Promise.all([getProfile(client), getAccountOverview(client), listPublicPlans(client).catch(() => [] as PlanSummary[])]);
-        if (id !== loadId) return;
-        writeCachedName(storage(), deps.auth.getState().user?.id ?? '', profile?.displayName ?? null);
-        set({ flags, profile, overview, plans, needsOnboarding: !!profile && !hasAcceptedCurrentTerms(profile, flags), needsName: !!profile && hasAcceptedCurrentTerms(profile, flags) && !profile.displayName, loading: false, loadFailed: false });
-      } catch {
-        if (id === loadId) set({ loading: false, loadFailed: true });
-      }
+      const current = () => id === loadId && `${deps.auth.getState().status}:${deps.auth.getState().status === 'signedIn' ? deps.auth.getState().user?.id ?? '' : ''}` === identity;
+      const cached = signedIn && !get().profile ? readVerifiedConsent(storage(), userId, LEGAL_DOC_VERSION) : null;
+      set({ loading: true, ...(cached ? { profile: cached, flags: { ...FLAGS_OFF, legalVersion: LEGAL_DOC_VERSION } } : {}) });
+      let stage = 'client';
+      const promise = (async () => {
+        try {
+          const client = await deps.loadClient();
+          if (!current()) return;
+          if (!client) throw new Error('account_unavailable');
+          stage = 'legal-version';
+          const flags = await getCommercialFlags(client, signedIn);
+          if (!current()) return;
+          if (!signedIn) { set({ flags, loading: false, loadFailed: false }); return; }
+          // Retain a successfully fetched new effective version even if the profile request fails.
+          set({ flags });
+          stage = 'profile';
+          let profile = await getProfile(client);
+          if (!current()) return;
+          if (!profile) throw new Error('profile_missing');
+          // Successful evidence remains valid even if recording a new OAuth receipt fails.
+          const previouslyAccepted = hasAcceptedCurrentTerms(profile, flags);
+          if (previouslyAccepted) cacheVerifiedConsent(storage(), userId, profile);
+          else clearVerifiedConsent(storage(), userId);
+          set({ profile, needsOnboarding: !previouslyAccepted, needsName: previouslyAccepted && !profile.displayName });
+          if (profile.displayName && normalizeDisplayName(profile.displayName)
+            && (flags.legalVersion ?? LEGAL_VERSION_PENDING) === LEGAL_DOC_VERSION
+            && hasPendingConsent(consentSessionStorage(), LEGAL_DOC_VERSION, Date.now())) {
+            stage = 'record-consent';
+            await completeOnboarding(client, profile.displayName, LEGAL_DOC_VERSION);
+            if (!current()) return;
+            clearPendingConsent(consentSessionStorage());
+            profile = await getProfile(client);
+            if (!current()) return;
+            if (!profile) throw new Error('profile_missing');
+          }
+          const accepted = hasAcceptedCurrentTerms(profile, flags);
+          if (accepted) cacheVerifiedConsent(storage(), userId, profile);
+          else clearVerifiedConsent(storage(), userId);
+          writeCachedName(storage(), userId, profile.displayName);
+          set({ flags, profile, needsOnboarding: !accepted, needsName: accepted && !profile.displayName, loading: false, loadFailed: false });
+          // Billing/credit/catalogue availability is independent of legal verification.
+          const [overview, plans] = await Promise.allSettled([getAccountOverview(client), listPublicPlans(client)]);
+          if (!current()) return;
+          set({ ...(overview.status === 'fulfilled' ? { overview: overview.value } : {}), ...(plans.status === 'fulfilled' ? { plans: plans.value } : {}) });
+        } catch (error) {
+          if (current()) {
+            set({ loading: false, loadFailed: true });
+            // No names, tokens, payloads or raw server messages in diagnostic logs.
+            console.warn('[account] verification unavailable', { stage, kind: error instanceof Error ? error.name : 'unknown' });
+          }
+        }
+      })().finally(() => { if (inFlight?.promise === promise) inFlight = null; });
+      inFlight = { identity, promise };
+      return promise;
     },
 
     async submitOnboarding(name) {
       const client = await deps.loadClient();
-      if (!client) return;
-      await completeOnboarding(client, name, get().flags.legalVersion ?? LEGAL_VERSION_PENDING);
+      if (!client) throw new Error('account_unavailable');
+      if ((get().flags.legalVersion ?? LEGAL_VERSION_PENDING) !== LEGAL_DOC_VERSION) throw new Error('legal_version_mismatch');
+      await completeOnboarding(client, name, LEGAL_DOC_VERSION);
+      clearPendingConsent(consentSessionStorage());
       await get().refresh();
     },
 
@@ -118,8 +168,12 @@ export function createAccountStore(deps: AccountDeps) {
       let last: string | null = null;
       const sync = () => {
         const status = deps.auth.getState().status;
-        if (status === last) return;
-        last = status;
+        const identity = `${status}:${deps.auth.getState().user?.id ?? ''}`;
+        if (identity === last) return;
+        last = identity;
+        loadId += 1;
+        inFlight = null;
+        store.setState({ profile: null, overview: null, plans: [], needsOnboarding: false, needsName: false, loadFailed: false, loading: false });
         if (status === 'signedIn') void store.getState().refresh();
         else {
           loadId += 1;

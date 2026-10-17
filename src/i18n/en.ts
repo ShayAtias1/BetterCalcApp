@@ -571,7 +571,7 @@ export const en: Dictionary = {
   },
 
   home: {
-    privacyNote: 'Plans and projects are stored only on this computer · pseudonymous usage statistics (never plan content) may be collected',
+    privacyNote: 'Plan files and projects stay in this browser · account data is processed by sign-in providers · usage analytics are currently disabled',
   },
 
   workspace: {
@@ -2619,6 +2619,11 @@ export const en: Dictionary = {
     aiNote: 'AI tools are coming soon.',
     needName: 'Enter your name.',
     needAgree: 'Please accept the terms of use and the privacy policy.',
+    localConsentIntro: 'Account verification is temporarily unavailable. Please accept the Terms and Privacy Policy to continue with local projects. This does not complete account registration.',
+    localAccessNotice: 'Account services are temporarily unavailable. Your local projects remain available; account consent has not been changed.',
+    consentUnavailable: 'We could not verify your acceptance of the Terms and Privacy Policy. Retry or sign out to continue as a guest.',
+    consentVersionMismatch: 'The legal documents in this app do not match the current server version. Reload to view the applicable documents before continuing.',
+    consentRetry: 'Reload and retry',
     onboardingTitle: 'Finish registration',
     onboardingIntro: 'One short step: what should we call you, and agreeing to the terms.',
     onboardingSave: 'Continue',
@@ -2758,6 +2763,7 @@ export const en: Dictionary = {
       storage: '{size} cloud storage',
     },
     billing: {
+      detailsUnavailable: 'Billing details cannot be collected or edited while payments are unavailable.',
       next: 'Next charge',
       nextNone: 'No upcoming charge',
       update: 'Update payment method',
@@ -2788,6 +2794,7 @@ export const en: Dictionary = {
       download: 'Download invoice',
     },
     errors: {
+      'billing-disabled': 'Billing details cannot be saved while payments are unavailable.',
       'invalid-name': 'That name is not valid. Use up to 80 characters.',
       network: 'No internet connection. Your projects are unharmed; try again when you are back online.',
       unknown: 'The action failed. Try again.',

@@ -33,21 +33,3 @@ export const useAccountUi = create<{
   closeLegal: () => set({ legal: null }),
   setCloudOpen: (cloudOpen) => set({ cloudOpen }),
 }));
-
-const CONSENT_KEY = 'bettercalc.consent-pending';
-/**
- * The registration form's "I agree" is remembered for this tab only, so a Google round trip does not ask again.
- * The server records the agreement only when onboarding completes.
- */
-export function markConsentPending(): void {
-  try { sessionStorage.setItem(CONSENT_KEY, '1'); } catch { /* storage blocked: the onboarding step asks instead */ }
-}
-export function takeConsentPending(): boolean {
-  try {
-    const pending = sessionStorage.getItem(CONSENT_KEY) === '1';
-    sessionStorage.removeItem(CONSENT_KEY);
-    return pending;
-  } catch {
-    return false;
-  }
-}

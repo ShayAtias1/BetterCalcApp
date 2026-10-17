@@ -5,7 +5,6 @@ import { ACCOUNTS_ENABLED } from '../lib/access/accessPolicy';
 import { AccountError, normalizeDisplayName } from '../lib/account/accountApi';
 import { accountStore } from '../store/accountStore';
 import { authStore } from '../store/authStore';
-import { takeConsentPending } from '../store/accountUi';
 import AppModal from './AppModal';
 import { AgreeLabel } from './LegalDialog';
 import BrandLogo from './BrandLogo';
@@ -14,10 +13,7 @@ import './Account.css';
 /** Set when the user chooses "later"; the step returns on the next visit. */
 let postponed = false;
 
-/**
- * The step after a first sign-in: confirm the name and agree to the terms. If the user already agreed on the
- * registration form (and the name is known), it completes silently. Never blocks local work.
- */
+/** Explicit account acceptance; registration cannot be postponed or completed automatically. */
 export default function OnboardingDialog() {
   const t = useT();
   const needsRegistration = useStore(accountStore, (s) => s.needsOnboarding);
@@ -29,16 +25,9 @@ export default function OnboardingDialog() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hidden, setHidden] = useState(postponed);
-  const [auto, setAuto] = useState<boolean | null>(null);
   const known = profile?.displayName ?? '';
 
   useEffect(() => { setName((current) => current || known); }, [known]);
-
-  // Decide once whether the registration form already covered this step.
-  useEffect(() => {
-    if (!needs || auto !== null) return;
-    setAuto(needsRegistration && takeConsentPending() && !!normalizeDisplayName(known));
-  }, [needs, known, auto]);
 
   const submit = async (value: string) => {
     setBusy(true);
@@ -53,13 +42,11 @@ export default function OnboardingDialog() {
     }
   };
 
-  useEffect(() => { if (needs && auto === true && !busy) void submit(known); }, [needs, auto]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (!ACCOUNTS_ENABLED || !needs || hidden || auto !== false) return null;
+  if (!ACCOUNTS_ENABLED || !needs || (hidden && !needsRegistration)) return null;
   const later = () => { postponed = true; setHidden(true); };
   const valid = !!normalizeDisplayName(name) && (agree || !needsRegistration);
   return (
-    <AppModal title={needsRegistration ? t('acct.onboardingTitle') : t('acct.nameOnlyTitle')} onCancel={later} showClose className="onboarding-dialog auth-dialog" eyebrow={<div className="auth-brand"><BrandLogo /></div>}>
+    <AppModal title={needsRegistration ? t('acct.onboardingTitle') : t('acct.nameOnlyTitle')} onCancel={needsRegistration ? () => undefined : later} showClose={!needsRegistration} className="onboarding-dialog auth-dialog" eyebrow={<div className="auth-brand"><BrandLogo /></div>}>
       <p className="auth-lead">{needsRegistration ? t('acct.onboardingIntro') : t('acct.nameOnlyIntro')}</p>
       <form onSubmit={(e) => { e.preventDefault(); if (valid) void submit(name); }}>
         <label className="auth-field">
@@ -68,9 +55,9 @@ export default function OnboardingDialog() {
         </label>
         {needsRegistration && (
           <label className="auth-field auth-agree">
-          <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-          <AgreeLabel />
-        </label>
+            <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+            <AgreeLabel />
+          </label>
         )}
         {error && <p className="auth-error" role="alert">{error}</p>}
         <div className="app-dialog-actions">

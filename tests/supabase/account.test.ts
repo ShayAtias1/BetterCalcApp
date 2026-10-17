@@ -21,6 +21,7 @@ import {
   type AccountClient,
 } from '../../src/lib/account/accountApi.ts';
 import { createAccountStore, LEGAL_VERSION_PENDING } from '../../src/store/accountStore.ts';
+import { markPendingConsent, PENDING_CONSENT_KEY } from '../../src/lib/legal/pendingConsent.ts';
 import {
   getPaymentProvider,
   PaymentsUnavailableError,
@@ -72,7 +73,7 @@ test('flags: read from the server, and everything is off when they cannot be rea
 
 test('profile and onboarding: the name is validated before anything is sent', async () => {
   const { client, calls } = fakeClient({ profiles: { display_name: 'Dana', locale: 'he', terms_version: 'v1', terms_accepted_at: '2026-10-18T10:00:00Z', onboarding_completed_at: '2026-10-18T10:00:00Z' } });
-  assert.deepEqual(await getProfile(client), { displayName: 'Dana', locale: 'he', termsVersion: 'v1', termsAcceptedAt: Date.parse('2026-10-18T10:00:00Z'), onboardingCompleted: true });
+  assert.deepEqual(await getProfile(client), { displayName: 'Dana', locale: 'he', termsVersion: 'v1', termsAcceptedAt: Date.parse('2026-10-18T10:00:00Z'), privacyAcceptedAt: null, onboardingCompleted: true });
   await assert.rejects(completeOnboarding(client, '   ', 'v1'), (e: AccountError) => e.code === 'invalid-name');
   await assert.rejects(updateDisplayName(client, 'u', ''), (e: AccountError) => e.code === 'invalid-name');
   assert.deepEqual(calls, []);
@@ -117,7 +118,7 @@ test('invoice details update the owner row, or insert it when none exists; never
       };
       return chain;
     },
-    rpc: async () => ({ data: null, error: null }),
+    rpc: async () => ({ data: { payments_enabled: true }, error: null }),
   }) as unknown as AccountClient;
   const form = { invoiceName: ' Acme ', taxId: '', addressLine: '', city: 'Haifa', postalCode: '' };
   const fields = { invoice_name: 'Acme', tax_id: null, address_line: null, city: 'Haifa', postal_code: null };
@@ -163,8 +164,8 @@ test('signed in without onboarding: the store asks for it; signing out clears th
   stop();
 });
 
-test('an onboarded user is never interrupted, and a failed load never blocks work', async () => {
-  const done = storeFixture('signedIn', { display_name: 'Dana', onboarding_completed_at: '2026-10-18T10:00:00Z', terms_accepted_at: null });
+test('an explicitly onboarded user is accepted; failed loads remain marked for the legal gate', async () => {
+  const done = storeFixture('signedIn', { display_name: 'Dana', terms_version: 'pending', onboarding_completed_at: '2026-10-18T10:00:00Z', terms_accepted_at: '2026-10-18T10:00:00Z', privacy_accepted_at: '2026-10-18T10:00:00Z' });
   done.sync.start();
   await settle();
   assert.equal(done.sync.store.getState().needsOnboarding, false);
@@ -183,6 +184,25 @@ test('submitting onboarding sends the name with the pending legal version until 
   await settle();
   await f.sync.store.getState().submitOnboarding(' Dana ');
   assert.deepEqual(f.calls.find(([n]) => n === 'rpc:complete_onboarding'), ['rpc:complete_onboarding', { p_name: 'Dana', p_legal_version: LEGAL_VERSION_PENDING }]);
+});
+
+test('a valid explicit OAuth receipt is recorded even for an existing account and consumed after success', async () => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+  const values = new Map<string, string>();
+  const storage = { getItem: (k: string) => values.get(k) ?? null, setItem: (k: string, v: string) => void values.set(k, v), removeItem: (k: string) => void values.delete(k) };
+  Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: storage });
+  try {
+    markPendingConsent(storage, 'pending', Date.now());
+    const f = storeFixture('signedIn', { display_name: 'Dana', terms_version: 'pending', terms_accepted_at: '2026-10-18T10:00:00Z', privacy_accepted_at: '2026-10-18T10:00:00Z', onboarding_completed_at: '2026-10-18T10:00:00Z' });
+    await f.sync.store.getState().refresh();
+    assert.deepEqual(f.calls.find(([name]) => name === 'rpc:complete_onboarding'), ['rpc:complete_onboarding', { p_name: 'Dana', p_legal_version: 'pending' }]);
+    assert.equal(storage.getItem(PENDING_CONSENT_KEY), null);
+    await f.sync.store.getState().refresh();
+    assert.equal(f.calls.filter(([name]) => name === 'rpc:complete_onboarding').length, 1);
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'sessionStorage', previous);
+    else Reflect.deleteProperty(globalThis, 'sessionStorage');
+  }
 });
 
 test('payments fail closed: no provider, or the server switch off, means no checkout', async () => {
@@ -249,4 +269,68 @@ test('invoice links are kept only as absolute https URLs', async () => {
   const rows = [{ id: 'p', description: null, status: 'paid', amount_minor: 100, currency: 'ILS', invoice_url: 'javascript:alert(1)', created_at: '2026-01-01T00:00:00Z' }];
   const client = { from: () => ({ select: () => ({ order: () => ({ limit: async () => ({ data: rows, error: null }) }) }) }) };
   assert.equal((await listPayments(client as never))[0].invoiceUrl, null);
+});
+
+test('overlapping refreshes share one request and unrelated account overview failure does not revoke consent', async () => {
+  const f = storeFixture('signedIn', { display_name: 'Dana', terms_version: 'pending', terms_accepted_at: '2026-10-18T10:00:00Z', privacy_accepted_at: '2026-10-18T10:00:00Z', onboarding_completed_at: '2026-10-18T10:00:00Z' });
+  const first = f.sync.store.getState().refresh();
+  const second = f.sync.store.getState().refresh();
+  assert.equal(first, second);
+  await first;
+  assert.equal(f.calls.filter(([n]) => n === 'rpc:commercial_flags').length, 1);
+  assert.equal(f.sync.store.getState().loadFailed, false);
+});
+
+test('a late response cannot restore the profile after sign-out', async () => {
+  let resolveClient!: (client: AccountClient) => void;
+  const auth = createStore<any>()(() => ({ status: 'signedIn', user: { id: 'u1' } }));
+  const { client } = fakeClient({}, { commercial_flags: { data: {}, error: null } });
+  const sync = createAccountStore({ auth, loadClient: () => new Promise((resolve) => { resolveClient = resolve; }) });
+  const stop = sync.start();
+  auth.setState({ status: 'unconfigured', user: null });
+  resolveClient(client);
+  await settle();
+  assert.equal(sync.store.getState().profile, null);
+  assert.equal(sync.store.getState().loadFailed, false);
+  assert.equal(sync.store.getState().loading, false);
+  stop();
+});
+
+test('failed optional credit/catalogue requests do not turn valid legal verification into an error', async () => {
+  const auth = createStore<any>()(() => ({ status: 'signedIn', user: { id: 'u1' } }));
+  const { client } = fakeClient({ profiles: { display_name: 'Dana', terms_version: 'pending', terms_accepted_at: '2026-10-18T10:00:00Z', privacy_accepted_at: '2026-10-18T10:00:00Z', onboarding_completed_at: '2026-10-18T10:00:00Z' } }, {
+    commercial_flags: { data: { legal_version: null }, error: null },
+    account_overview: { data: null, error: { message: 'temporarily unavailable' } },
+  });
+  const sync = createAccountStore({ auth, loadClient: async () => client });
+  await sync.store.getState().refresh();
+  assert.equal(sync.store.getState().loadFailed, false);
+  assert.equal(sync.store.getState().needsOnboarding, false);
+  assert.equal(sync.store.getState().profile?.termsVersion, 'pending');
+});
+
+test('a successfully verified acceptance survives refresh and temporary Supabase failure without inventing new consent', async () => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const values = new Map<string, string>();
+  const storage = { getItem: (k: string) => values.get(k) ?? null, setItem: (k: string, v: string) => void values.set(k, v), removeItem: (k: string) => void values.delete(k) };
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage });
+  try {
+    const verified = storeFixture('signedIn', { display_name: 'Dana', terms_version: 'pending', terms_accepted_at: '2026-10-18T10:00:00Z', privacy_accepted_at: '2026-10-18T10:00:00Z', onboarding_completed_at: '2026-10-18T10:00:00Z' });
+    await verified.sync.store.getState().refresh();
+    const auth = createStore<any>()(() => ({ status: 'signedIn', user: { id: 'u1' } }));
+    let writes = 0;
+    const offline = createAccountStore({ auth, loadClient: async () => ({ rpc: async () => { throw new TypeError('Failed to fetch'); }, from: () => { writes++; throw new Error('unreachable'); } }) as never });
+    await offline.store.getState().refresh();
+    assert.equal(offline.store.getState().loadFailed, true);
+    assert.equal(offline.store.getState().profile?.termsVersion, 'pending');
+    assert.equal(offline.store.getState().profile?.termsAcceptedAt, Date.parse('2026-10-18T10:00:00Z'));
+    assert.equal(writes, 0);
+    auth.setState({ user: { id: 'another-user' } });
+    const other = createAccountStore({ auth, loadClient: async () => null });
+    await other.store.getState().refresh();
+    assert.equal(other.store.getState().profile, null);
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'localStorage', previous);
+    else Reflect.deleteProperty(globalThis, 'localStorage');
+  }
 });

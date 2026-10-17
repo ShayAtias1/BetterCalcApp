@@ -6,7 +6,8 @@ import type { AuthFailure } from '../lib/supabase/authService';
 import { normalizeDisplayName } from '../lib/account/accountApi';
 import { ACCOUNTS_ENABLED, EMAIL_OTP_ENABLED } from '../lib/access/accessPolicy';
 import { useAccessPrompt, type PromptReason } from '../lib/access/editGuard';
-import { markConsentPending } from '../store/accountUi';
+import { LEGAL_DOC_VERSION } from '../lib/legal/legalDocs';
+import { clearPendingConsent, consentSessionStorage, markPendingConsent } from '../lib/legal/pendingConsent';
 import AppModal from './AppModal';
 import BrandLogo from './BrandLogo';
 import { AgreeLabel } from './LegalDialog';
@@ -29,8 +30,8 @@ function GoogleMark() {
 }
 
 /**
- * Registration and sign-in with Google or an emailed 6-digit code. No passwords. Creating an account asks for a
- * name and agreement to the terms first. Signing in never touches local projects.
+ * Registration and sign-in with Google or an emailed 6-digit code. No passwords. Both modes require agreement
+ * before contacting the provider; account onboarding explicitly records acceptance after authentication.
  */
 export default function AuthDialog() {
   const t = useT();
@@ -59,10 +60,9 @@ export function AuthForm({ reason, initialMode, onClose, t, inline = false }: { 
 
   const creating = mode === 'create';
   const fullName = creating ? (normalizeDisplayName(name) ?? undefined) : undefined;
-  /** Registration needs a valid name and the agreement before anything is sent. */
+  /** Every sign-in requires explicit agreement before the OAuth redirect or code request. */
   const registrationProblem = (): Problem | null => {
-    if (!creating) return null;
-    if (!normalizeDisplayName(name)) return 'need-name';
+    if (creating && !normalizeDisplayName(name)) return 'need-name';
     return agree ? null : 'need-agree';
   };
 
@@ -72,12 +72,12 @@ export function AuthForm({ reason, initialMode, onClose, t, inline = false }: { 
     const result = await action();
     setBusy(false);
     if (result.ok) onOk?.();
-    else setProblem(result.reason);
+    else { clearPendingConsent(consentSessionStorage()); setProblem(result.reason); }
   };
   const guarded = (action: () => Promise<{ ok: true } | { ok: false; reason: AuthFailure }>, onOk?: () => void) => {
     const blocked = registrationProblem();
     if (blocked) return setProblem(blocked);
-    if (creating) markConsentPending();
+    markPendingConsent(consentSessionStorage(), LEGAL_DOC_VERSION, Date.now());
     void run(action, onOk);
   };
   const switchTo = (next: Mode) => { setMode(next); setStep('start'); setProblem(null); };
@@ -91,19 +91,17 @@ export function AuthForm({ reason, initialMode, onClose, t, inline = false }: { 
       {step === 'start' ? (
         <>
           {creating && (
-            <>
               <label className="auth-field">
                 {t('acct.fullName')}
                 <input className="app-dialog-input" autoComplete="name" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
                 <span className="muted">{t('acct.nameHint')}</span>
               </label>
-              <label className="auth-field auth-agree">
-                <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-                <AgreeLabel />
-              </label>
-            </>
           )}
-          <button type="button" className="btn-secondary auth-google" disabled={busy} onClick={() => guarded(() => auth.signInWithGoogle())}>
+          <label className="auth-field auth-agree">
+            <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+            <AgreeLabel />
+          </label>
+          <button type="button" className="btn-secondary auth-google" disabled={busy || !agree} onClick={() => guarded(() => auth.signInWithGoogle())}>
             <GoogleMark />{t('account.google')}
           </button>
           {EMAIL_OTP_ENABLED && <>

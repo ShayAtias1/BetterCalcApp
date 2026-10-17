@@ -7,7 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  */
 export type AccountClient = Pick<SupabaseClient, 'rpc' | 'from'>;
 
-export type AccountErrorCode = 'invalid-name' | 'network' | 'unknown';
+export type AccountErrorCode = 'invalid-name' | 'network' | 'billing-disabled' | 'unknown';
 export class AccountError extends Error {
   readonly code: AccountErrorCode;
   constructor(code: AccountErrorCode, detail?: string) {
@@ -22,6 +22,7 @@ function toAccountError(error: unknown): AccountError {
   const { name, message, status } = (error ?? {}) as { name?: string; message?: string; status?: number };
   const text = message ?? '';
   if (name === 'TypeError' || status === 0 || /failed to fetch|network|load failed/i.test(text)) return new AccountError('network', text);
+  if (/billing_disabled/i.test(text)) return new AccountError('billing-disabled', text);
   if (/invalid_name|check constraint/i.test(text)) return new AccountError('invalid-name', text);
   return new AccountError('unknown', text);
 }
@@ -84,10 +85,13 @@ export interface CommercialFlags {
 /** Everything off: what the app assumes whenever the flags cannot be read. */
 export const FLAGS_OFF: CommercialFlags = { aiEnabled: false, paymentsEnabled: false, creditPurchasesEnabled: false, legalVersion: null };
 
-export async function getCommercialFlags(client: AccountClient): Promise<CommercialFlags> {
+export async function getCommercialFlags(client: AccountClient, requireServer = false): Promise<CommercialFlags> {
   try {
     const { data, error } = await client.rpc('commercial_flags');
-    if (error || !data) return FLAGS_OFF;
+    if (error || !data) {
+      if (requireServer) throw error ?? new Error('flags_unavailable');
+      return FLAGS_OFF;
+    }
     const f = data as Record<string, unknown>;
     return {
       aiEnabled: f.ai_enabled === true,
@@ -95,7 +99,8 @@ export async function getCommercialFlags(client: AccountClient): Promise<Commerc
       creditPurchasesEnabled: f.credit_purchases_enabled === true,
       legalVersion: typeof f.legal_version === 'string' ? f.legal_version : null,
     };
-  } catch {
+  } catch (error) {
+    if (requireServer) throw toAccountError(error);
     return FLAGS_OFF;
   }
 }
@@ -106,6 +111,7 @@ export interface Profile {
   locale: 'he' | 'en' | null;
   termsVersion: string | null;
   termsAcceptedAt: number | null;
+  privacyAcceptedAt: number | null;
   onboardingCompleted: boolean;
 }
 
@@ -113,13 +119,14 @@ const ms = (value: unknown) => (typeof value === 'string' ? Date.parse(value) : 
 
 export function getProfile(client: AccountClient): Promise<Profile | null> {
   return guard(async () => {
-    const row = unwrap(await client.from('profiles').select('display_name, locale, terms_version, terms_accepted_at, onboarding_completed_at').maybeSingle()) as Record<string, unknown> | null;
+    const row = unwrap(await client.from('profiles').select('display_name, locale, terms_version, terms_accepted_at, privacy_accepted_at, onboarding_completed_at').maybeSingle()) as Record<string, unknown> | null;
     if (!row) return null;
     return {
       displayName: (row.display_name as string | null) ?? null,
       locale: row.locale === 'he' || row.locale === 'en' ? row.locale : null,
       termsVersion: (row.terms_version as string | null) ?? null,
       termsAcceptedAt: ms(row.terms_accepted_at),
+      privacyAcceptedAt: ms(row.privacy_accepted_at),
       onboardingCompleted: row.onboarding_completed_at != null,
     };
   });
@@ -225,6 +232,7 @@ export function getBillingProfile(client: AccountClient): Promise<BillingProfile
 
 export function saveBillingProfile(client: AccountClient, userId: string, b: BillingProfile): Promise<void> {
   return guard(async () => {
+    if (!(await getCommercialFlags(client)).paymentsEnabled) throw new AccountError('billing-disabled');
     const orNull = (v: string) => v.trim() || null;
     const fields = { invoice_name: orNull(b.invoiceName), tax_id: orNull(b.taxId), address_line: orNull(b.addressLine), city: orNull(b.city), postal_code: orNull(b.postalCode) };
     // Update first, then insert if there was no row. An upsert would also try to rewrite user_id, which clients may not change.

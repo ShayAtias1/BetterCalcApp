@@ -19,7 +19,7 @@ test('not asked on the welcome screen, while signed in, or while the session is 
   assert.equal(guestNeedsAck({ ...base, welcomeSeen: false }), false);
   assert.equal(guestNeedsAck({ ...base, authStatus: 'signedIn' }), false);
   assert.equal(guestNeedsAck({ ...base, authStatus: 'loading' }), false);
-  assert.equal(guestNeedsAck({ ...base, accountsEnabled: false }), false);
+  assert.equal(guestNeedsAck({ ...base, accountsEnabled: false }), true);
 });
 
 test('unreadable or malformed records ask again, and a blocked storage does not throw', () => {
@@ -33,13 +33,13 @@ test('unreadable or malformed records ask again, and a blocked storage does not 
 });
 
 test('signed-in acceptance follows the version the server announces (placeholder "pending" until set)', () => {
-  const done = { onboardingCompleted: true, termsVersion: 'pending' };
+  const done = { onboardingCompleted: true, termsVersion: 'pending', termsAcceptedAt: 1, privacyAcceptedAt: 1 };
   assert.equal(hasAcceptedCurrentTerms(done, { legalVersion: null }), true);
   assert.equal(hasAcceptedCurrentTerms(done, { legalVersion: '2026-12-01' }), false);
-  assert.equal(hasAcceptedCurrentTerms({ onboardingCompleted: true, termsVersion: '2026-12-01' }, { legalVersion: '2026-12-01' }), true);
-  assert.equal(hasAcceptedCurrentTerms({ onboardingCompleted: false, termsVersion: null }, { legalVersion: null }), false);
+  assert.equal(hasAcceptedCurrentTerms({ ...done, termsVersion: '2026-12-01' }, { legalVersion: '2026-12-01' }, '2026-12-01'), true);
+  assert.equal(hasAcceptedCurrentTerms({ ...done, onboardingCompleted: false, termsVersion: null }, { legalVersion: null }), false);
   assert.equal(hasAcceptedCurrentTerms(null, { legalVersion: null }), false);
-  // Accepted before versions were recorded: not interrupted until a version is announced, then asked once.
-  assert.equal(hasAcceptedCurrentTerms({ onboardingCompleted: true, termsVersion: null }, { legalVersion: null }), true);
-  assert.equal(hasAcceptedCurrentTerms({ onboardingCompleted: true, termsVersion: null }, { legalVersion: '2026-12-01' }), false);
+  // Unversioned legacy evidence is preserved, but does not count as explicit acceptance of this document.
+  assert.equal(hasAcceptedCurrentTerms({ ...done, termsVersion: null }, { legalVersion: null }), false);
+  assert.equal(hasAcceptedCurrentTerms({ ...done, termsVersion: null }, { legalVersion: '2026-12-01' }), false);
 });

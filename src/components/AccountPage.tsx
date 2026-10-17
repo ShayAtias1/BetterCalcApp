@@ -278,20 +278,8 @@ const PAYMENT_STATUS: Record<string, 'paid' | 'failed' | 'pending' | 'refunded'>
 function BillingSection() {
   const t = useT();
   const language = useLanguage();
-  const user = useStore(authStore, (s) => s.user);
-  const [saved, , loaded] = useAccountData<BillingProfile>(getBillingProfile);
+  const paymentsEnabled = useStore(accountStore, (s) => s.flags.paymentsEnabled);
   const [payments] = useAccountData<PaymentRow[]>((c) => listPayments(c));
-  const [form, setForm] = useState<BillingProfile>(EMPTY_BILLING);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { if (saved) setForm(saved); }, [saved]);
-  const set = (key: keyof BillingProfile) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value }));
-  const save = async () => {
-    if (!user) return;
-    setBusy(true);
-    try { await withClient((c) => saveBillingProfile(c, user.id, form)); notify(t('acct.billing.saved')); }
-    catch (e) { notify(t(errorKey(e))); }
-    finally { setBusy(false); }
-  };
   return (
     <>
       <h1>{t('acct.billing.title')}</h1>
@@ -309,17 +297,7 @@ function BillingSection() {
           </div>
         </Card>
         <Card title={t('acct.billing.invoice')}>
-          <form className="account-stack" onSubmit={(e) => { e.preventDefault(); void save(); }}>
-            <label className="auth-field">{t('acct.billing.invoiceName')}<input className="app-dialog-input" disabled={!loaded} maxLength={200} value={form.invoiceName} onChange={set('invoiceName')} /></label>
-            <label className="auth-field">{t('acct.billing.taxId')}<input className="app-dialog-input" disabled={!loaded} maxLength={40} dir="ltr" value={form.taxId} onChange={set('taxId')} /></label>
-            <label className="auth-field">{t('acct.billing.address')}<input className="app-dialog-input" disabled={!loaded} maxLength={200} value={form.addressLine} onChange={set('addressLine')} /></label>
-            <div className="acct-fields">
-              <label className="auth-field">{t('acct.billing.city')}<input className="app-dialog-input" disabled={!loaded} maxLength={100} value={form.city} onChange={set('city')} /></label>
-              <label className="auth-field">{t('acct.billing.postal')}<input className="app-dialog-input" disabled={!loaded} maxLength={20} dir="ltr" value={form.postalCode} onChange={set('postalCode')} /></label>
-            </div>
-            <div className="acct-actions"><button type="submit" className="btn-primary" disabled={busy || !loaded}>{t('acct.billing.save')}</button></div>
-            <p className="acct-note">{t('acct.billing.invoiceNote')}</p>
-          </form>
+          {paymentsEnabled ? <InvoiceDetailsForm /> : <p className="acct-note">{t('acct.billing.detailsUnavailable')}</p>}
         </Card>
       </div>
       <Card title={t('acct.billing.history')}>
@@ -338,6 +316,37 @@ function BillingSection() {
         )}
       </Card>
     </>
+  );
+}
+
+/** Mounted only while payments are available; existing stored details are never cleared. */
+function InvoiceDetailsForm() {
+  const t = useT();
+  const user = useStore(authStore, (s) => s.user);
+  const [saved, , loaded] = useAccountData<BillingProfile>(getBillingProfile);
+  const [form, setForm] = useState<BillingProfile>(EMPTY_BILLING);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (saved) setForm(saved); }, [saved]);
+  const set = (key: keyof BillingProfile) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value }));
+  const save = async () => {
+    if (!user) return;
+    setBusy(true);
+    try { await withClient((c) => saveBillingProfile(c, user.id, form)); notify(t('acct.billing.saved')); }
+    catch (e) { notify(t(errorKey(e))); }
+    finally { setBusy(false); }
+  };
+  return (
+    <form className="account-stack" onSubmit={(e) => { e.preventDefault(); void save(); }}>
+      <label className="auth-field">{t('acct.billing.invoiceName')}<input className="app-dialog-input" disabled={!loaded} maxLength={200} value={form.invoiceName} onChange={set('invoiceName')} /></label>
+      <label className="auth-field">{t('acct.billing.taxId')}<input className="app-dialog-input" disabled={!loaded} maxLength={40} dir="ltr" value={form.taxId} onChange={set('taxId')} /></label>
+      <label className="auth-field">{t('acct.billing.address')}<input className="app-dialog-input" disabled={!loaded} maxLength={200} value={form.addressLine} onChange={set('addressLine')} /></label>
+      <div className="acct-fields">
+        <label className="auth-field">{t('acct.billing.city')}<input className="app-dialog-input" disabled={!loaded} maxLength={100} value={form.city} onChange={set('city')} /></label>
+        <label className="auth-field">{t('acct.billing.postal')}<input className="app-dialog-input" disabled={!loaded} maxLength={20} dir="ltr" value={form.postalCode} onChange={set('postalCode')} /></label>
+      </div>
+      <div className="acct-actions"><button type="submit" className="btn-primary" disabled={busy || !loaded}>{t('acct.billing.save')}</button></div>
+      <p className="acct-note">{t('acct.billing.invoiceNote')}</p>
+    </form>
   );
 }
 

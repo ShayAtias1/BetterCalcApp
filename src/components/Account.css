@@ -9,6 +9,10 @@ a.link-button:hover { text-decoration: underline; }
 .soon-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: var(--r-pill); background: var(--warning-bg); color: var(--warning); font: var(--t-label); white-space: nowrap; }
 .acct-lock { inline-size: 14px; block-size: 14px; flex: none; }
 
+.legal-access-screen { min-block-size: 100dvh; display: grid; place-items: center; padding: var(--s-4); box-sizing: border-box; background: var(--bg-stage); }
+.legal-access-state { inline-size: min(440px, 100%); box-sizing: border-box; }
+.legal-access-state p { margin: 0; font: var(--t-body); color: var(--text-2); }
+
 /* ---------------------------------------------------------------- sign-in / registration dialog */
 .auth-dialog { width: min(420px, calc(100vw - 32px)); }
 .auth-dialog .app-dialog-header, .ai-soon-dialog .app-dialog-header { position: static; margin: 0 0 var(--s-2); padding: 0; border: 0; }

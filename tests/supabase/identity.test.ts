@@ -50,7 +50,7 @@ test('the owner can edit their name but not consent or onboarding columns', asyn
 const setLegalVersion = (v: string | null) =>
   db.exec(`update public.commercial_settings set value = ${v === null ? "'null'" : `to_jsonb('${v}'::text)`} where key = 'legal_version'`);
 
-test('onboarding records name and consent with the server clock, once', async () => {
+test('each acceptance records its version and a fresh server timestamp, preserving history', async () => {
   await setLegalVersion('v1');
   try {
     await as(A, () => db.exec("select public.complete_onboarding('  Dana  ', 'v1')"));
@@ -62,7 +62,10 @@ test('onboarding records name and consent with the server clock, once', async ()
     await as(A, () => db.exec("select public.complete_onboarding('Dana L', 'v2')"));
     const again = (await q(`select display_name, terms_version, terms_accepted_at from public.profiles where id = '${A}'`))[0];
     assert.deepEqual([again.display_name, again.terms_version], ['Dana L', 'v2']);
-    assert.equal(again.terms_accepted_at.getTime(), first.terms_accepted_at.getTime()); // first agreement time is kept
+    assert.ok(again.terms_accepted_at.getTime() > first.terms_accepted_at.getTime());
+    const history = await as(A, () => q('select document_version, terms_accepted_at from public.legal_consents order by terms_accepted_at'));
+    assert.deepEqual(history.map((r) => r.document_version), ['v1', 'v2']);
+    assert.equal(history[0].terms_accepted_at.getTime(), first.terms_accepted_at.getTime());
     assert.equal((await q(`select onboarding_completed_at from public.profiles where id = '${B}'`))[0].onboarding_completed_at, null);
   } finally {
     await setLegalVersion(null);
@@ -74,6 +77,43 @@ test('onboarding rejects empty names, missing versions and anonymous callers', a
   await assert.rejects(as(A, () => db.exec("select public.complete_onboarding('Dana', '')")), /invalid_version/);
   await assert.rejects(as(A, () => db.exec("select public.complete_onboarding('Dana', null)")), /invalid_version/);
   await assert.rejects(as(null, () => db.exec("select public.complete_onboarding('Dana', 'pending')"), 'anon'), /permission denied/);
+});
+
+test('consent history is append-only for API users, private to its owner, and preserves repeat acceptance', async () => {
+  await as(A, () => db.exec("select public.complete_onboarding('Dana', 'pending')"));
+  await as(A, () => db.exec("select public.complete_onboarding('Dana', 'pending')"));
+  const history = await as(A, () => q('select * from public.legal_consents order by terms_accepted_at'));
+  assert.equal(history.length, 2);
+  assert.ok(history.every((r) => r.document_version === 'pending' && r.source === 'explicit'));
+  assert.ok(history[1].terms_accepted_at >= history[0].terms_accepted_at);
+  assert.equal((await as(B, () => q('select * from public.legal_consents'))).length, 0);
+  await assert.rejects(as(A, () => db.exec(`insert into public.legal_consents (user_id, source) values ('${A}', 'legacy')`)), /permission denied/);
+  await assert.rejects(as(A, () => db.exec("update public.legal_consents set document_version = 'fake'")), /permission denied/);
+  await assert.rejects(as(A, () => db.exec('delete from public.legal_consents')), /permission denied/);
+  await assert.rejects(as(A, () => db.exec("select public.complete_onboarding('Dana', 'fake')")), /invalid_version/);
+  assert.equal((await as(A, () => q('select * from public.legal_consents'))).length, 2);
+});
+
+test('the migration preserves legacy versions and timestamps without fabricating missing evidence', async () => {
+  const legacy = new PGlite();
+  try {
+    await legacy.exec(AUTH_STUB);
+    const files = readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).sort();
+    const last = files.pop()!;
+    await legacy.exec(files.map((f) => readFileSync(new URL(f, MIGRATIONS), 'utf8')).join('\n'));
+    await legacy.exec(`insert into auth.users(id) values ('${A}'), ('${B}');
+      update public.profiles set terms_version = 'v0', terms_accepted_at = '2026-01-02T03:04:05Z', privacy_accepted_at = '2026-01-02T03:04:06Z' where id = '${A}';
+      update public.profiles set terms_accepted_at = '2026-01-01T00:00:00Z' where id = '${B}';`);
+    await legacy.exec(readFileSync(new URL(last, MIGRATIONS), 'utf8'));
+    const rows = (await legacy.query<Record<string, any>>('select * from public.legal_consents order by user_id')).rows;
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].document_version, 'v0');
+    assert.equal(rows[0].terms_accepted_at.toISOString(), '2026-01-02T03:04:05.000Z');
+    assert.equal(rows[0].privacy_accepted_at.toISOString(), '2026-01-02T03:04:06.000Z');
+    assert.equal(rows[1].document_version, null);
+    assert.equal(rows[1].privacy_accepted_at, null);
+    assert.ok(rows.every((r) => r.source === 'legacy'));
+  } finally { await legacy.close(); }
 });
 
 test('consent is recorded only against the version the server announces', async () => {
