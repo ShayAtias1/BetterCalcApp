@@ -4,7 +4,7 @@ import { useT } from '../i18n';
 import { authStore, type AuthState } from '../store/authStore';
 import type { AuthFailure } from '../lib/supabase/authService';
 import { normalizeDisplayName } from '../lib/account/accountApi';
-import { ACCOUNTS_ENABLED } from '../lib/access/accessPolicy';
+import { ACCOUNTS_ENABLED, EMAIL_OTP_ENABLED } from '../lib/access/accessPolicy';
 import { useAccessPrompt, type PromptReason } from '../lib/access/editGuard';
 import { markConsentPending } from '../store/accountUi';
 import AppModal from './AppModal';
@@ -106,6 +106,7 @@ export function AuthForm({ reason, initialMode, onClose, t, inline = false }: { 
           <button type="button" className="btn-secondary auth-google" disabled={busy} onClick={() => guarded(() => auth.signInWithGoogle())}>
             <GoogleMark />{t('account.google')}
           </button>
+          {EMAIL_OTP_ENABLED && <>
           <div className="auth-or" role="separator">{t('account.or')}</div>
           <form onSubmit={(e) => { e.preventDefault(); guarded(() => auth.requestEmailCode(email, fullName), () => setStep('code')); }}>
             <label className="auth-field">
@@ -114,6 +115,7 @@ export function AuthForm({ reason, initialMode, onClose, t, inline = false }: { 
             </label>
             <button type="submit" className="btn-primary auth-submit" disabled={busy || !email.trim()}>{busy ? t('account.sending') : t('account.sendCode')}</button>
           </form>
+          </>}
           {problemText && <p className="auth-error" role="alert">{problemText}</p>}
           {creating && <p className="auth-note">{t('acct.aiNote')}</p>}
           <p className="auth-switch">
