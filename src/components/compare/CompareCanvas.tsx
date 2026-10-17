@@ -971,7 +971,7 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
         ctx.textAlign = x.rtl ? 'right' : 'left';
         const edge = (inset: number) => (x.rtl ? w - inset : inset);
         ctx.fillStyle = '#0f172a';
-        ctx.font = `${20 * mult}px 'Segoe UI', sans-serif`;
+        ctx.font = `${20 * mult}px 'BetterCalc Numbers', 'Segoe UI', sans-serif`;
         ctx.fillText(
           comparison.apartmentNumber
             ? x.t('compare.exportHeader.withApartment', { name: comparison.name, apartment: comparison.apartmentNumber })
@@ -981,10 +981,10 @@ const CompareCanvas = forwardRef<CompareCanvasHandle>(function CompareCanvas(_pr
           w - 32 * mult
         );
         ctx.fillStyle = '#8b8f99';
-        ctx.font = `${12 * mult}px 'Segoe UI', sans-serif`;
+        ctx.font = `${12 * mult}px 'BetterCalc Numbers', 'Segoe UI', sans-serif`;
         ctx.fillText(x.today(), edge(16 * mult), 50 * mult);
 
-        ctx.font = `${12 * mult}px 'Segoe UI', sans-serif`;
+        ctx.font = `${12 * mult}px 'BetterCalc Numbers', 'Segoe UI', sans-serif`;
         // Legend items: a colour dot, then its label. The Hebrew header keeps its fixed positions; the
         // English one flows each item after the previous label, so a longer label never meets its neighbour.
         const originalLabel = x.t('compare.exportHeader.original');

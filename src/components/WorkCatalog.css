@@ -398,6 +398,10 @@ select.wi-allocation-add:hover {
   text-align: end;
   font-family: var(--mono);
 }
+.work-breakdown-table th + th,
+.work-breakdown-table td + td {
+  border-inline-start: 1px solid var(--border);
+}
 .work-breakdown-table tr.wb-category td {
   font-weight: 600;
   background: var(--bg-subtle);

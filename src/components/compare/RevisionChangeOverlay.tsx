@@ -203,7 +203,7 @@ function noteTextWidth(text: string, size: number, bold = false): number {
   if (typeof document === 'undefined') return text.length * size * 0.6;
   noteMeasureContext ??= document.createElement('canvas').getContext('2d');
   if (!noteMeasureContext) return text.length * size * 0.6;
-  noteMeasureContext.font = `${bold ? '700' : '400'} ${size}px system-ui, sans-serif`;
+  noteMeasureContext.font = `${bold ? '700' : '400'} ${size}px 'BetterCalc Numbers', system-ui, sans-serif`;
   return noteMeasureContext.measureText(text).width;
 }
 
@@ -245,7 +245,7 @@ function ChangeNote({ type, at, targets, regionTip, width, height, number, selec
         rx={10 / zoom} fill="#fff" fillOpacity={0.96} stroke="#64748b" strokeWidth={1 / zoom} />
 
       <text x={at.x + 5 / zoom + width / 2} y={at.y + 2 / zoom} textAnchor="middle" dominantBaseline="central"
-        fontSize={11 / zoom} fontWeight={700} fontFamily="system-ui, sans-serif" fill={ink} direction="ltr">
+        fontSize={11 / zoom} fontWeight={700} fontFamily="'BetterCalc Numbers', system-ui, sans-serif" fill={ink} direction="ltr">
         #{number}
       </text>
       </g>
@@ -289,15 +289,15 @@ function ChangeNotePopup({ change, titleLines, lines, bubble, popupWidth, popupH
       style={{ cursor: onToggle ? 'pointer' : undefined }}>
       <rect x={x} y={y} width={popupWidth} height={popupHeight} rx={3 / zoom} fill="#fff" fillOpacity={1} stroke="#64748b" strokeWidth={1 / zoom} />
       <text x={textX} y={titleBaseline} direction={rtl ? 'rtl' : 'ltr'} textAnchor="start" style={textDirection}
-        fontSize={titleSize / zoom} fontWeight={700} fontFamily="system-ui, sans-serif" fill={ink} stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke" strokeLinejoin="round">
+        fontSize={titleSize / zoom} fontWeight={700} fontFamily="'BetterCalc Numbers', system-ui, sans-serif" fill={ink} stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke" strokeLinejoin="round">
         {titleLines.map((line, i) => <tspan key={i} x={textX} dy={i ? titleLine / zoom : 0}>{line}</tspan>)}
       </text>
       {lines.length > 0 && <text x={textX} y={y + (bodyTop + bodyLine * 0.78) / zoom} direction={rtl ? 'rtl' : 'ltr'} textAnchor="start" style={textDirection}
-        fontSize={bodySize / zoom} fontFamily="system-ui, sans-serif" fill={ink} stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke" strokeLinejoin="round">
+        fontSize={bodySize / zoom} fontFamily="'BetterCalc Numbers', system-ui, sans-serif" fill={ink} stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke" strokeLinejoin="round">
         {lines.map((line, i) => <tspan key={i} x={textX} dy={i ? bodyLine / zoom : 0}>{line}</tspan>)}
       </text>}
       <text x={textX} y={y + (workTop + bodyLine * 0.78) / zoom} direction={rtl ? 'rtl' : 'ltr'} textAnchor="start" style={textDirection}
-        fontSize={bodySize / zoom} fontWeight={700} fontFamily="system-ui, sans-serif" stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke">
+        fontSize={bodySize / zoom} fontWeight={700} fontFamily="'BetterCalc Numbers', system-ui, sans-serif" stroke="#fff" strokeWidth={3 / zoom} paintOrder="stroke">
         {work.map((kind, i) => <tspan key={kind} fill={colors[kind]}>{i ? ' · ' : ''}{t(`revisionAi.work.${kind}`)}</tspan>)}
       </text>
     </g>

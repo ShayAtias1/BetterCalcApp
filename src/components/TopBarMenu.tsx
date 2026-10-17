@@ -46,11 +46,11 @@ export default function TopBarMenu({
   const open = openId === id;
 
   return (
-    <div className="top-bar-menu-anchor">
+    <div className={`top-bar-menu-anchor${id === 'plans' ? ` bc-select${open ? ' is-open' : ''}` : ''}`}>
       <button
         ref={anchorRef}
         type="button"
-        className={`btn-${variant} small top-bar-menu-btn ${
+        className={`btn-${variant} small top-bar-menu-btn${id === 'plans' ? ' bc-select-trigger' : ''} ${
           variant !== 'primary' && (open || highlighted) ? 'active' : ''
         }`}
         onClick={() => setOpenId(open ? null : id)}
@@ -59,11 +59,11 @@ export default function TopBarMenu({
         aria-controls={open ? menuId : undefined}
       >
         {icon && <Icon name={icon} />}
-        <span className="btn-label">{label}</span>
+        <span className="btn-label" dir="auto">{label}</span>
         {caret === 'text' && <span className="menu-caret">▾</span>}
-        {caret === 'chevron' && <Icon name="chevron-down" size={13} />}
+        {caret === 'chevron' && <Icon name="chevron-down" size={id === 'plans' ? 16 : 13} className={id === 'plans' ? 'bc-select-chevron' : undefined} />}
       </button>
-      {open && <ResponsivePopover id={menuId} label={label} anchorRef={anchorRef} onClose={() => setOpenId(null)} desktopMaxWidth={desktopMaxWidth}>{children}</ResponsivePopover>}
+      {open && <ResponsivePopover id={menuId} label={label} anchorRef={anchorRef} onClose={() => setOpenId(null)} desktopMaxWidth={desktopMaxWidth} className={id === 'plans' ? 'bc-select-list plan-select-menu' : undefined}>{children}</ResponsivePopover>}
     </div>
   );
 }

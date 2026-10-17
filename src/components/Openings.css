@@ -20,8 +20,12 @@
 .opening-quantity-summary { margin-block: 10px; padding: 8px; border: 1px solid var(--border, #ddd); }
 .opening-quantity-summary > summary { cursor: pointer; font-weight: 600; }
 .opening-report-table { margin-block: 12px; }
-.opening-table-scroll { overflow-x: auto; }
+.opening-table-scroll { overflow-x: auto; margin-block-start: var(--s-2); border: 1px solid var(--border); }
 .opening-report-table th, .opening-report-table td { padding: 6px; text-align: start; white-space: normal; min-width: 70px; }
+.opening-report-table .qty-table th + th,
+.opening-report-table .qty-table td + td {
+  border-inline-start: 1px solid var(--border);
+}
 
 /* Rooms / Finishes keeps its two workflows inside the existing workspace. */
 .rooms-finishes-tabs {

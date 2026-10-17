@@ -5,6 +5,27 @@
    and one accent. Everything below this block is expected to reach for a token
    rather than invent a value.
    =========================================================================== */
+/* Digit-only aliases reuse the Openings table's existing Geist face. Letters and punctuation
+   keep falling through to their original text fonts, including in mixed labels and inputs. */
+@font-face {
+  font-family: 'BetterCalc Numbers';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('@fontsource-variable/geist/files/geist-latin-wght-normal.woff2') format('woff2');
+  unicode-range: U+0030-0039;
+  font-feature-settings: 'tnum';
+}
+@font-face {
+  font-family: 'BetterCalc Numbers';
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('@fontsource-variable/geist/files/geist-latin-wght-italic.woff2') format('woff2');
+  unicode-range: U+0030-0039;
+  font-feature-settings: 'tnum';
+}
+
 :root {
   /* --- background hierarchy -------------------------------------------------
      The stage is the DEEPEST level and belongs to the canvas alone; surfaces are
@@ -61,10 +82,11 @@
 
   /* --- typography ----------------------------------------------------------
      Geist for Latin and figures, Assistant for Hebrew (Geist has no Hebrew glyphs, so the browser
-     falls through per character). Both are bundled — nothing is fetched at runtime. Quantities use
-     the mono face so columns line up. */
-  --sans: 'Geist Variable', 'Assistant', 'Segoe UI', system-ui, sans-serif;
-  --mono: 'Geist Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+     falls through per character). Both are bundled — nothing is fetched at runtime. All digits use
+     Geist's tabular figures; the mono stack keeps its existing non-numeric glyphs. */
+  --numeric-font: 'BetterCalc Numbers';
+  --sans: var(--numeric-font), 'Geist Variable', 'Assistant', 'Segoe UI', system-ui, sans-serif;
+  --mono: var(--numeric-font), 'Geist Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, monospace;
   --t-label: 600 11px/1.4 var(--sans);
   --t-meta: 400 12px/1.45 var(--sans);
   --t-body: 400 13px/1.5 var(--sans);
@@ -1002,13 +1024,6 @@ button:disabled,
 .takeoff-top-bar .identity .page-nav {
   margin-inline-start: 6px;
 }
-.takeoff-top-bar .output .top-bar-menu-btn.btn-primary {
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: var(--r-md);
-  font: var(--t-body);
-  font-weight: 600;
-}
 /* End group, as in the approved header: quiet history icons, a status line, a framed View button,
    the AI menu in its own colour, the language switch, and Export as the one filled action. */
 .takeoff-top-bar .undo-redo-group .icon-btn {
@@ -1033,17 +1048,19 @@ button:disabled,
 .takeoff-top-bar .save-state-unsaved {
   color: var(--warning);
 }
-.takeoff-top-bar .output .top-bar-menu-btn.btn-secondary {
+.takeoff-top-bar .output .top-bar-menu-btn:is(.btn-secondary, .btn-primary) {
   height: 30px;
   min-height: 30px;
   padding: 0 10px;
   gap: 5px;
   border-radius: var(--r-md);
+  font: var(--t-body);
+  font-size: 12.5px;
+}
+.takeoff-top-bar .output .top-bar-menu-btn.btn-secondary {
   border-color: var(--border-strong);
   background: var(--bg-surface);
   color: var(--text);
-  font: var(--t-body);
-  font-size: 12.5px;
 }
 .takeoff-top-bar .output .top-bar-menu-btn.btn-secondary.active {
   border-color: var(--accent);
@@ -1053,10 +1070,6 @@ button:disabled,
 .takeoff-top-bar .output .top-bar-menu-btn .icon {
   width: 14px;
   height: 14px;
-}
-.takeoff-top-bar .output .top-bar-menu-btn.btn-primary {
-  height: 32px;
-  gap: 6px;
 }
 .takeoff-top-bar .language-switch {
   margin-inline-start: 0;
@@ -4883,6 +4896,16 @@ html[dir='rtl'] .openings-panel .opening-list-row.selected {
   justify-content: flex-start;
   gap: var(--s-3);
 }
+.projects-page .panel-head-actions > button {
+  min-height: 36px;
+  padding: 7px 14px;
+  font: var(--t-body);
+  gap: 6px;
+}
+.projects-page .panel-head-actions > button .icon {
+  width: 16px;
+  height: 16px;
+}
 .projects-page .home-panel-text h2 {
   font: 600 22px/1.3 var(--sans);
   margin-bottom: 6px;
@@ -5186,7 +5209,7 @@ html[dir='rtl'] .qty-grid .col-room {
   font-family: var(--sans);
 }
 .qty-summary .qty-summary-table th + th, .qty-summary .qty-summary-table td + td {
-  border-inline-start: 0;
+  border-inline-start: 1px solid var(--border);
 }
 .qty-summary-table tbody tr:nth-child(even) {
   background: transparent;
@@ -6119,6 +6142,31 @@ html[dir='rtl'] .header-calibration-action + .header-calibration-action { border
   padding: 8px 12px 4px;
   font: var(--t-label);
   color: var(--muted);
+}
+
+/* Keep the plan menu's rename and navigation controls in the shared dropdown surface. */
+.takeoff-top-bar .identity .top-bar-menu-anchor.bc-select {
+  width: auto;
+  max-width: 240px;
+}
+.takeoff-top-bar .identity .bc-select-trigger {
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--bg-surface);
+}
+.takeoff-top-bar .identity .bc-select.is-open .bc-select-trigger {
+  border-color: var(--accent);
+}
+.plan-select-menu .bc-select-option:hover,
+.plan-select-menu .bc-select-option:focus-visible {
+  background: var(--accent-bg);
+}
+.plan-select-menu .bc-select-option.is-selected:is(:hover, :focus-visible) {
+  background: var(--accent);
+}
+.plan-select-menu .bc-select-option.is-selected .menu-check {
+  color: inherit;
 }
 
 [data-touch-input='true'] .bc-select-trigger,

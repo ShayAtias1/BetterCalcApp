@@ -26,7 +26,7 @@ import { pdfDrawingPages, type PdfDrawingOptions } from './pdfDrawingLayers';
 
 export interface QuantityPdfOptions extends OpeningPdfOptions, PdfDrawingOptions {}
 
-const FONT = "'Segoe UI', sans-serif";
+const FONT = "'BetterCalc Numbers', 'Segoe UI', sans-serif";
 
 /**
  * Concrete and rebar zones of one page on the export canvas, each only when its View switch is on.

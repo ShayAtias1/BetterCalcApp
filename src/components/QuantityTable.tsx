@@ -1,6 +1,6 @@
 import { roomOpeningDisplay } from '../lib/openingQuantityReport';
 import { exportContext } from '../lib/exportLanguage';
-import { useLanguage } from '../i18n';
+import { formatNumber, useLanguage } from '../i18n';
 import OpeningQuantitySummary from './OpeningQuantitySummary';
 import WorkBreakdownTable from './WorkBreakdownTable';
 import { planUsesWorkBreakdown } from '../lib/workAllocation';
@@ -24,6 +24,7 @@ import {
 import Icon from './Icon';
 
 const DASH = '-';
+const fmt = (value: number | null | undefined) => value == null ? DASH : formatNumber(value);
 
 /**
  * The contractor-facing quantity report. Lives inside the bottom quantities panel; `showDefaults` is
@@ -158,7 +159,7 @@ export default function QuantityTable({ showDefaults = false, onCloseDefaults, c
                               <span className="cal-missing">{t('quantities.notCalibrated')}</span>
                             </td>,
                             <td key={`${c}-order`} className="num">
-                              <span className="qty-sub">{t('quantityTable.waste', { percent: q.wastePercent })}</span>
+                              <span className="qty-sub">{t('quantityTable.waste', { percent: fmt(q.wastePercent) })}</span>
                             </td>,
                           ];
                         }
@@ -166,26 +167,26 @@ export default function QuantityTable({ showDefaults = false, onCloseDefaults, c
                         // Strips (skirting and custom perimeter work) are read in metres with their m² under them.
                         const strip = info.unit === 'lm' && info.hasArea;
                         const netSub: string[] = [];
-                        const orderSub: string[] = [t('quantityTable.waste', { percent: q.wastePercent })];
+                        const orderSub: string[] = [t('quantityTable.waste', { percent: fmt(q.wastePercent) })];
                         // The deduction reads as one short word under the net; hovering spells out
                         // gross − deduction = net.
                         let netTitle: string | undefined;
                         if (strip) {
-                          netSub.push(`${q.quantityM2 ?? 0} ${t('units.m2')}`);
-                          orderSub.push(`${q.orderM2 ?? 0} ${t('units.m2')}`);
+                          netSub.push(`${fmt(q.quantityM2 ?? 0)} ${t('units.m2')}`);
+                          orderSub.push(`${fmt(q.orderM2 ?? 0)} ${t('units.m2')}`);
                           const doors = panels ? s.panelsDeductedLengthM ?? 0 : 0;
                           if (doors > 0 && q.lengthM != null) {
-                            netSub.push(t('quantityTable.deduction', { amount: doors }));
-                            netTitle = t('quantityTable.doorsTitle', { gross: round(q.lengthM + doors, 2), doors, net: q.lengthM, unit: t('units.lm') });
+                            netSub.push(t('quantityTable.deduction', { amount: fmt(doors) }));
+                            netTitle = t('quantityTable.doorsTitle', { gross: fmt(round(q.lengthM + doors, 2)), doors: fmt(doors), net: fmt(q.lengthM), unit: t('units.lm') });
                           }
                         } else {
                           const deduction = s.openingDeductions.find((d) => d.category === c);
                           if (deduction) {
-                            netSub.push(t('quantityTable.deduction', { amount: deduction.deductedM2 }));
+                            netSub.push(t('quantityTable.deduction', { amount: fmt(deduction.deductedM2) }));
                             netTitle = t('quantityTable.openingsTitle', {
-                              gross: deduction.grossM2,
-                              deducted: deduction.deductedM2,
-                              net: deduction.netM2,
+                              gross: fmt(deduction.grossM2),
+                              deducted: fmt(deduction.deductedM2),
+                              net: fmt(deduction.netM2),
                               unit: t('units.m2'),
                             });
                           }
@@ -193,19 +194,19 @@ export default function QuantityTable({ showDefaults = false, onCloseDefaults, c
                         if (compact) {
                           return (
                             <td key={c} className="num group-edge qty-pair" title={[netTitle, ...netSub, ...orderSub].filter(Boolean).join('\n')}>
-                              <span className="qty-pair-net">{reading.net}</span>
+                              <span className="qty-pair-net">{fmt(reading.net)}</span>
                               <span className="qty-pair-sep" aria-hidden="true">·</span>
-                              <span className="qty-pair-order">{reading.order}</span>
+                              <span className="qty-pair-order">{fmt(reading.order)}</span>
                             </td>
                           );
                         }
                         return [
                           <td key={`${c}-net`} className="num group-edge" title={netTitle}>
-                            <span className="qty-main">{reading.net}</span>
+                            <span className="qty-main">{fmt(reading.net)}</span>
                             {netSub.length > 0 && <span className="qty-sub">{netSub.join(' · ')}</span>}
                           </td>,
                           <td key={`${c}-order`} className="num order">
-                            <span className="qty-main">{reading.order}</span>
+                            <span className="qty-main">{fmt(reading.order)}</span>
                             <span className="qty-sub">{orderSub.join(' · ')}</span>
                           </td>,
                         ];
@@ -215,7 +216,7 @@ export default function QuantityTable({ showDefaults = false, onCloseDefaults, c
                         title={
                           openings
                             .map((o) =>
-                              t('quantityTable.openingTitle', { type: t(`openingTypes.${o.type}`), width: o.widthM, height: o.heightM, quantity: o.quantity })
+                              t('quantityTable.openingTitle', { type: t(`openingTypes.${o.type}`), width: fmt(o.widthM), height: fmt(o.heightM), quantity: fmt(o.quantity) })
                             )
                             .join('\n') || undefined
                         }
@@ -224,7 +225,7 @@ export default function QuantityTable({ showDefaults = false, onCloseDefaults, c
                           <>
                             <span className="qty-main">{openingsText}</span>
                             <span className="qty-sub">
-                              {openingsArea === null ? DASH : openingsArea} {t('units.m2')}{canonicalDisplay?.partial ? ` · ${t('openingQuantities.partial')}` : ''}
+                              {fmt(openingsArea)} {t('units.m2')}{canonicalDisplay?.partial ? ` · ${t('openingQuantities.partial')}` : ''}
                             </span>
                           </>
                         ) : (
@@ -249,9 +250,9 @@ export default function QuantityTable({ showDefaults = false, onCloseDefaults, c
                       const reading = primaryReading(total, infos.get(c)!);
                       return (
                         <td key={c} className="num group-edge qty-pair">
-                          <span className="qty-pair-net">{reading.net ?? DASH}</span>
+                          <span className="qty-pair-net">{fmt(reading.net)}</span>
                           <span className="qty-pair-sep" aria-hidden="true">·</span>
-                          <span className="qty-pair-order">{reading.order ?? DASH}</span>
+                          <span className="qty-pair-order">{fmt(reading.order)}</span>
                         </td>
                       );
                     })}
@@ -290,11 +291,11 @@ export default function QuantityTable({ showDefaults = false, onCloseDefaults, c
                   return (
                     <tr key={total.category}>
                       <td>{info.label}</td>
-                      <td>{total.lengthM ?? DASH}</td>
-                      <td>{counted ? `${total.count ?? 0} ${info.unitLabel}` : info.hasArea ? total.quantityM2 : DASH}</td>
-                      <td>{total.wastePercent}%</td>
-                      <td className="order">{total.orderLengthM ?? DASH}</td>
-                      <td className="order">{counted ? `${total.orderCount ?? 0} ${info.unitLabel}` : info.hasArea ? total.orderM2 : DASH}</td>
+                      <td>{fmt(total.lengthM)}</td>
+                      <td>{counted ? `${fmt(total.count ?? 0)} ${info.unitLabel}` : info.hasArea ? fmt(total.quantityM2) : DASH}</td>
+                      <td>{fmt(total.wastePercent)}%</td>
+                      <td className="order">{fmt(total.orderLengthM)}</td>
+                      <td className="order">{counted ? `${fmt(total.orderCount ?? 0)} ${info.unitLabel}` : info.hasArea ? fmt(total.orderM2) : DASH}</td>
                     </tr>
                   );
                 })}

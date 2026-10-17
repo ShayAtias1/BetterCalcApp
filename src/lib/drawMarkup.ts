@@ -2,7 +2,7 @@ import type { Markup } from '../types';
 import { arrowHeadPoints, cloudPath } from './geometry';
 import { dimensionChainGeometry, dimensionStyleFor } from './dimensionChain';
 
-const FONT = "'Segoe UI', sans-serif";
+const FONT = "'BetterCalc Numbers', 'Segoe UI', sans-serif";
 
 /**
  * Draw order for a set of markups: masks first, so a block that hides part of the plan never

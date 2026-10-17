@@ -15,7 +15,7 @@ import { polygonCentroid } from './geometry';
 import { labelDirection } from './textDirection';
 import { CONCRETE_COLOR, REBAR_COLOR, concreteZoneLabel, rebarZoneRows } from './structuralOverlay';
 
-const FONT = "'Segoe UI', sans-serif";
+const FONT = "'BetterCalc Numbers', 'Segoe UI', sans-serif";
 
 /** A rebar zone narrower than this (native px) cannot hold the level lines: it shows the mark and a B / T tag. */
 export const REBAR_COMPACT_WIDTH_PX = 110;

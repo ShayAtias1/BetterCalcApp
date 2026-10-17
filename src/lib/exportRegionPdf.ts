@@ -13,7 +13,7 @@ import type { Language } from '../i18n';
 import { exportContext } from './exportLanguage';
 import { labelDirection } from './textDirection';
 
-const FONT = "'Segoe UI', sans-serif";
+const FONT = "'BetterCalc Numbers', 'Segoe UI', sans-serif";
 
 /**
  * Renders one plan page — optionally cropped to `region` — with its room markings and measurements

@@ -144,7 +144,7 @@
 .revision-list > .segmented-tabs { align-self: flex-start; max-width: 100%; }
 .revision-list > .segmented-tabs > button { padding: 0 10px; }
 
-.revision-opening-drawing-controls { display: flex; flex-direction: column; gap: 5px; padding: 8px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-surface, #fff); color: var(--text); font: 12px system-ui, sans-serif; }
+.revision-opening-drawing-controls { display: flex; flex-direction: column; gap: 5px; padding: 8px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-surface, #fff); color: var(--text); font: 12px var(--numeric-font), system-ui, sans-serif; }
 .revision-opening-drawing-controls .tool-group, .revision-opening-drawing-controls p { margin: 0; }
 .revision-opening-drawing-controls .tool-label { font-size: 12px; }
 

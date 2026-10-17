@@ -4,10 +4,11 @@ import { useWorkspaceLayout } from '../hooks/useWorkspaceLayout';
 import { LANGUAGES, useLanguage } from '../i18n';
 
 /** Small anchored surfaces share collision handling; dialogs and form selects keep their own UI. */
-export default function ResponsivePopover({ anchorRef, onClose, id, label, children, desktopMaxWidth = 480 }: {
+export default function ResponsivePopover({ anchorRef, onClose, id, label, children, desktopMaxWidth = 480, className }: {
   anchorRef: RefObject<HTMLButtonElement | null>; onClose: () => void;
   id: string; label: string; children: ReactNode;
   desktopMaxWidth?: number;
+  className?: string;
 }) {
   const surfaceRef = useRef<HTMLDivElement>(null);
   const safeRef = useRef<HTMLDivElement>(null);
@@ -76,7 +77,7 @@ export default function ResponsivePopover({ anchorRef, onClose, id, label, child
     <div ref={safeRef} className="popover-safe-margins" aria-hidden="true" />
     <div ref={surfaceRef} id={id} role="region" aria-label={label} dir={dir} lang={language}
       data-layout={layout} data-touch-input={touchInput} data-plan-control="popover"
-      className="top-bar-menu responsive-popover" style={{ visibility: 'hidden' }}>
+      className={`top-bar-menu responsive-popover${className ? ` ${className}` : ''}`} style={{ visibility: 'hidden' }}>
       {children}
     </div>
   </>, document.body);

@@ -4,7 +4,7 @@ import { translatorFor, type Language } from '../i18n';
 import { labelDirection } from './textDirection';
 import { measurementLabel, type MeasurementValueFields } from './measurementValues';
 
-const FONT = "'Segoe UI', sans-serif";
+const FONT = "'BetterCalc Numbers', 'Segoe UI', sans-serif";
 const PLAIN_COLOR = '#0ea5e9';
 
 /** Structural shape shared by both apps' Measurement types (quantity-takeoff and Revision Compare). */

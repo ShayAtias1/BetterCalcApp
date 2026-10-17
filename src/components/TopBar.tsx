@@ -186,9 +186,9 @@ export default function TopBar({ domain, onDomainChange }: { domain?: WorkDomain
           <div className="menu-divider" />
           <p className="menu-hint menu-section-title">{t('topBar.plans')}</p>
           {projectPlans.map((p) => (
-            <button key={p.id} className={`menu-item ${p.id === project.id ? 'active' : ''}`} onClick={() => switchPlan(p.id)}>
+            <button key={p.id} className={`menu-item bc-select-option${p.id === project.id ? ' is-selected' : ''}`} aria-current={p.id === project.id ? 'page' : undefined} onClick={() => switchPlan(p.id)}>
               <span className="menu-check">{p.id === project.id && <Icon name="check" size={13} />}</span>
-              {p.id === project.id ? project.name : p.name}
+              <span dir="auto">{p.id === project.id ? project.name : p.name}</span>
             </button>
           ))}
           <div className="menu-divider" />
