@@ -1,3 +1,4 @@
+import { LEGAL_DOC_VERSION } from '../../src/lib/legal/legalDocs.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { legalAccessState } from '../../src/lib/access/legalAccess.ts';
@@ -7,8 +8,8 @@ import { hasPendingConsent, markPendingConsent, PENDING_CONSENT_KEY } from '../.
 
 const base = {
   accountsEnabled: true, authStatus: 'signedIn' as const, welcomeSeen: true, ack: null,
-  profile: { displayName: 'Dana', locale: null, termsVersion: 'pending', termsAcceptedAt: 1, privacyAcceptedAt: 1, onboardingCompleted: true },
-  flags: FLAGS_OFF, loading: false, loadFailed: false,
+  profile: { displayName: 'Dana', locale: null, termsVersion: LEGAL_DOC_VERSION, termsAcceptedAt: 1, privacyAcceptedAt: 1, onboardingCompleted: true },
+  flags: { ...FLAGS_OFF, legalVersion: LEGAL_DOC_VERSION }, loading: false, loadFailed: false,
 };
 
 test('the service gate requires explicit, matching account acceptance even for restored sessions', () => {
@@ -36,7 +37,7 @@ test('guests cannot bypass consent using unconfigured accounts, an old acknowled
   assert.equal(legalAccessState({ ...guest, welcomeSeen: false }), 'welcome');
   assert.equal(legalAccessState(guest), 'guest');
   assert.equal(legalAccessState({ ...guest, ack: { version: 'old', at: 1 } }), 'guest');
-  assert.equal(legalAccessState({ ...guest, ack: { version: 'pending', at: 1 } }), 'ready');
+  assert.equal(legalAccessState({ ...guest, ack: { version: LEGAL_DOC_VERSION, at: 1 } }), 'ready');
   assert.equal(legalAccessState({ ...guest, authStatus: 'unconfigured', welcomeSeen: false }), 'guest');
   assert.equal(legalAccessState({ ...guest, accountsEnabled: false, welcomeSeen: false }), 'guest');
 });
@@ -81,7 +82,7 @@ test('OAuth receipts bind agreement to the displayed version, expire, and reject
 test('temporary failure preserves verified consent and otherwise requires explicit local consent only', () => {
   assert.equal(legalAccessState({ ...base, loadFailed: true }), 'ready');
   assert.equal(legalAccessState({ ...base, profile: null, loadFailed: true }), 'local-consent');
-  assert.equal(legalAccessState({ ...base, profile: null, loadFailed: true, ack: { version: 'pending', at: 1 } }), 'local');
+  assert.equal(legalAccessState({ ...base, profile: null, loadFailed: true, ack: { version: LEGAL_DOC_VERSION, at: 1 } }), 'local');
   assert.equal(legalAccessState({ ...base, profile: null, loadFailed: true, ack: { version: 'old', at: 1 } }), 'local-consent');
   assert.equal(legalAccessState({ ...base, loadFailed: true, flags: { ...FLAGS_OFF, legalVersion: 'new' } }), 'version-mismatch');
 });
@@ -91,9 +92,9 @@ test('verified consent cache is user- and document-specific and does not fabrica
   const values = new Map<string, string>();
   const storage = { getItem: (k: string) => values.get(k) ?? null, setItem: (k: string, v: string) => void values.set(k, v), removeItem: (k: string) => void values.delete(k) };
   cacheVerifiedConsent(storage, 'u1', base.profile);
-  assert.equal(readVerifiedConsent(storage, 'u1', 'pending')?.termsAcceptedAt, 1);
-  assert.equal(readVerifiedConsent(storage, 'u2', 'pending'), null);
+  assert.equal(readVerifiedConsent(storage, 'u1', LEGAL_DOC_VERSION)?.termsAcceptedAt, 1);
+  assert.equal(readVerifiedConsent(storage, 'u2', LEGAL_DOC_VERSION), null);
   assert.equal(readVerifiedConsent(storage, 'u1', 'new-version'), null);
   cacheVerifiedConsent(storage, 'u1', { ...base.profile, privacyAcceptedAt: null });
-  assert.equal(readVerifiedConsent(storage, 'u1', 'pending'), null);
+  assert.equal(readVerifiedConsent(storage, 'u1', LEGAL_DOC_VERSION), null);
 });

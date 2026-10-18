@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LEGAL_CONTENT, legalDocumentStrings, legalPlaceholders } from '../../src/lib/legal/legalContent.ts';
-import { LEGAL_DOC_VERSION, LEGAL_DOC_VERSION_PENDING, LEGAL_IS_DRAFT } from '../../src/lib/legal/legalDocs.ts';
+import { LEGAL_DOC_VERSION, LEGAL_DOC_VERSION_PENDING, LEGAL_EFFECTIVE_DATE, LEGAL_IS_DRAFT } from '../../src/lib/legal/legalDocs.ts';
 
 const KINDS = ['privacy', 'terms'] as const;
 const LANGS = ['he', 'en'] as const;
@@ -68,14 +68,20 @@ test('a published version has no placeholder left; until then the version stays 
 });
 
 
-test('Early Access drafts require a real contact, do not publish a fake mailbox and retain pending status', () => {
-  assert.equal(LEGAL_DOC_VERSION, 'pending');
+test('final Early Access documents share the approved version, effective date and identity/contact', () => {
+  assert.equal(LEGAL_DOC_VERSION, 'ea-2026-10-18-v1');
+  assert.equal(LEGAL_EFFECTIVE_DATE, '2026-10-18');
+  assert.equal(LEGAL_IS_DRAFT, false);
   for (const kind of KINDS) for (const lang of LANGS) {
     const doc = LEGAL_CONTENT[kind][lang];
     const text = legalDocumentStrings(doc).join('\n');
-    assert.match(doc.meta, /pending/);
+    assert.ok(doc.meta.includes(LEGAL_DOC_VERSION));
+    assert.ok(doc.meta.includes(LEGAL_EFFECTIVE_DATE));
+    assert.doesNotMatch(doc.meta, /pending|draft|טיוטת/);
     assert.doesNotMatch(text, /support@bettercalc\.invalid/);
-    assert.match(text, lang === 'en' ? /active support and privacy contact/ : /כתובת פעילה לתמיכה ולפרטיות/);
+    assert.match(text, /support\.bettercalc@gmail\.com/);
+    assert.match(text, /שי אטיאס/);
+    assert.doesNotMatch(text, /confirm registered legal name|לאימות השם המשפטי הרשום/);
     assert.doesNotMatch(text, /VAT-exempt|עוסק פטור/);
   }
 });
@@ -85,4 +91,25 @@ test('publishing also requires removal of the development-only contact placehold
   for (const kind of KINDS) for (const lang of LANGS) {
     assert.doesNotMatch(legalDocumentStrings(LEGAL_CONTENT[kind][lang]).join('\n'), /support@bettercalc\.invalid/);
   }
+});
+
+test('privacy describes optional local-data deletion during sign-out in both languages', () => {
+  assert.match(legalDocumentStrings(LEGAL_CONTENT.privacy.en).join(' '), /unless you explicitly choose to delete local data/);
+  assert.match(legalDocumentStrings(LEGAL_CONTENT.privacy.he).join(' '), /אלא אם בחרתם במפורש למחוק נתונים מקומיים/);
+});
+
+
+test('shared-browser and exact local clearing disclosures stay paired in Hebrew and English', () => {
+  const en = legalDocumentStrings(LEGAL_CONTENT.privacy.en).join(' ');
+  const he = legalDocumentStrings(LEGAL_CONTENT.privacy.he).join(' ');
+  for (const term of ['not separated by Google account', 'other accounts', 'Language, grid', 'guest trial state', 'guest consent acknowledgement and history remain', 'before the app attempts account sign-out', 'not automatically erased', 'not anonymous']) assert.ok(en.includes(term), term);
+  for (const term of ['אינם מופרדים לפי חשבון Google', 'חשבונות אחרים', 'העדפות השפה, הרשת', 'מצב הניסיון לאורח', 'אישור הסכמת האורח וההיסטוריה שלו נשארים', 'לפני ניסיון ההתנתקות', 'אינם נמחקים אוטומטית', 'אינן אנונימיות']) assert.ok(he.includes(term), term);
+});
+
+test('prepared Supabase legal release matches the client without touching consent history', async () => {
+  const { readFileSync } = await import('node:fs');
+  const sql = readFileSync('scripts/sql/early-access-legal-release.sql', 'utf8');
+  assert.ok(sql.includes(`('legal_version', to_jsonb('${LEGAL_DOC_VERSION}'::text))`));
+  assert.ok(sql.includes(`('legal_effective_date', to_jsonb('${LEGAL_EFFECTIVE_DATE}'::text))`));
+  assert.doesNotMatch(sql, /(?:update|delete from|insert into) public\.(?:profiles|legal_consents)\b/i);
 });

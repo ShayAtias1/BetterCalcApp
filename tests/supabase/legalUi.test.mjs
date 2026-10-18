@@ -41,7 +41,11 @@ const { default: AccountPage } = await import('../../src/components/AccountPage.
 const { useAccountUi } = await import('../../src/store/accountUi.ts');
 const { translate } = await import('../../src/i18n/index.ts');
 const render = (Component, props) => renderToStaticMarkup(createElement(Component, props));
-const accepted = { displayName: 'Dana', termsVersion: 'pending', termsAcceptedAt: 1, privacyAcceptedAt: 1, onboardingCompleted: true };
+const { LEGAL_DOC_VERSION } = await import('../../src/lib/legal/legalDocs.ts');
+const { default: LegalPage } = await import('../../src/components/LegalPage.tsx');
+const { useLanguageStore } = await import('../../src/i18n/index.ts');
+const currentFlags = { ...FLAGS_OFF, legalVersion: LEGAL_DOC_VERSION };
+const accepted = { displayName: 'Dana', termsVersion: LEGAL_DOC_VERSION, termsAcceptedAt: 1, privacyAcceptedAt: 1, onboardingCompleted: true };
 
 test('both Google sign-in modes render an unchecked agreement and a disabled OAuth button before acceptance', () => {
   for (const initialMode of ['signIn', 'create']) {
@@ -56,7 +60,7 @@ test('both Google sign-in modes render an unchecked agreement and a disabled OAu
 
 test('an unsigned account cannot mount service controls or dismiss required consent', () => {
   authStore.setState({ status: 'signedIn', user: { id: 'test' } });
-  accountStore.setState({ profile: { ...accepted, termsVersion: null }, flags: FLAGS_OFF, needsOnboarding: true, loading: false, loadFailed: false });
+  accountStore.setState({ profile: { ...accepted, termsVersion: null }, flags: currentFlags, needsOnboarding: true, loading: false, loadFailed: false });
   const html = render(Gate, { children: createElement('button', null, 'service-marker') });
   assert.doesNotMatch(html, /service-marker|app-dialog-close/);
   assert.match(html, /type="checkbox"/);
@@ -67,7 +71,7 @@ test('an unsigned account cannot mount service controls or dismiss required cons
 
 test('a signed-in billing page has no invoice collection form while payments are unavailable', () => {
   authStore.setState({ status: 'signedIn', user: { id: 'test' } });
-  accountStore.setState({ flags: FLAGS_OFF, profile: accepted });
+  accountStore.setState({ flags: currentFlags, profile: accepted });
   useAccountUi.setState({ pageOpen: true, section: 'billing' });
   const html = render(AccountPage);
   assert.doesNotMatch(html, /<input|<form/);
@@ -76,7 +80,7 @@ test('a signed-in billing page has no invoice collection form while payments are
 
 test('temporary verification failure keeps local controls mounted with one non-modal notice', () => {
   authStore.setState({ status: 'signedIn', user: { id: 'test' } });
-  accountStore.setState({ profile: accepted, flags: FLAGS_OFF, needsOnboarding: false, needsName: false, loading: false, loadFailed: true });
+  accountStore.setState({ profile: accepted, flags: currentFlags, needsOnboarding: false, needsName: false, loading: false, loadFailed: true });
   const html = render(Gate, { children: createElement('button', null, 'local-project-controls') });
   assert.match(html, /local-project-controls/);
   assert.doesNotMatch(html, /<dialog/);
@@ -88,4 +92,19 @@ test('Early Access cloud backup stays unavailable without mounting upload or res
   const html = render(CloudBackupDialog, { onClose() {} });
   assert.ok(html.includes(translate('he', 'cloud.earlyAccessUnavailable')));
   assert.doesNotMatch(html, /<input|<progress|type="checkbox"/);
+});
+
+
+test('the four finalized public documents render formatted text without draft or Markdown artifacts', () => {
+  for (const language of ['he', 'en']) {
+    useLanguageStore.setState({ language });
+    for (const kind of ['terms', 'privacy']) {
+      const html = render(LegalPage, { kind });
+      assert.ok(html.includes(LEGAL_DOC_VERSION));
+      assert.ok(html.includes('2026-10-18'));
+      assert.match(html, /<strong>/);
+      assert.doesNotMatch(html, /\*\*|\[\[|class="legal-draft"|Version: pending/);
+    }
+  }
+  useLanguageStore.setState({ language: 'he' });
 });

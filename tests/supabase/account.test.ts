@@ -1,3 +1,4 @@
+import { LEGAL_DOC_VERSION } from '../../src/lib/legal/legalDocs.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createStore } from 'zustand/vanilla';
@@ -20,7 +21,7 @@ import {
   FLAGS_OFF,
   type AccountClient,
 } from '../../src/lib/account/accountApi.ts';
-import { createAccountStore, LEGAL_VERSION_PENDING } from '../../src/store/accountStore.ts';
+import { createAccountStore } from '../../src/store/accountStore.ts';
 import { markPendingConsent, PENDING_CONSENT_KEY } from '../../src/lib/legal/pendingConsent.ts';
 import {
   getPaymentProvider,
@@ -144,7 +145,7 @@ test('registration: the chosen name travels with the first code request, and onl
 function storeFixture(status: 'signedIn' | 'signedOut', profile: any) {
   const auth = createStore<{ status: string; user: { id: string } | null }>()(() => ({ status, user: { id: 'u1' } }));
   const { client, calls } = fakeClient({ profiles: profile }, {
-    commercial_flags: { data: { ai_enabled: false, payments_enabled: false, credit_purchases_enabled: false, legal_version: null }, error: null },
+    commercial_flags: { data: { ai_enabled: false, payments_enabled: false, credit_purchases_enabled: false, legal_version: LEGAL_DOC_VERSION }, error: null },
     account_overview: { data: { purchased_credits: 0, monthly_credits: 0, subscription: null }, error: null },
   });
   const sync = createAccountStore({ auth: auth as never, loadClient: async () => client });
@@ -165,7 +166,7 @@ test('signed in without onboarding: the store asks for it; signing out clears th
 });
 
 test('an explicitly onboarded user is accepted; failed loads remain marked for the legal gate', async () => {
-  const done = storeFixture('signedIn', { display_name: 'Dana', terms_version: 'pending', onboarding_completed_at: '2026-10-18T10:00:00Z', terms_accepted_at: '2026-10-18T10:00:00Z', privacy_accepted_at: '2026-10-18T10:00:00Z' });
+  const done = storeFixture('signedIn', { display_name: 'Dana', terms_version: LEGAL_DOC_VERSION, onboarding_completed_at: '2026-10-18T10:00:00Z', terms_accepted_at: '2026-10-18T10:00:00Z', privacy_accepted_at: '2026-10-18T10:00:00Z' });
   done.sync.start();
   await settle();
   assert.equal(done.sync.store.getState().needsOnboarding, false);
@@ -178,12 +179,12 @@ test('an explicitly onboarded user is accepted; failed loads remain marked for t
   assert.deepEqual([broken.store.getState().needsOnboarding, broken.store.getState().loadFailed], [false, true]);
 });
 
-test('submitting onboarding sends the name with the pending legal version until texts exist', async () => {
+test('submitting onboarding sends the name with the finalized displayed legal version', async () => {
   const f = storeFixture('signedIn', { display_name: null, onboarding_completed_at: null });
   f.sync.start();
   await settle();
   await f.sync.store.getState().submitOnboarding(' Dana ');
-  assert.deepEqual(f.calls.find(([n]) => n === 'rpc:complete_onboarding'), ['rpc:complete_onboarding', { p_name: 'Dana', p_legal_version: LEGAL_VERSION_PENDING }]);
+  assert.deepEqual(f.calls.find(([n]) => n === 'rpc:complete_onboarding'), ['rpc:complete_onboarding', { p_name: 'Dana', p_legal_version: LEGAL_DOC_VERSION }]);
 });
 
 test('a valid explicit OAuth receipt is recorded even for an existing account and consumed after success', async () => {
@@ -192,10 +193,10 @@ test('a valid explicit OAuth receipt is recorded even for an existing account an
   const storage = { getItem: (k: string) => values.get(k) ?? null, setItem: (k: string, v: string) => void values.set(k, v), removeItem: (k: string) => void values.delete(k) };
   Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: storage });
   try {
-    markPendingConsent(storage, 'pending', Date.now());
-    const f = storeFixture('signedIn', { display_name: 'Dana', terms_version: 'pending', terms_accepted_at: '2026-10-18T10:00:00Z', privacy_accepted_at: '2026-10-18T10:00:00Z', onboarding_completed_at: '2026-10-18T10:00:00Z' });
+    markPendingConsent(storage, LEGAL_DOC_VERSION, Date.now());
+    const f = storeFixture('signedIn', { display_name: 'Dana', terms_version: LEGAL_DOC_VERSION, terms_accepted_at: '2026-10-18T10:00:00Z', privacy_accepted_at: '2026-10-18T10:00:00Z', onboarding_completed_at: '2026-10-18T10:00:00Z' });
     await f.sync.store.getState().refresh();
-    assert.deepEqual(f.calls.find(([name]) => name === 'rpc:complete_onboarding'), ['rpc:complete_onboarding', { p_name: 'Dana', p_legal_version: 'pending' }]);
+    assert.deepEqual(f.calls.find(([name]) => name === 'rpc:complete_onboarding'), ['rpc:complete_onboarding', { p_name: 'Dana', p_legal_version: LEGAL_DOC_VERSION }]);
     assert.equal(storage.getItem(PENDING_CONSENT_KEY), null);
     await f.sync.store.getState().refresh();
     assert.equal(f.calls.filter(([name]) => name === 'rpc:complete_onboarding').length, 1);
@@ -272,7 +273,7 @@ test('invoice links are kept only as absolute https URLs', async () => {
 });
 
 test('overlapping refreshes share one request and unrelated account overview failure does not revoke consent', async () => {
-  const f = storeFixture('signedIn', { display_name: 'Dana', terms_version: 'pending', terms_accepted_at: '2026-10-18T10:00:00Z', privacy_accepted_at: '2026-10-18T10:00:00Z', onboarding_completed_at: '2026-10-18T10:00:00Z' });
+  const f = storeFixture('signedIn', { display_name: 'Dana', terms_version: LEGAL_DOC_VERSION, terms_accepted_at: '2026-10-18T10:00:00Z', privacy_accepted_at: '2026-10-18T10:00:00Z', onboarding_completed_at: '2026-10-18T10:00:00Z' });
   const first = f.sync.store.getState().refresh();
   const second = f.sync.store.getState().refresh();
   assert.equal(first, second);
@@ -298,15 +299,15 @@ test('a late response cannot restore the profile after sign-out', async () => {
 
 test('failed optional credit/catalogue requests do not turn valid legal verification into an error', async () => {
   const auth = createStore<any>()(() => ({ status: 'signedIn', user: { id: 'u1' } }));
-  const { client } = fakeClient({ profiles: { display_name: 'Dana', terms_version: 'pending', terms_accepted_at: '2026-10-18T10:00:00Z', privacy_accepted_at: '2026-10-18T10:00:00Z', onboarding_completed_at: '2026-10-18T10:00:00Z' } }, {
-    commercial_flags: { data: { legal_version: null }, error: null },
+  const { client } = fakeClient({ profiles: { display_name: 'Dana', terms_version: LEGAL_DOC_VERSION, terms_accepted_at: '2026-10-18T10:00:00Z', privacy_accepted_at: '2026-10-18T10:00:00Z', onboarding_completed_at: '2026-10-18T10:00:00Z' } }, {
+    commercial_flags: { data: { legal_version: LEGAL_DOC_VERSION }, error: null },
     account_overview: { data: null, error: { message: 'temporarily unavailable' } },
   });
   const sync = createAccountStore({ auth, loadClient: async () => client });
   await sync.store.getState().refresh();
   assert.equal(sync.store.getState().loadFailed, false);
   assert.equal(sync.store.getState().needsOnboarding, false);
-  assert.equal(sync.store.getState().profile?.termsVersion, 'pending');
+  assert.equal(sync.store.getState().profile?.termsVersion, LEGAL_DOC_VERSION);
 });
 
 test('a successfully verified acceptance survives refresh and temporary Supabase failure without inventing new consent', async () => {
@@ -315,14 +316,14 @@ test('a successfully verified acceptance survives refresh and temporary Supabase
   const storage = { getItem: (k: string) => values.get(k) ?? null, setItem: (k: string, v: string) => void values.set(k, v), removeItem: (k: string) => void values.delete(k) };
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage });
   try {
-    const verified = storeFixture('signedIn', { display_name: 'Dana', terms_version: 'pending', terms_accepted_at: '2026-10-18T10:00:00Z', privacy_accepted_at: '2026-10-18T10:00:00Z', onboarding_completed_at: '2026-10-18T10:00:00Z' });
+    const verified = storeFixture('signedIn', { display_name: 'Dana', terms_version: LEGAL_DOC_VERSION, terms_accepted_at: '2026-10-18T10:00:00Z', privacy_accepted_at: '2026-10-18T10:00:00Z', onboarding_completed_at: '2026-10-18T10:00:00Z' });
     await verified.sync.store.getState().refresh();
     const auth = createStore<any>()(() => ({ status: 'signedIn', user: { id: 'u1' } }));
     let writes = 0;
     const offline = createAccountStore({ auth, loadClient: async () => ({ rpc: async () => { throw new TypeError('Failed to fetch'); }, from: () => { writes++; throw new Error('unreachable'); } }) as never });
     await offline.store.getState().refresh();
     assert.equal(offline.store.getState().loadFailed, true);
-    assert.equal(offline.store.getState().profile?.termsVersion, 'pending');
+    assert.equal(offline.store.getState().profile?.termsVersion, LEGAL_DOC_VERSION);
     assert.equal(offline.store.getState().profile?.termsAcceptedAt, Date.parse('2026-10-18T10:00:00Z'));
     assert.equal(writes, 0);
     auth.setState({ user: { id: 'another-user' } });

@@ -1,3 +1,4 @@
+import { LEGAL_DOC_VERSION } from '../../src/lib/legal/legalDocs.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GUEST_ACK_KEY, guestNeedsAck, readGuestAck, writeGuestAck } from '../../src/lib/access/guestAck.ts';
@@ -34,7 +35,9 @@ test('unreadable or malformed records ask again, and a blocked storage does not 
 
 test('signed-in acceptance follows the version the server announces (placeholder "pending" until set)', () => {
   const done = { onboardingCompleted: true, termsVersion: 'pending', termsAcceptedAt: 1, privacyAcceptedAt: 1 };
-  assert.equal(hasAcceptedCurrentTerms(done, { legalVersion: null }), true);
+  assert.equal(hasAcceptedCurrentTerms(done, { legalVersion: null }, 'pending'), true);
+  assert.equal(hasAcceptedCurrentTerms(done, { legalVersion: LEGAL_DOC_VERSION }), false);
+  assert.equal(hasAcceptedCurrentTerms({ ...done, termsVersion: LEGAL_DOC_VERSION }, { legalVersion: LEGAL_DOC_VERSION }), true);
   assert.equal(hasAcceptedCurrentTerms(done, { legalVersion: '2026-12-01' }), false);
   assert.equal(hasAcceptedCurrentTerms({ ...done, termsVersion: '2026-12-01' }, { legalVersion: '2026-12-01' }, '2026-12-01'), true);
   assert.equal(hasAcceptedCurrentTerms({ ...done, onboardingCompleted: false, termsVersion: null }, { legalVersion: null }), false);

@@ -50,9 +50,13 @@ Never print secrets, invoke production deletion for a smoke test, or edit user p
 
 ## Minimum owner/legal decisions — free beta, not paid checkout
 
-The owner supplied “שי אטיאס” but expressly requires verification of the registered
-legal name. Do not publish it as confirmed yet. A real monitored support/privacy
-contact remains essential; no `.invalid` address remains in the document content.
+The owner has now confirmed “שי אטיאס” as the registered sole proprietor. The supplied
+support.bettercalc@gmail.com is confirmed by the owner; Gmail access and incoming
+mail were verified. The approved release basis is now finalized with the requested
+shared-browser/clearing disclosures: ea-2026-10-18-v1, effective 2026-10-18.
+Matching server configuration is prepared, not applied, in
+scripts/sql/early-access-legal-release.sql. Consolidated release approval is pending.
+No `.invalid` address remains in the document content.
 
 The Privacy Protection Authority's Section 11 guidance requires controller name and
 contact, processing purposes, whether providing information is mandatory and the
@@ -79,9 +83,13 @@ preparation does not invent durations or silently delete historical data.
 Final bilingual approval must cover measurement and independent verification warnings,
 mandatory-law exceptions, liability/indemnity enforceability and any applicable
 consumer rules. No commercial terms, tax status or AI-provider details are needed
-until those unavailable features are offered. All documents remain version `pending`.
+until those unavailable features are offered. All documents are finalized locally as `ea-2026-10-18-v1`, effective `2026-10-18`;
+production remains unchanged until consolidated release approval.
 
 ## Ordered release procedure — only after explicit final approval
+
+Current applied Netlify/Google preparation and remaining release blockers:
+[NETLIFY-GOOGLE-LAUNCH.md](NETLIFY-GOOGLE-LAUNCH.md). Safe hosted configuration changes are recorded there; no release has occurred.
 
 1. Resolve/approve final identity/contact, provider and retention facts. Finalize
    both legal texts, assign one immutable version and effective date, retain copies.
@@ -91,8 +99,9 @@ until those unavailable features are offered. All documents remain version `pend
    Public URLs must work before completing OAuth publication. Do not use fake contact.
 3. Confirm database backup/recovery arrangements. Review migration diff and dependencies
    (existing 20261016–22 schema, billing policies, profile/consent RPC). Run local SQL
-   regression tests. With approved release authority, apply **only** pending 20261023
-   through the normal migration process. It adds/backfills history without fabricating
+   regression tests. With approved release authority, apply pending 20261023 and then 20261024
+   through the normal migration process, each transactionally. Migration 24 tightens
+   completed-backup reads and API sequence permissions without enabling cloud access. Migration 23 adds/backfills history without fabricating
    missing legacy evidence, preserves invoice data and original onboarding timestamp,
    and does not enable AI, payments, credit purchases or cloud entitlements.
 4. Coordinate the effective backend `commercial_settings.legal_version` with the
@@ -141,3 +150,13 @@ records. The supplied read-only SQL reports total/Google registrations, registra
 by day and accounts missing a profile, using aggregates without plan content.
 Registration counts **are not active-user counts**; no new event tracking is added.
 Do not infer meaningful usage from registration or token refresh alone.
+
+### Recovery checkpoint — 18 October 2026
+
+Free read-only backup and isolated PostgreSQL 17.11 recovery passed. All 60 table
+counts/digests, 21 policies, 225 constraints and 155 function definitions matched.
+No production password reset, migration, purchase, push or deployment. See
+NETLIFY-GOOGLE-LAUNCH.md for the private backup location, isolation controls and
+limitations. A SQL restore is not a full hosted-service disaster-recovery test;
+external configuration/Vault key context must be retained, and the checkpoint
+must be refreshed if data changed before the approved migration window.
