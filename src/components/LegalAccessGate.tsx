@@ -22,7 +22,10 @@ export default function LegalAccessGate({ children }: { children: ReactNode }) {
   const account = useStore(accountStore);
   const welcomeSeen = welcomeStore((s) => s.seen);
   const ack = useGuestConsent((s) => s.ack);
-  const state = legalAccessState({ accountsEnabled: ACCOUNTS_ENABLED, authStatus: auth.status, welcomeSeen, ack, ...account });
+  const state = legalAccessState({ accountsEnabled: ACCOUNTS_ENABLED, authStatus: auth.status, welcomeSeen, ack, ...account }, undefined, {
+    enabled: import.meta.env?.DEV === true,
+    hostname: typeof window === 'undefined' ? '' : window.location.hostname,
+  });
   useEffect(() => {
     if (state === 'ready' || state === 'local') accessSync.beginUse();
   }, [state]);

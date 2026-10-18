@@ -98,3 +98,19 @@ test('verified consent cache is user- and document-specific and does not fabrica
   cacheVerifiedConsent(storage, 'u1', { ...base.profile, privacyAcceptedAt: null });
   assert.equal(readVerifiedConsent(storage, 'u1', LEGAL_DOC_VERSION), null);
 });
+
+
+test('only loopback development previews use explicit local consent for a server-version mismatch', () => {
+  const mismatch = { ...base, flags: FLAGS_OFF };
+  for (const hostname of ['localhost', '127.0.0.1', '[::1]']) {
+    const development = { enabled: true, hostname };
+    assert.equal(legalAccessState(mismatch, LEGAL_DOC_VERSION, development), 'local-consent');
+    assert.equal(legalAccessState({ ...mismatch, ack: { version: 'old', at: 1 } }, LEGAL_DOC_VERSION, development), 'local-consent');
+    assert.equal(legalAccessState({ ...mismatch, ack: { version: LEGAL_DOC_VERSION, at: 1 } }, LEGAL_DOC_VERSION, development), 'local');
+    assert.equal(legalAccessState(mismatch, LEGAL_DOC_VERSION, { enabled: false, hostname }), 'version-mismatch');
+  }
+  assert.equal(legalAccessState(mismatch, LEGAL_DOC_VERSION, { enabled: true, hostname: 'bettercalcapp.netlify.app' }), 'version-mismatch');
+  assert.equal(legalAccessState(mismatch), 'version-mismatch');
+  assert.equal(mismatch.profile.termsVersion, LEGAL_DOC_VERSION);
+  assert.equal(mismatch.flags.legalVersion, null, 'preview must not fabricate a server version');
+});
