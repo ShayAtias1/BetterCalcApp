@@ -33,9 +33,15 @@ Terms or Privacy Policy and does not enable any commercial or AI capability.
 Apply `20261023000000_early_access_legal_consent.sql` through the normal deployment
 process before releasing the client. It adds owner-readable, API-immutable
 `legal_consents` history and updates the existing acceptance RPC transactionally.
-Each acceptance records the exact shared Terms/Privacy version and fresh server
-timestamps. The latest profile timestamps are updated as well; original
-onboarding completion time stays intact. Deleting the account also deletes its
+The first acceptance of each Terms/Privacy version records that version with
+server timestamps (a unique index allows one explicit row per user and version).
+Repeated or concurrent calls for the same version add no row and keep the
+original timestamps; a new version adds one new row. The latest profile
+timestamps follow the newest acceptance; original onboarding completion time
+stays intact.
+Migration `20261024000000_backup_read_and_sequence_privileges.sql` also limits
+cloud-backup downloads to completed backups and revokes API-role access to
+identity sequences. Deleting the account also deletes its
 consent history, consistent with the existing account deletion flow.
 
 The migration copies the legacy evidence that exists, preserving null/unknown

@@ -25,6 +25,14 @@ async function as<T>(sub: string | null, fn: () => Promise<T>, role = 'authentic
     await db.exec('reset role;');
   }
 }
+/** Runs `fn` the way the Storage API does: it tags each request with its operation, which the read policy looks at. */
+async function asOp<T>(sub: string, op: string, fn: () => Promise<T>): Promise<T> {
+  return as(sub, async () => {
+    await db.exec(`select set_config('storage.operation', '${op}', false)`);
+    try { return await fn(); } finally { await db.exec(`select set_config('storage.operation', '', false)`); }
+  });
+}
+const del = (uid: string, path: string) => asOp(uid, 'storage.object.delete_many', () => db.exec(`delete from storage.objects where name = '${path}'`));
 const q = async (sql: string) => (await db.query<Record<string, any>>(sql)).rows;
 const grant = (uid: string, status = 'active', extra = '') =>
   db.exec(`insert into public.entitlements (user_id, status, source${status === 'ended' ? ', ended_at' : ''}${extra ? ', storage_quota_bytes' : ''})
@@ -33,7 +41,7 @@ const reserve = (uid: string, size: number, name = 'Project') =>
   as(uid, async () => (await q(`select * from public.reserve_cloud_backup('${name}', ${size}, 1, 7)`))[0]);
 /** The client's upload: an insert into storage.objects, subject to the bucket policy. */
 const upload = (uid: string, path: string, size: number) =>
-  as(uid, () => db.exec(`insert into storage.objects (bucket_id, name, owner, metadata) values ('cloud-backups', '${path}', '${uid}', '{"size": ${size}}')`));
+  asOp(uid, 'storage.object.upload', () => db.exec(`insert into storage.objects (bucket_id, name, owner, metadata) values ('cloud-backups', '${path}', '${uid}', '{"size": ${size}}') returning id`));
 const rejects = (p: Promise<unknown>, re: RegExp) => assert.rejects(p, re);
 
 before(async () => {
@@ -95,7 +103,7 @@ test('full flow: reserve, upload to the reserved path, complete, list, download,
   assert.equal((await as(A, () => q('select name from storage.objects'))).length, 1);
   // delete: the file first, then the row
   await rejects(as(A, () => db.exec(`select public.delete_cloud_backup('${r.id}')`)), /object_exists/);
-  await as(A, () => db.exec(`delete from storage.objects where name = '${r.object_path}'`));
+  await del(A, r.object_path);
   await as(A, () => db.exec(`select public.delete_cloud_backup('${r.id}')`));
   assert.equal((await q('select * from public.cloud_backups')).length, 0);
 });
@@ -180,7 +188,7 @@ test('completing needs the object, a fitting size and the owner', async () => {
   assert.deepEqual([kept.status, kept.closed], ['pending', true]);
   const usedWithRefused = await as(A, async () => (await q('select public.cloud_backup_status() as s'))[0].s.used_bytes);
   assert.equal(Number(usedWithRefused), 5 * MB + 6 * MB);
-  await as(A, () => db.exec(`delete from storage.objects where name = '${big.object_path}'`)); // what the client does
+  await del(A, big.object_path); // what the client does
   assert.equal(Number(await as(A, async () => (await q('select public.cloud_backup_status() as s'))[0].s.used_bytes)), 5 * MB);
   assert.equal(Number((await as(null, () => q('select public.cleanup_stale_cloud_backups() as n'), 'service_role'))[0].n), 1);
   const small = await reserve(A, 5 * MB);
@@ -198,7 +206,7 @@ test('users see and download only their own backups', async () => {
   assert.equal((await as(B, () => q('select * from public.cloud_backups'))).length, 0);
   assert.equal((await as(B, () => q('select * from storage.objects'))).length, 0);
   assert.equal((await as(A, () => q('select * from storage.objects'))).length, 1);
-  await as(B, () => db.exec(`delete from storage.objects where name = '${r.object_path}'`)); // deletes nothing
+  await del(B, r.object_path); // deletes nothing
   assert.equal((await q('select * from storage.objects')).length, 1);
   await as(B, () => db.exec(`select public.delete_cloud_backup('${r.id}')`)); // not B's: no effect
   assert.equal((await q('select * from public.cloud_backups')).length, 1);
@@ -228,7 +236,7 @@ test('grace keeps full access; an ended subscription is read-and-download only f
   await rejects(reserve(B, MB), /not_entitled/);
   // Removing one's own backup stays possible after the subscription ended: file first, then the record.
   await rejects(as(B, () => db.exec(`select public.delete_cloud_backup('${r.id}')`)), /object_exists/);
-  await as(B, () => db.exec(`delete from storage.objects where name = '${r.object_path}'`));
+  await del(B, r.object_path);
   await as(B, () => db.exec(`select public.delete_cloud_backup('${r.id}')`));
   assert.equal((await q(`select * from public.cloud_backups where user_id = '${B}'`)).length, 0);
 
@@ -310,8 +318,66 @@ test('an upload can read its own file back during its upload window (the Storage
   await grant(A);
   const r = await reserve(A, MB);
   await upload(A, r.object_path, MB);
-  assert.equal((await as(A, () => q(`select * from storage.objects where name = '${r.object_path}'`))).length, 1);
-  assert.equal((await as(B, () => q(`select * from storage.objects where name = '${r.object_path}'`))).length, 0);
+  // The upload's own INSERT ... RETURNING works (upload() above); a download or listing of it does not.
+  assert.equal((await asOp(A, 'storage.object.get_authenticated', () => q(`select * from storage.objects where name = '${r.object_path}'`))).length, 0);
+  assert.equal((await asOp(A, 'storage.object.list', () => q(`select * from storage.objects where name = '${r.object_path}'`))).length, 0);
+  assert.equal((await asOp(B, 'storage.object.get_authenticated', () => q(`select * from storage.objects where name = '${r.object_path}'`))).length, 0);
+});
+
+test('only completed backups can be downloaded; incomplete, refused and expired files cannot, but can be deleted', async () => {
+  await grant(A);
+  await grant(B);
+  const get = (uid: string, path: string) => asOp(uid, 'storage.object.get_authenticated', () => q(`select name from storage.objects where name = '${path}'`));
+  const done = await reserve(A, 5 * MB);
+  await upload(A, done.object_path, 5 * MB);
+  assert.equal((await get(A, done.object_path)).length, 0); // uploaded but not completed
+  await as(A, () => db.exec(`select public.complete_cloud_backup('${done.id}')`));
+  assert.equal((await get(A, done.object_path)).length, 1); // completed: legitimate download works
+  assert.equal((await get(B, done.object_path)).length, 0); // tenant isolation intact
+  assert.equal((await asOp(A, 'storage.object.list', () => q('select name from storage.objects'))).length, 1);
+
+  const big = await reserve(A, 5 * MB);
+  await upload(A, big.object_path, 6 * MB);
+  assert.equal(await as(A, async () => (await q(`select public.complete_cloud_backup('${big.id}') as r`))[0].r), 'size_mismatch');
+  assert.equal((await get(A, big.object_path)).length, 0); // refused file stays unreadable
+
+  const stale = await reserve(A, MB);
+  await upload(A, stale.object_path, MB);
+  await db.exec(`update public.cloud_backups set reserved_until = now() - interval '1 minute' where id = '${stale.id}'`);
+  assert.equal((await get(A, stale.object_path)).length, 0); // abandoned file stays unreadable
+  assert.equal((await q(`select 1 from storage.objects where name = '${stale.object_path}'`)).length, 1); // still stored and counted
+
+  // Plain SQL (no Storage operation) fails closed for incomplete files too, and a forged path gets nothing.
+  assert.deepEqual((await as(A, () => q('select name from storage.objects'))).map((r) => r.name), [done.object_path]);
+  await db.exec(`insert into storage.objects (bucket_id, name, metadata) values ('cloud-backups', '${A}/forged.bettercalc', '{"size": 1}')`);
+  assert.equal((await get(A, `${A}/forged.bettercalc`)).length, 0);
+
+  // Owners can still remove the unreadable files; others cannot.
+  await del(B, big.object_path);
+  assert.equal((await q(`select 1 from storage.objects where name = '${big.object_path}'`)).length, 1);
+  await del(A, big.object_path);
+  await del(A, stale.object_path);
+  assert.equal((await q(`select 1 from storage.objects where name in ('${big.object_path}', '${stale.object_path}')`)).length, 0);
+
+  // After the read window closes, even a completed backup is gone from view.
+  await db.exec(`update public.entitlements set status = 'ended', ended_at = now() - interval '91 days' where user_id = '${A}'`);
+  assert.equal((await get(A, done.object_path)).length, 0);
+});
+
+test('API roles have no privileges on identity sequences', async () => {
+  const seqs = await q("select c.relname from pg_class c where c.relkind = 'S' and c.relnamespace = 'public'::regnamespace");
+  assert.ok(seqs.length >= 2);
+  for (const { relname } of seqs) {
+    for (const role of ['anon', 'authenticated']) {
+      const has = (await q(`select has_sequence_privilege('${role}', 'public.${relname}', 'usage') as u,
+                                   has_sequence_privilege('${role}', 'public.${relname}', 'select') as s,
+                                   has_sequence_privilege('${role}', 'public.${relname}', 'update') as w`))[0];
+      assert.deepEqual([has.u, has.s, has.w], [false, false, false], `${role} on ${relname}`);
+    }
+    assert.equal((await q(`select has_sequence_privilege('service_role', 'public.${relname}', 'usage') as u`))[0].u, true);
+  }
+  await rejects(as(A, () => q("select nextval('public.credit_ledger_id_seq')")), /permission denied/);
+  await rejects(as(null, () => q("select nextval('public.audit_log_id_seq')"), 'anon'), /permission denied/);
 });
 
 test('the owner can delete an abandoned upload after its window closed; nobody else can', async () => {
@@ -320,9 +386,9 @@ test('the owner can delete an abandoned upload after its window closed; nobody e
   const r = await reserve(A, 1);
   await upload(A, r.object_path, 2 * MB);
   await db.exec(`update public.cloud_backups set reserved_until = now() - interval '1 minute' where id = '${r.id}'`);
-  await as(B, () => db.exec(`delete from storage.objects where name = '${r.object_path}'`)); // zero rows for B
+  await del(B, r.object_path); // zero rows for B
   assert.equal((await q(`select * from storage.objects where name = '${r.object_path}'`)).length, 1);
-  await as(A, () => db.exec(`delete from storage.objects where name = '${r.object_path}'`));
+  await del(A, r.object_path);
   assert.equal((await q(`select * from storage.objects where name = '${r.object_path}'`)).length, 0);
   assert.equal(Number(await as(A, async () => (await q('select public.cloud_backup_status() as s'))[0].s.used_bytes)), 0);
 });

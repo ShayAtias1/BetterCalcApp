@@ -12,6 +12,7 @@ export const AUTH_STUB = `
   -- Supabase grants new public tables to the API roles by default; mirror it so the migration's revokes matter.
   alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
+  alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 
   -- Stand-in for Supabase Storage: just the tables, helper and grants the migrations touch.
   create schema storage;
@@ -28,9 +29,12 @@ export const AUTH_STUB = `
   alter table storage.objects enable row level security;
   create function storage.foldername(name text) returns text[] language sql immutable as
     $$ select (string_to_array(name, '/'))[1:cardinality(string_to_array(name, '/')) - 1] $$;
+  -- Storage sets this per request ('object.get', 'object.delete', ...); null outside the Storage API.
+  create function storage.operation() returns text language sql stable as
+    $$ select nullif(current_setting('storage.operation', true), '') $$;
   grant usage on schema storage to anon, authenticated, service_role;
   -- Supabase grants the API roles full table access and relies on RLS; mirror that so a missing policy shows up.
   grant all on storage.objects, storage.buckets to authenticated, service_role;
   grant select on storage.buckets to anon;
-  grant execute on function storage.foldername(text) to anon, authenticated, service_role;
+  grant execute on function storage.foldername(text), storage.operation() to anon, authenticated, service_role;
 `;
