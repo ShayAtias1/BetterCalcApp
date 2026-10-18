@@ -56,7 +56,7 @@ export default function AppDialogs() {
   const queue = useAppDialogs(s => s.queue), notices = useAppDialogs(s => s.notices);
   const planId = useAppStore(s => s.project?.id), folderId = useAppStore(s => s.currentProject?.id);
   const comparisonId = useCompareStore(s => s.comparison?.id);
-  useEffect(() => { if (consumeLocalDataCleared()) notify(t('acct.clearedNote')); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const note = consumeLocalDataCleared(); if (note) notify(t(note === 'signed-out' ? 'acct.clearedNote' : 'acct.clearedSignOutFailedNote')); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => {
     // A delayed confirmation must never apply to a different workspace after navigation.
     for (const d of useAppDialogs.getState().queue) settleDialog(d.id, d.kind === 'prompt' ? null : false);

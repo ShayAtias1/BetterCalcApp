@@ -9,7 +9,7 @@ import { accessSync } from '../lib/access/accessSync';
 import { ACCESS_ENFORCEMENT_ENABLED, ACCOUNTS_ENABLED } from '../lib/access/accessPolicy';
 import { initialsOf, planName, readCachedName } from '../lib/account/accountApi';
 import { confirmDialog, confirmDialogWithToggle, notify } from '../lib/appDialogs';
-import { clearLocalData } from '../lib/account/localDataWipe';
+import { clearLocalData, signOutClearingLocalData } from '../lib/account/localDataWipe';
 import { markLocalDataCleared } from '../lib/account/clearedNote';
 import { deleteLocalDatabase } from '../db/database';
 import ResponsivePopover from './ResponsivePopover';
@@ -26,20 +26,26 @@ export async function confirmSignOut(t: ReturnType<typeof useT>): Promise<void> 
   });
   if (!confirmed) return;
   if (toggled && !await confirmDialog(t('acct.clearLocalConfirm'), { title: t('acct.clearLocalConfirmTitle'), confirmLabel: t('acct.clearLocalAction'), destructive: true })) return;
-  if (!(await authStore.getState().signOut()).ok) return;
-  useAccountUi.getState().closePage();
   if (!toggled) {
+    if (!(await authStore.getState().signOut()).ok) return;
+    useAccountUi.getState().closePage();
     notify(t('acct.signedOutNote'), { label: t('account.signIn'), run: () => useAccessPrompt.getState().show('account') });
     return;
   }
-  const cleared = await clearLocalData({
-    deleteDatabase: deleteLocalDatabase,
-    local: typeof localStorage === 'undefined' ? null : localStorage,
-    session: typeof sessionStorage === 'undefined' ? null : sessionStorage,
+  let signedOut = false;
+  const result = await signOutClearingLocalData({
+    clear: () => clearLocalData({
+      deleteDatabase: deleteLocalDatabase,
+      local: typeof localStorage === 'undefined' ? null : localStorage,
+      session: typeof sessionStorage === 'undefined' ? null : sessionStorage,
+    }),
+    askRetry: () => confirmDialog(t('acct.clearFailedMessage'), { title: t('acct.clearFailedTitle'), confirmLabel: t('acct.clearRetry') }),
+    signOut: async () => (signedOut = (await authStore.getState().signOut()).ok),
   });
-  if (!cleared) { notify(t('acct.clearFailedNote')); return; }
+  if (result === 'cancelled') return; // still signed in, nothing deleted
+  if (signedOut) useAccountUi.getState().closePage();
   // In-memory plans must not outlive the deleted database (or be saved back by autosave): start from a clean page.
-  markLocalDataCleared();
+  markLocalDataCleared(result);
   window.location.reload();
 }
 

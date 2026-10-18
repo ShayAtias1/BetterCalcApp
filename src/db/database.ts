@@ -90,22 +90,26 @@ function getDb(): Promise<IDBPDatabase<QtoDB>> {
 }
 
 /**
- * Permanently deletes the whole local project database (plans, folders, comparisons, PDFs, AI records).
- * Only the explicit "clear local data on sign out" flow calls this. Afterwards every database call fails
- * until the page is reloaded, so a late autosave cannot silently recreate a plan.
- * Resolves false when another tab keeps the database open.
+ * Permanently deletes every record of the local project database (plans, folders, comparisons, PDFs, AI records).
+ * Only the explicit "clear local data on sign out" flow calls this. All stores are emptied in ONE transaction, so
+ * the result is all-or-nothing: on any failure nothing is removed and the app keeps working (retry is safe). It
+ * does not use `deleteDatabase`, whose request can stay pending behind another tab and wipe data later, after the
+ * user already cancelled. After a successful clear every database call fails until the page is reloaded, so a late
+ * autosave cannot silently recreate a plan. Resolves false on failure.
  */
 export async function deleteLocalDatabase(): Promise<boolean> {
-  const open = dbPromise;
-  dbPromise = Promise.reject(new Error('local data was cleared; reload the page'));
-  dbPromise.catch(() => undefined);
-  try { (await open)?.close(); } catch { /* it never opened */ }
-  return new Promise<boolean>((resolve) => {
-    const request = indexedDB.deleteDatabase(DB_NAME);
-    request.onsuccess = () => resolve(true);
-    request.onerror = () => resolve(false);
-    request.onblocked = () => resolve(false);
-  });
+  try {
+    const db = await getDb();
+    const stores = [...db.objectStoreNames];
+    const tx = db.transaction(stores, 'readwrite');
+    await Promise.all([...stores.map((name) => tx.objectStore(name).clear()), tx.done]);
+  } catch {
+    return false;
+  }
+  const lock = Promise.reject(new Error('local data was cleared; reload the page'));
+  lock.catch(() => undefined);
+  dbPromise = lock;
+  return true;
 }
 
 // ---------- plan-dependent records ----------
