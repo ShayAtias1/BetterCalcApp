@@ -10,6 +10,8 @@ export interface AccessSyncDeps {
   storage: TrialStorage | null;
   now: () => number;
   enforce: boolean;
+  /** Cancelable clock; tests can advance the seven-day boundary without waiting. */
+  schedule?: (callback: () => void, delay: number) => () => void;
   /** Feeds workspaceCapabilities, which the editing surfaces consult. */
   setEditingAllowed: (allowed: boolean) => void;
 }
@@ -18,26 +20,54 @@ export interface AccessSyncDeps {
 export function createAccessSync(deps: AccessSyncDeps) {
   const store = createStore<AccessDecision>()(() => evaluateAccess('loading', null));
 
+  let inUse = false;
+  let running = false;
+  let cancelExpiry: (() => void) | undefined;
+  const schedule = deps.schedule ?? ((callback: () => void, delay: number) => {
+    const timer = setTimeout(callback, delay);
+    // Do not keep Node test processes alive; browsers return a numeric timer handle.
+    (timer as unknown as { unref?: () => void }).unref?.();
+    return () => clearTimeout(timer);
+  });
   const refresh = () => {
-    // The trial clock starts only once restrictions are enforced; until then nothing is read or written.
-    const trial = deps.enforce ? loadTrial(deps.storage, deps.now()) : null;
-    const decision = evaluateAccess(deps.auth.getState().status, trial);
+    cancelExpiry?.();
+    cancelExpiry = undefined;
+    const auth = deps.auth.getState().status;
+    // Merely opening the welcome/legal screens or being signed in does not start a guest trial.
+    const trial = deps.enforce && inUse && auth === 'signedOut' ? loadTrial(deps.storage, deps.now()) : null;
+    const decision = evaluateAccess(auth, trial);
     store.setState(decision, true);
     deps.setEditingAllowed(deps.enforce ? decision.canCreateOrEdit : true);
+    if (running && trial && !trial.expired) {
+      cancelExpiry = schedule(refresh, Math.max(1, trial.expiresAt - deps.now()));
+    }
   };
 
   return {
     store,
-    /** Starts tracking: starts the trial clock on first call and follows sign-in state. Returns a stop function. */
+    /** Called after legal acceptance, when the service workspace becomes available. */
+    beginUse() { inUse = true; refresh(); },
     start() {
+      running = true;
       refresh();
-      return deps.auth.subscribe(refresh);
+      const stopAuth = deps.auth.subscribe(refresh);
+      const visible = () => { if (document.visibilityState === 'visible') refresh(); };
+      if (typeof document !== 'undefined') document.addEventListener('visibilitychange', visible);
+      if (typeof window !== 'undefined') window.addEventListener('storage', refresh);
+      return () => {
+        running = false;
+        inUse = false;
+        cancelExpiry?.();
+        stopAuth();
+        if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', visible);
+        if (typeof window !== 'undefined') window.removeEventListener('storage', refresh);
+      };
     },
     refresh,
   };
 }
 
-/** The app's instance. Nothing starts it yet: Phase 1D calls `accessSync.start()` once sign-in screens exist. */
+/** The app instance: enforcement stays off until the approved activation release. */
 export const accessSync = createAccessSync({
   auth: authStore,
   storage: typeof localStorage === 'undefined' ? null : localStorage,

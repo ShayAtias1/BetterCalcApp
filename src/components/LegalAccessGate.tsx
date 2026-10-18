@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 import { useT } from '../i18n';
 import { ACCOUNTS_ENABLED } from '../lib/access/accessPolicy';
+import { accessSync } from '../lib/access/accessSync';
 import { legalAccessState } from '../lib/access/legalAccess';
 import { LEGAL_PATH } from '../lib/legal/legalDocs';
 import { welcomeStore } from '../lib/access/welcome';
@@ -22,6 +23,9 @@ export default function LegalAccessGate({ children }: { children: ReactNode }) {
   const welcomeSeen = welcomeStore((s) => s.seen);
   const ack = useGuestConsent((s) => s.ack);
   const state = legalAccessState({ accountsEnabled: ACCOUNTS_ENABLED, authStatus: auth.status, welcomeSeen, ack, ...account });
+  useEffect(() => {
+    if (state === 'ready' || state === 'local') accessSync.beginUse();
+  }, [state]);
   useEffect(() => {
     if (!ACCOUNTS_ENABLED || auth.status !== 'signedIn') return;
     const refresh = () => {

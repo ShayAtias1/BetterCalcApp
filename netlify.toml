@@ -1,0 +1,7 @@
+[build]
+  # Public deploys must not publish draft legal documents or unsafe client configuration.
+  command = "npm run release:check && npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "24"

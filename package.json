@@ -7,6 +7,8 @@
     "postinstall": "node scripts/fix-exceljs-sheet-properties.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "licenses:generate": "node scripts/generate-licenses.mjs",
+    "release:check": "node scripts/early-access-preflight.mjs",
     "lint": "oxlint",
     "test": "node --experimental-test-module-mocks --import ./tests/resolve-ts.mjs --import ./tests/browser-stubs.mjs --test 'tests/**/*.test.ts' 'tests/**/*.test.mjs'",
     "preview": "vite preview",

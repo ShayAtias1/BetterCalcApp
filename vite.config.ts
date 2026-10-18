@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { thirdPartyNotices } from './scripts/third-party-notices.mjs'
 
 /**
  * The build's short git SHA, for analytics (`app_version`). Hosts that build without a .git
@@ -19,7 +20,7 @@ function appVersion(): string {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), thirdPartyNotices()],
   cacheDir: 'node_modules/.vite-bettercalc-app',
   server: {
     host: '127.0.0.1', port: 5173, strictPort: true,

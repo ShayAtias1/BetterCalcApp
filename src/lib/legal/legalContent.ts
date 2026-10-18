@@ -1,6 +1,6 @@
 /**
- * The Terms of Service and Privacy Policy (Hebrew and English), from the legal review v0.3
- * (docs/legal/BetterCalc-legal-review-v0.3.md), checked against what the application does.
+ * Early Access Terms and Privacy drafts (Hebrew and English), based on legal review v0.3
+ * and checked against the local implementation. Deployment and owner facts remain unresolved.
  *
  * Conventions:
  *  - `[[…]]` marks a fact the owner must still supply. Nothing about the operator is invented. While any placeholder
@@ -25,7 +25,7 @@ export interface LegalSection {
 }
 export interface LegalDocument {
   title: string;
-  /** "Last updated / Version" line; placeholders until published. */
+  /** Draft status until the owner approves a publication version and effective date. */
   meta: string;
   /** A prominent notice shown before the sections (the Terms' professional-use notice). */
   notice?: { title: string; points: string[]; closing: string };
@@ -43,23 +43,23 @@ const table = (head: string[], ...rows: string[][]): LegalBlock => ({ kind: 'tab
 // ===================================================================================== Privacy, English
 const privacyEn: LegalDocument = {
   title: 'Privacy Policy',
-  meta: 'Last updated: [[date]] · Version: [[version]]',
+  meta: 'Early Access draft · Version: pending · Not yet effective',
   sections: [
-    { heading: '1. Who we are', blocks: [p('BetterCalc (“we”, “us”) is operated by [[owner’s full legal name]], a VAT-exempt sole proprietor (עוסק פטור), ID / business no. [[number]], [[address]]. Privacy contact: [[privacy e-mail]].')] },
+    { heading: '1. Who we are', blocks: [p('BetterCalc (“we”, “us”) is operated by [[confirm registered legal name: שי אטיאס]], an Israeli sole proprietor. Privacy contact: [[active support and privacy contact]].')] },
     { heading: '2. The short version', blocks: [ul(
       'Your plans and projects are stored **in your own browser**, on your device. We do not receive them when you work.',
       'An account is optional. If you sign in with Google, we store basic account details (Section 4).',
       'We do not currently collect usage statistics or analytics (Section 5).',
-      'AI features, cloud backup and payments are **not available yet**. Nothing described in Section 8 happens today.',
+      'AI features, cloud backup and payments are **not available yet**. The plans page is a preview only (Section 8).',
     )] },
-    { heading: '3. Data that stays on your device', status: 'active', blocks: [p('Plans (PDF files), projects, rooms, measurements, quantities, markups, comparisons and exports are stored in your browser’s storage (IndexedDB) and saved to your device when you export. We cannot see, access, recover or delete this data. Your browser may delete it if storage runs low or you clear site data. Signing in, signing out or deleting your account does not read, move or delete it. Plans may contain information about other people (for example owners’ names or site addresses); you control that information and are responsible for using it lawfully.')] },
+    { heading: '3. Data that stays on your device', status: 'active', blocks: [p("Plan PDFs, projects, rooms, measurements, quantities, markups and comparisons are processed locally and saved in this browser’s IndexedDB. Exports and local backup files are saved where you choose on your device. The normal Early Access workflow does not upload project content to our servers. Browser storage may be cleared or lost; keep separate local backups. Signing in, signing out and deleting an account do not transfer or erase local projects. You can remove them through the app or by clearing this site’s browser data. Plans may contain other people’s personal or confidential data; you are responsible for having permission to use it.")] },
     { heading: '4. Account data (optional)', status: 'active', blocks: [
       p('If you sign in with Google, we receive and store, through our provider Supabase:'),
       ul(
         'user ID, e-mail address and name, and the basic profile details Google shares with sign-in apps (such as a profile picture link);',
         'the display name you confirm;',
-        'the date, time and version of the Terms and Privacy Policy you accepted;',
-        'technical records created by the authentication service, such as sign-in times and the IP address and browser used to sign in;',
+        'the exact document version and server timestamps of each recorded acceptance of the Terms and Privacy Policy, including consent history;',
+        'authentication and session records; provider access and security logs may include IP addresses, browser details and request times (provider logging settings and retention still require confirmation);',
         'account status records (for example an empty credit balance) and, if you request deletion, the deletion request.',
       ),
       p('Purpose: to create and secure your account, keep you signed in, record your acceptance of these documents, and prepare account features. You are not legally required to give us this data; without it you can still use BetterCalc as a guest. We never receive your Google password. Your language choice is kept in your browser, not in your account.'),
@@ -68,40 +68,25 @@ const privacyEn: LegalDocument = {
       p('During the Early Access period BetterCalc does not run product analytics. The app does not load an analytics tool, does not send usage events to any analytics provider, and does not create or store an analytics identifier in your browser. Any analytics identifier left in your browser by an earlier version is removed when the app opens.'),
       p('Before analytics is switched on again, we will update this policy and show you what changes.'),
     ] },
-    { heading: '6. Browser storage', status: 'active', blocks: [p('We use your browser’s local storage and IndexedDB (not advertising cookies) for: your projects, your sign-in session, language and display preferences, and a local record of your acknowledgement of the Terms. If CAPTCHA protection is enabled, Cloudflare Turnstile may process browser signals to detect bots.')] },
-    { heading: '7. Who processes data for us', blocks: [
-      table(['Provider', 'Role', 'Location'],
-        ['Supabase', 'Authentication, database, file storage', 'EU (Ireland)'],
-        ['Google', 'Sign-in', '[[global / US]]'],
-        ['Netlify', 'Website hosting and delivery', '[[global CDN / US]]'],
-        ['Cloudflare', 'CAPTCHA (only if enabled)', '[[global]]']),
-      p('Some providers operate outside Israel. We transfer data to them under [[legal basis: consent / contractual undertakings]].'),
-      p('We do not sell personal data and do not share it for advertising. We may disclose data if required by law or a competent authority, or to protect our rights in a legal proceeding.'),
-    ] },
-    { heading: '8. Features not available yet', status: 'soon', blocks: [
-      p('The following exist in the code but are **switched off**. Before any of them is enabled, we will update this policy, show you what changes, and ask for your agreement where required.'),
-      ul(
-        '**Cloud backup:** an optional copy of your projects (including plan files) stored in your account in private storage. [[Retention, and what happens after a subscription ends]].',
-        '**AI assistance** (for example suggesting rooms, openings or revision changes): would send selected plan pages to an AI provider [[provider, location, retention, training use]]. Nothing is sent to any AI service today.',
-        '**Payments and subscriptions:** would be handled by a payment provider [[name]]; we would store billing details for invoices (name, tax ID, address) and payment records, which we may have to keep for [[period under tax law]] even after account deletion. No payment details are collected today.',
-      ),
-    ] },
-    { heading: '9. How long we keep data', blocks: [ul(
-      'Account data: until you delete your account. After a deletion request, a 7-day waiting period applies (you can cancel); then account data and any cloud files are deleted.',
-      'A minimal record that an account was deleted (internal IDs, no name or e-mail) is kept in our security log for [[period]].',
-      'Backups kept by our providers may persist for up to [[period]] before being overwritten.',
-    )] },
-    { heading: '10. Your rights', blocks: [p('Under Israeli law you may ask to access the personal data we hold about you and to correct or delete data that is inaccurate, incomplete, unclear or outdated. You can also delete your account yourself from the account page, and change your display name at any time. Send requests to [[privacy e-mail]]; we will respond within the period required by law. If you are in the EU, you may have additional rights under the GDPR.')] },
-    { heading: '11. Security', blocks: [p('We use encrypted connections, per-user access rules on account data, private storage, restricted administrative access and a strict content-security policy. Plans stay on your device, which also means their security depends on your device and browser. No system is completely secure; if a security incident affects your data, we will act as required by law.')] },
+    { heading: '6. Browser storage', status: 'active', blocks: [p("We use IndexedDB and local/session storage for projects, sign-in sessions, language and display preferences, guest trial state, guest consent history, a cached account display name and previously verified consent evidence linked to the account and document version. A short-lived agreement receipt in session storage carries your explicit acceptance across a Google sign-in redirect. These are functional records, not advertising identifiers. Clearing storage removes local records and may lose projects or require sign-in and acceptance again. If CAPTCHA is configured, Cloudflare Turnstile processes browser signals for bot protection; it is not product analytics.")] },
+    { heading: '7. Who processes data for us', blocks: [table(["Provider", "Role in Early Access", "Processing location"],["Supabase", "Google sign-in integration, account database, sessions and consent records; no project backup uploads", "Database: EU (Ireland), eu-west-1; [[confirm other provider processing locations]]"],["Google", "Identity provider when you choose Google sign-in", "[[confirm processing locations and applicable provider terms]]"],["Netlify", "Website delivery; technical access/security logs may be processed even for guests", "[[confirm hosting, CDN and log processing locations]]"],["Cloudflare (only if CAPTCHA is configured)", "Turnstile bot protection", "[[confirm applicable processing locations]]"]),p("Account and technical data may be processed outside Israel. The applicable provider agreements, processing locations and lawful international-transfer arrangements remain [[owner confirmation of provider agreements and transfer safeguards]]. No project content is sent to these providers by the normal local manual workflow."),p("We do not sell personal data or share it for advertising. We may disclose data where required by law or a competent authority, or where lawfully necessary to protect rights in legal proceedings.")] },
+    { heading: '8. Features not available yet', status: 'soon', blocks: [p("AI, payments, subscriptions and cloud backup are **not available yet**. The pricing page is a comparison preview only: prices may change, paid plans cannot be purchased, and preview credits do not grant AI access. Billing-detail collection and editing are disabled; any details stored previously are preserved until account deletion. No payment or AI billing is activated."),p("Before any such feature launches, we will publish the applicable data flows, providers, processing locations, retention and any required consent. Future provider or billing terms are not part of the current Early Access offering.")] },
+    { heading: '9. How long we keep data', blocks: [ul("Local projects and browser records remain until you delete them or the browser removes them. Account deletion does not clear browser storage on any device.",
+      "Server account data, including the profile and consent history, remains while the account exists. You can request deletion on the account page and cancel while the request is pending. The implemented worker uses a default 7-day waiting period, then removes any stored cloud files before deleting the authentication account and linked profile, consent history, billing details and other linked account records. Completion occurs on a successful maintenance run, not automatically at the end of the waiting period. [[confirm deployed deletion worker, schedule and grace period]]",
+      "Deletion audit entries retain the internal user ID, action and time; they are not anonymous. The code contains no automatic expiry for these entries. [[approve and implement deletion-audit retention period]]",
+      "Provider authentication/security logs and backups may outlive deletion from the active database. [[confirm provider log and backup retention and deletion limits]] No exact erasure period is promised until these settings are verified.",
+      "If historical payment records exist, deletion removes their account link but preserves the payment records; payment-event records may also remain. No new payments are collected in Early Access. [[confirm historical records and applicable retention or cleanup]]")] },
+    { heading: '10. Your rights', blocks: [p('Under Israeli law you may ask to access the personal data we hold about you and to correct or delete data that is inaccurate, incomplete, unclear or outdated. You can also request account deletion from the account page as described in Section 9, and change your display name. Send requests to [[active support and privacy contact]]; we will respond within the period required by law. If you are in the EU, you may have additional rights under the GDPR.')] },
+    { heading: '11. Security', blocks: [p('The app is configured to use HTTPS for remote account services, per-user database access rules and a content-security policy. These measures reduce risk but do not guarantee security; provider and administrative security settings require operational verification. Plans stay on your device, which also means their security depends on your device and browser. No system is completely secure; if a security incident affects your data, we will act as required by law.')] },
     { heading: '12. Age', blocks: [p('BetterCalc is intended for users aged 18 and over.')] },
-    { heading: '13. Changes', blocks: [p('We will publish changes on this page with a new date and version. For material changes we will notify signed-in users in the app [[or by e-mail]] before they take effect and, where required, ask for renewed consent.')] },
+    { heading: '13. Changes', blocks: [p("Updated documents will be published with a new version and effective date. When a new version becomes effective, the app requires explicit renewed acceptance from account users and guests before continued service use. A temporary account outage does not create an account acceptance: local use requires current local acknowledgement or previously verified acceptance. We do not currently provide an automated advance e-mail notification process.")] },
   ],
 };
 
 // ===================================================================================== Terms, English
 const termsEn: LegalDocument = {
   title: 'Terms of Service',
-  meta: 'Last updated: [[date]] · Version: [[version]]',
+  meta: 'Early Access draft · Version: pending · Not yet effective',
   notice: {
     title: 'Professional-use notice. Read before using BetterCalc',
     points: [
@@ -115,15 +100,15 @@ const termsEn: LegalDocument = {
   },
   sections: [
     { heading: '1. The Operator and acceptance', blocks: [
-      p('BetterCalc (“the Service”) is operated by **[[owner’s full legal name]]**, an individual (natural person) residing in Israel, doing business as a VAT-exempt sole proprietor (עוסק פטור), ID / business no. [[number]], address for notices: [[address]], e-mail: [[e-mail]] (“the Operator”, “we”). The Operator is not a company or other corporate body.', '1.1'),
-      p('By using the Service, with or without an account, you agree to these Terms and to the Privacy Policy. If you do not agree, do not use the Service.', '1.2'),
+      p('BetterCalc (“the Service”) is operated by **[[confirm registered legal name: שי אטיאס]]**, an individual (natural person), operating as an Israeli sole proprietor, e-mail: [[active support and privacy contact]] (“the Operator”, “we”). The Operator is not a company or other corporate body.', '1.1'),
+      p("Before service use, you must explicitly accept these Terms and the Privacy Policy, whether using an account or guest access. If you do not agree, do not use the Service.", '1.2'),
       p('You must be at least 18 and legally competent. If you use the Service for a business, you confirm you may bind that business, and “you” includes it.', '1.3'),
       p('The Service is intended for professional use in the construction field. If you are a consumer under the Consumer Protection Law, 5741-1981, nothing in these Terms limits rights that law gives you and that cannot be waived.', '1.4'),
     ] },
     { heading: '2. Nature of the Service', status: 'active', blocks: [
       p('The Service is **strictly an auxiliary quantity-calculation tool** based on PDF drawings. It runs in your browser and applies calculations to the drawings, scales, calibration, selections and settings that **you** provide.', '2.1'),
-      p('The Service is provided **free of charge** [[during an initial / beta period]]. The Operator does not review your drawings, inputs or results, does not advise you, and no professional, advisory, agency, employment or fiduciary relationship arises between you and the Operator.', '2.2'),
-      p('No statement on the website, in marketing, in the Service or in support communications is a promise or warranty of accuracy, unless it is made in a written document signed by the Operator.', '2.3'),
+      p("Manual measurement, quantity calculation, visual revision comparison and local export/backup tools are **free during Early Access**. The Operator does not review your drawings, inputs or results or provide professional advice. No professional, advisory, agency, employment or fiduciary relationship is created.", '2.2'),
+      p("Descriptions and support communications do not replace independent verification of results or professional advice. Nothing in this clause excludes liability for misleading statements or other rights that cannot lawfully be excluded.", '2.3'),
     ] },
     { heading: '3. Inherent inaccuracy; no guarantee', status: 'active', blocks: [
       p('Measurements taken from PDF drawings are **inherently subject to inaccuracy**. Causes include: drawings that are not to scale, distorted, scanned, cropped, outdated or incomplete; incorrect or imprecise calibration; differences in PDF rendering; line thickness and pointer precision; elements drawn, detected or classified incorrectly; settings such as heights, waste, deductions, spacing, cover or lap lengths; rounding; and software errors.', '3.1'),
@@ -148,25 +133,25 @@ const termsEn: LegalDocument = {
       p('The Service is provided to you only. The Operator does not intend anyone else to rely on the Service or on Reports, and to the extent permitted by law accepts no duty or responsibility to any third party.', '6.3'),
     ] },
     { heading: '7. Data stored on your device', status: 'active', blocks: [
-      p('Drawings, projects and Reports are stored only in your browser storage and on your device. The Operator does not receive, hold or back them up, and cannot access, restore or recover them.', '7.1'),
-      p('Browser storage can be erased by the browser, by clearing site data, by private browsing, by device failure or replacement, or by software updates. **You are responsible for keeping current backups** using the export and backup tools provided.', '7.2'),
+      p('In the normal Early Access workflow, drawings and projects are stored in your browser, and exports and local backups are saved to your device. The Operator does not receive or back up project content through this workflow and cannot recover it from an account. Account data is processed separately as described in the Privacy Policy.', '7.1'),
+      p('Browser storage can be erased by the browser, by clearing site data, by private browsing, by device failure or replacement, or by software updates. **You are responsible for keeping current backups** using the local export and backup tools provided; cloud backup is unavailable.', '7.2'),
       p('To the extent permitted by law, the Operator is not liable for loss, corruption or unavailability of data stored on your device, including where caused by a software error, except as set out in Section 12.4.', '7.3'),
     ] },
     { heading: '8. Accounts', status: 'active', blocks: [
-      p('Accounts are optional and created through Google sign-in. Keep your Google account secure; you are responsible for activity under your account.', '8.1'),
-      p('You may delete your account at any time, as described in the Privacy Policy. Deleting it does not delete data on your devices.', '8.2'),
+      p('Google registration is free, requires no payment details and unlocks unlimited manual tools. After trial activation, each guest browser receives seven days starting on its first service use, not the global launch date. After expiry, viewing, local export/backup and project deletion remain available; creating or editing requires registration. The trial is stored locally, is not tamper-proof, and clearing browser data can restart it. Keep your Google account secure; you are responsible for activity under your account.', '8.1'),
+      p('You may request account deletion at any time, subject to the waiting period and processing described in the Privacy Policy. Deleting it does not delete data on your devices.', '8.2'),
     ] },
     { heading: '9. Acceptable use', status: 'active', blocks: [p('You must not: interfere with, overload, probe or bypass the Service’s security or limits; access other users’ data; reverse-engineer the Service except as permitted by law; use automated means to abuse it; or use it unlawfully or with content you have no right to use.')] },
     { heading: '10. Your content and the Operator’s intellectual property', status: 'active', blocks: [
       p('You own your drawings, projects, measurements and Reports. The Operator claims no ownership.', '10.1'),
       p('You confirm that you have the rights and permissions needed to use the drawings you load, including under copyright and any confidentiality or tender obligations.', '10.2'),
-      p('If a future feature you choose requires the Operator to store or process your content (such as cloud backup or AI), you grant the Operator a limited, non-exclusive licence to do so solely to provide that feature to you.', '10.3'),
-      p('The software, design and name “BetterCalc” belong to the Operator or the Operator’s licensors. Open-source components are licensed under their own terms, listed at [[licences page]]. You receive a personal, non-transferable, revocable right to use the Service under these Terms.', '10.4'),
-      p('The Operator may use feedback you send without obligation, and may use aggregated statistics that do not contain your content.', '10.5'),
+      p("AI processing and cloud backup are unavailable in Early Access. These Terms do not authorize uploading your project content to a future service; applicable terms and any required consent will be presented before such a feature is enabled.", '10.3'),
+      p("The software, design and name “BetterCalc” belong to the Operator or the Operator’s licensors. Open-source components remain subject to their own licences. Notices and licence terms are available at /licenses/index.html. You receive a personal, non-transferable right to use the Service subject to these Terms and applicable law.", '10.4'),
+      p("The Operator may use feedback you choose to send to improve the Service. Product usage analytics are disabled during Early Access; the handling of technical account and provider records is described in the Privacy Policy.", '10.5'),
     ] },
     { heading: '11. Service provided “as is”', blocks: [
       p('The Service is provided free of charge, as a general auxiliary tool, on inputs you control, with results you are required to verify. It is therefore provided **“as is” and “as available”**. To the extent permitted by law, the Operator gives no warranty or representation, express or implied, as to accuracy, completeness, reliability, availability, error-free operation or fitness for a particular purpose.', '11.1'),
-      p('The Operator may change, suspend or discontinue any feature. If the Service as a whole is discontinued, the Operator will try to give at least [[30]] days’ notice so that you can export your data.', '11.2'),
+      p("Early Access features may change, be interrupted or be discontinued. Keep independent local backups. Where reasonably possible, we will give advance notice of discontinuing the whole Service so you can export data; this does not limit mandatory notice obligations under law.", '11.2'),
     ] },
     { heading: '12. Exclusion of liability', blocks: [
       p('**Financial losses.** To the fullest extent permitted by law, the Operator is not liable for any financial loss or damage, **direct or indirect**, arising from or connected with the use of, inability to use, or reliance on the Service or any result or Report, including:', '12.1'),
@@ -174,20 +159,20 @@ const termsEn: LegalDocument = {
       p('**Third-party claims.** To the fullest extent permitted by law, the Operator is not liable to you for any claim made against you by a third party in connection with a result or Report, and you are responsible for any such claim as between you and the Operator (see also Section 13).', '12.2'),
       p('**Basis.** You acknowledge that: the Service is a free auxiliary tool; PDF-based measurement is inherently imprecise; you, not the Operator, choose the drawings, scales and inputs; you are able and required to verify all results before relying on them; the Operator has no access to your drawings or projects; and the Operator does not charge for, and could not bear, the risk of your business decisions. This Section is a fundamental basis on which the Service is offered free of charge.', '12.3'),
       p('**What is not excluded.** Nothing in these Terms excludes or limits the Operator’s liability: (a) for malice, fraud or deceit; (b) for gross negligence; (c) for death or bodily injury caused by negligence; (d) for any obligation or liability that cannot be excluded or limited under Israeli law, including mandatory duties under privacy and data-protection law; or (e) for any right you have as a consumer that cannot be waived.', '12.4'),
-      p('**Fallback if the exclusion is not enforced.** If, despite Section 12.1, the Operator is held liable for a loss, then to the extent permitted by law: (a) liability is limited to direct damage that was reasonably foreseeable when you started using the Service and that you prove; (b) it is reduced in proportion to your own contribution to the loss, including any failure to verify results as required by Section 4; (c) you must take reasonable steps to mitigate the loss; and (d) no punitive or exemplary damages apply.', '12.5'),
+      p('**Fallback if the exclusion is not enforced.** If, despite Section 12.1, the Operator is held liable for a loss, then to the extent permitted by law: (a) liability is limited to direct damage that was reasonably foreseeable when you started using the Service and that you prove; (b) it is reduced in proportion to your own contribution to the loss, including any failure to verify results as required by Section 4; (c) you must take reasonable steps to mitigate the loss; and (d) any restriction on damages remains subject to mandatory law and the court’s powers. These limitations are proposed contractual allocations of risk, not a guarantee of immunity, and remain subject to Section 12.4 and judicial review.', '12.5'),
       p('**Who is protected.** This Section protects the Operator personally and anyone acting on the Operator’s behalf, who may rely on it.', '12.6'),
-      p('**Notice of claims.** If you believe you have a claim, please notify the Operator in writing at [[e-mail]] promptly, and in any case within [[6/12]] months of becoming aware of it, so that the problem can be investigated and, where possible, fixed.', '12.7'),
+      p("If you believe you have a claim, please contact the Operator promptly so the issue can be investigated. This request does not shorten any statutory limitation period, waive a remedy or make notice a condition of asserting your rights.", '12.7'),
     ] },
-    { heading: '13. Indemnity (business users)', blocks: [p('If you use the Service in the course of a business, you will indemnify the Operator for reasonable costs, losses and legal fees arising from a third-party claim caused by: (a) content you loaded without the right to do so; (b) a Report or result you gave to a third party, or its use by that third party; or (c) your breach of these Terms. The Operator will notify you of the claim promptly and allow you to take part in the defence. This Section does not apply to the extent the claim results from a matter listed in Section 12.4(a)–(c).')] },
-    { heading: '14. Features not available yet', status: 'soon', blocks: [p('AI assistance, cloud backup, paid plans, credits and payments are **not offered today**, and nothing is charged. Before any of them becomes available, the Operator will publish its specific terms, which you must accept before using it: price, billing, renewal, cancellation and refunds, and for AI, the provider and how outputs must be reviewed. The Operator is a VAT-exempt dealer (עוסק פטור), so prices will not include VAT. The exclusions in Section 12 will be reviewed for paid features before launch.')] },
+    { heading: '13. Indemnity (business users)', blocks: [p('If you use the Service in the course of a business, you will indemnify the Operator for reasonable costs, losses and legal fees arising from a third-party claim caused by: (a) content you loaded without the right to do so; (b) a Report or result you gave to a third party, or its use by that third party; or (c) your breach of these Terms. The Operator will notify you of the claim promptly and allow you to take part in the defence. This Section does not apply to the extent the claim results from a matter listed in Section 12.4.')] },
+    { heading: '14. Features not available yet', status: 'soon', blocks: [p("AI access, cloud backup, paid subscriptions, credit purchases and payments are **disabled during Early Access**. Plans and credit allocations may be compared in a preview only; displayed preview prices may change and are not a purchase or entitlement. No checkout or subscription activation is available. Separate terms and privacy information, including any applicable prices, taxes, renewal, cancellation and refund rules, must be finalized before a commercial launch.")] },
     { heading: '15. Changes to these Terms', blocks: [
-      p('Changes will be published with a new date and version. For material changes, signed-in users will be notified in the app [[and by e-mail]] at least [[14/30]] days before the changes take effect. Changes required by law or for security may take effect sooner.', '15.1'),
-      p('If you do not agree, you may stop using the Service and delete your account. Continued use after the effective date means acceptance. Changes do not apply to claims that arose before they took effect.', '15.2'),
+      p("Changes will be published in the app with a new document version and effective date. When an updated version becomes effective, continued service use requires explicit renewed acceptance. Any advance notice required by applicable law remains required.", '15.1'),
+      p("If you do not agree, you may stop using the Service and request account deletion. Continued use alone does not replace the explicit acceptance step. Changes do not apply retroactively to claims that arose before their effective date.", '15.2'),
     ] },
     { heading: '16. Termination', blocks: [p('You may stop using the Service at any time. The Operator may suspend or end your access if you materially breach these Terms or if the law requires it, with notice where reasonable. Sections 3–7, 10–13 and 17–18 survive termination.')] },
     { heading: '17. Governing law and jurisdiction', blocks: [
       p('These Terms are governed by the laws of the State of Israel.', '17.1'),
-      p('The competent courts in Israel have jurisdiction. [[Option for business users only: the competent courts in the [district] district have exclusive jurisdiction.]] No exclusive forum is imposed on consumers.', '17.2'),
+      p("Jurisdiction is determined by applicable law in the competent courts in Israel. These Terms do not impose an exclusive district or limit mandatory consumer venue rights.", '17.2'),
     ] },
     { heading: '18. General', blocks: [
       p('**Modification rather than voiding.** If a court finds any provision invalid or unenforceable in whole or in part, including a provision of Section 12, that provision applies to the maximum extent permitted. Section 12.5 and the rest of these Terms remain in force.', '18.1'),
@@ -195,7 +180,7 @@ const termsEn: LegalDocument = {
       p('**Entire agreement.** These Terms and the Privacy Policy are the entire agreement about the Service.', '18.3'),
       p('**No waiver.** Not enforcing a right is not a waiver of it.', '18.4'),
       p('**Language.** These Terms are published in Hebrew and English. If they conflict, the Hebrew version prevails.', '18.5'),
-      p('**Notices.** The Operator may notify you in the app or by your account e-mail. Notices to the Operator: [[e-mail]] / [[address]].', '18.6'),
+      p('**Notices.** The Operator may notify you in the app or by your account e-mail. Notices to the Operator: [[active support and privacy contact]].', '18.6'),
     ] },
   ],
 };
@@ -203,23 +188,23 @@ const termsEn: LegalDocument = {
 // ===================================================================================== Privacy, Hebrew
 const privacyHe: LegalDocument = {
   title: 'מדיניות פרטיות',
-  meta: 'עדכון אחרון: [[תאריך]] · גרסה: [[גרסה]]',
+  meta: 'טיוטת גישה מוקדמת · גרסה: pending · טרם נכנסה לתוקף',
   sections: [
-    { heading: '1. מי אנחנו', blocks: [p('BetterCalc (“אנחנו”) מופעלת על ידי [[שם משפטי מלא של הבעלים]], עוסק פטור, ת.ז. / מס’ עוסק [[מספר]], [[כתובת]]. פנייה בנושאי פרטיות: [[דוא״ל פרטיות]].')] },
+    { heading: '1. מי אנחנו', blocks: [p('BetterCalc (“אנחנו”) מופעלת על ידי [[שי אטיאס — לאימות השם המשפטי הרשום]], עוסק עצמאי בישראל. פנייה בנושאי פרטיות: [[כתובת פעילה לתמיכה ולפרטיות]].')] },
     { heading: '2. בקצרה', blocks: [ul(
       'התוכניות והפרויקטים שלכם נשמרים **בדפדפן שלכם**, במכשיר שלכם. איננו מקבלים אותם בזמן העבודה.',
       'חשבון הוא אופציונלי. אם תתחברו עם Google, נשמור פרטי חשבון בסיסיים (סעיף 4).',
       'כיום איננו אוספים סטטיסטיקות שימוש או נתוני אנליטיקה (סעיף 5).',
-      'יכולות בינה מלאכותית, גיבוי בענן ותשלומים **אינם זמינים עדיין**. דבר ממה שמתואר בסעיף 8 אינו מתבצע היום.',
+      'יכולות בינה מלאכותית, גיבוי בענן ותשלומים **אינם זמינים עדיין**. עמוד התוכניות הוא תצוגה מקדימה בלבד (סעיף 8).',
     )] },
-    { heading: '3. מידע שנשאר במכשיר שלכם', status: 'active', blocks: [p('תוכניות (קובצי PDF), פרויקטים, חדרים, מדידות, כמויות, סימונים, השוואות וייצואים נשמרים באחסון הדפדפן (IndexedDB) ובמכשיר שלכם כשאתם מייצאים. איננו יכולים לראות, לגשת, לשחזר או למחוק מידע זה. הדפדפן עשוי למחוק אותו כשהאחסון מתמלא או כשמנקים נתוני אתר. התחברות, התנתקות או מחיקת חשבון אינן קוראות, מעבירות או מוחקות אותו. תוכניות עשויות לכלול מידע על אחרים (למשל שמות בעלים או כתובות אתרים); המידע הזה בשליטתכם ואתם אחראים לשימוש חוקי בו.')] },
+    { heading: '3. מידע שנשאר במכשיר שלכם', status: 'active', blocks: [p("קובצי PDF של תוכניות, פרויקטים, חדרים, מדידות, כמויות, סימונים והשוואות מעובדים מקומית ונשמרים ב-IndexedDB בדפדפן הזה. ייצואים וקובצי גיבוי מקומיים נשמרים במכשיר במקום שתבחרו. תהליך העבודה הרגיל בגישה המוקדמת אינו מעלה תוכן פרויקטים לשרתים שלנו. אחסון הדפדפן עלול להימחק או ללכת לאיבוד; יש לשמור גיבויים מקומיים נפרדים. התחברות, התנתקות ומחיקת חשבון אינן מעבירות או מוחקות פרויקטים מקומיים. ניתן למחוק אותם באפליקציה או בניקוי נתוני האתר בדפדפן. תוכניות עשויות לכלול מידע אישי או סודי של אחרים; אתם אחראים להרשאה להשתמש בו.")] },
     { heading: '4. נתוני חשבון (אופציונלי)', status: 'active', blocks: [
       p('אם תתחברו עם Google, נקבל ונשמור, באמצעות הספק שלנו Supabase:'),
       ul(
         'מזהה משתמש, כתובת דוא״ל ושם, ופרטי הפרופיל הבסיסיים ש-Google מעבירה לאפליקציות התחברות (כגון קישור לתמונת פרופיל);',
         'שם התצוגה שאישרתם;',
-        'המועד והגרסה של תנאי השימוש ומדיניות הפרטיות שאישרתם;',
-        'רשומות טכניות של שירות האימות, כגון מועדי התחברות וכתובת IP ודפדפן ששימשו להתחברות;',
+        'גרסת המסמכים המדויקת ומועדי השרת של כל הסכמה מתועדת לתנאי השימוש ולמדיניות הפרטיות, כולל היסטוריית הסכמות;',
+        'רשומות אימות וחיבור; יומני גישה ואבטחה אצל הספקים עשויים לכלול כתובות IP, פרטי דפדפן ומועדי בקשות (הגדרות הרישום ותקופות השמירה אצל הספקים עדיין טעונות אימות);',
         'רשומות מצב חשבון (למשל יתרת קרדיטים ריקה), ואם ביקשתם מחיקה, בקשת המחיקה.',
       ),
       p('מטרה: יצירת החשבון ואבטחתו, שמירת החיבור, תיעוד הסכמתכם למסמכים אלה והכנת יכולות חשבון. אינכם חייבים על פי דין למסור לנו מידע זה; בלעדיו ניתן להמשיך להשתמש ב-BetterCalc כאורח. איננו מקבלים את סיסמת Google שלכם. בחירת השפה נשמרת בדפדפן שלכם ולא בחשבון.'),
@@ -228,40 +213,25 @@ const privacyHe: LegalDocument = {
       p('בתקופת הגישה המוקדמת BetterCalc אינה מפעילה אנליטיקת מוצר. האפליקציה אינה טוענת כלי אנליטיקה, אינה שולחת אירועי שימוש לספק אנליטיקה, ואינה יוצרת או שומרת בדפדפן מזהה אנליטיקה. מזהה אנליטיקה שנשאר בדפדפן מגרסה קודמת מוסר עם פתיחת האפליקציה.'),
       p('לפני שהאנליטיקה תופעל מחדש נעדכן מדיניות זו ונציג מה משתנה.'),
     ] },
-    { heading: '6. אחסון בדפדפן', status: 'active', blocks: [p('אנו משתמשים באחסון המקומי וב-IndexedDB של הדפדפן (לא בעוגיות פרסום) עבור: הפרויקטים, חיבור המשתמש, העדפות שפה ותצוגה, ותיעוד מקומי של אישורכם את תנאי השימוש. אם מופעלת הגנת CAPTCHA, ‏Cloudflare Turnstile עשויה לעבד נתוני דפדפן לזיהוי בוטים.')] },
-    { heading: '7. מי מעבד מידע עבורנו', blocks: [
-      table(['ספק', 'תפקיד', 'מיקום'],
-        ['Supabase', 'אימות, מסד נתונים, אחסון קבצים', 'האיחוד האירופי (אירלנד)'],
-        ['Google', 'התחברות', '[[עולמי / ארה״ב]]'],
-        ['Netlify', 'אחסון והגשת האתר', '[[CDN עולמי / ארה״ב]]'],
-        ['Cloudflare', 'CAPTCHA (רק אם הופעל)', '[[עולמי]]']),
-      p('חלק מהספקים פועלים מחוץ לישראל. העברת המידע אליהם נעשית על בסיס [[בסיס משפטי: הסכמה / התחייבות חוזית]].'),
-      p('איננו מוכרים מידע אישי ואיננו משתפים אותו לצורכי פרסום. ייתכן שנמסור מידע אם הדין או רשות מוסמכת יחייבו זאת, או כדי להגן על זכויותינו בהליך משפטי.'),
-    ] },
-    { heading: '8. יכולות שאינן זמינות עדיין', status: 'soon', blocks: [
-      p('היכולות הבאות קיימות בקוד אך **כבויות**. לפני הפעלת כל אחת מהן נעדכן מדיניות זו, נציג מה משתנה ונבקש את הסכמתכם במקום שנדרש.'),
-      ul(
-        '**גיבוי בענן:** עותק אופציונלי של הפרויקטים (כולל קובצי התוכניות) בחשבונכם, באחסון פרטי. [[תקופת שמירה ומה קורה בסיום מנוי]].',
-        '**סיוע בינה מלאכותית** (למשל הצעת חדרים, פתחים או שינויים בין גרסאות): ישלח עמודי תוכנית נבחרים לספק בינה מלאכותית [[ספק, מיקום, תקופת שמירה, שימוש לאימון]]. היום שום דבר אינו נשלח לשירות בינה מלאכותית.',
-        '**תשלומים ומנויים:** יטופלו על ידי ספק סליקה [[שם]]; נשמור פרטי חיוב לחשבוניות (שם, מספר עוסק/ח.פ., כתובת) ורשומות תשלום, שייתכן שנידרש לשמור למשך [[תקופה לפי דיני המס]] גם לאחר מחיקת החשבון. היום לא נאספים פרטי תשלום.',
-      ),
-    ] },
-    { heading: '9. משך שמירת המידע', blocks: [ul(
-      'נתוני חשבון: עד למחיקת החשבון. לאחר בקשת מחיקה חלה תקופת המתנה של 7 ימים (שבה ניתן לבטל); לאחר מכן נמחקים נתוני החשבון וקובצי הענן.',
-      'רשומה מינימלית על כך שחשבון נמחק (מזהים פנימיים, ללא שם או דוא״ל) נשמרת ביומן האבטחה למשך [[תקופה]].',
-      'גיבויים אצל הספקים עשויים להישמר עד [[תקופה]] לפני שיידרסו.',
-    )] },
-    { heading: '10. הזכויות שלכם', blocks: [p('לפי הדין בישראל באפשרותכם לבקש לעיין במידע האישי שאנו מחזיקים עליכם, ולבקש לתקן או למחוק מידע שאינו נכון, שלם, ברור או מעודכן. תוכלו גם למחוק את החשבון בעצמכם מדף החשבון ולשנות את שם התצוגה בכל עת. בקשות יש לשלוח אל [[דוא״ל פרטיות]]; נשיב בתוך התקופה הקבועה בדין. אם אתם באיחוד האירופי, ייתכן שיש לכם זכויות נוספות לפי ה-GDPR.')] },
-    { heading: '11. אבטחת מידע', blocks: [p('אנו משתמשים בחיבורים מוצפנים, בכללי גישה פרטניים לכל משתמש על נתוני החשבון, באחסון פרטי, בהגבלת גישה ניהולית ובמדיניות אבטחת תוכן מחמירה. התוכניות נשארות במכשירכם, ולכן אבטחתן תלויה גם במכשיר ובדפדפן שלכם. אין מערכת מאובטחת לחלוטין; אם אירוע אבטחה ישפיע על המידע שלכם, נפעל כנדרש בדין.')] },
+    { heading: '6. אחסון בדפדפן', status: 'active', blocks: [p("אנו משתמשים ב-IndexedDB ובאחסון מקומי או זמני בדפדפן עבור פרויקטים, חיבור לחשבון, העדפות שפה ותצוגה, מצב תקופת הניסיון לאורחים, היסטוריית הסכמות אורח, שם תצוגה שמור וראיות להסכמה שאומתה בעבר המקושרות לחשבון ולגרסת המסמכים. אישור הסכמה קצר מועד באחסון הזמני מעביר את הסכמתכם המפורשת לאורך ההפניה להתחברות Google. אלה רשומות תפעוליות ולא מזהי פרסום. ניקוי האחסון מסיר רשומות מקומיות ועלול לגרום לאובדן פרויקטים או לצורך בהתחברות ובהסכמה מחדש. אם הוגדר CAPTCHA, ‏Cloudflare Turnstile מעבדת נתוני דפדפן להגנה מבוטים; זו אינה אנליטיקת מוצר.")] },
+    { heading: '7. מי מעבד מידע עבורנו', blocks: [table(["ספק", "תפקיד בגישה המוקדמת", "מיקום העיבוד"],["Supabase", "שילוב התחברות Google, מסד נתוני חשבון, חיבורים ורשומות הסכמה; ללא העלאת גיבויי פרויקטים", "מסד הנתונים: האיחוד האירופי (אירלנד), eu-west-1; [[אימות מיקומי עיבוד נוספים אצל הספק]]"],["Google", "ספק זהות כשבוחרים להתחבר באמצעות Google", "[[אימות מיקומי העיבוד ותנאי הספק החלים]]"],["Netlify", "הגשת האתר; ייתכן עיבוד יומני גישה ואבטחה טכניים גם לאורחים", "[[אימות מיקומי אחסון, CDN ועיבוד יומנים]]"],["Cloudflare (רק אם הוגדר CAPTCHA)", "הגנה מבוטים באמצעות Turnstile", "[[אימות מיקומי העיבוד החלים]]"]),p("נתוני חשבון ונתונים טכניים עשויים להיות מעובדים מחוץ לישראל. הסכמי הספקים, מיקומי העיבוד וההסדרים החוקיים להעברת מידע לחו״ל טעונים [[אישור הבעלים להסכמי הספקים ולהגנות בהעברת מידע]]. תוכן פרויקטים אינו נשלח לספקים אלה בתהליך העבודה הידני המקומי הרגיל."),p("איננו מוכרים מידע אישי או משתפים אותו לצורכי פרסום. ייתכן שנמסור מידע כשנדרש לפי דין או רשות מוסמכת, או כשהדבר נחוץ ומותר בדין להגנה על זכויות בהליך משפטי.")] },
+    { heading: '8. יכולות שאינן זמינות עדיין', status: 'soon', blocks: [p("בינה מלאכותית, תשלומים, מנויים וגיבוי בענן **אינם זמינים עדיין**. עמוד התוכניות הוא תצוגה מקדימה להשוואה בלבד: המחירים עשויים להשתנות, לא ניתן לרכוש תוכניות בתשלום, וקרדיטים בתצוגה אינם מעניקים גישה לבינה מלאכותית. איסוף ועריכת פרטי חיוב כבויים; פרטים שנשמרו בעבר נשמרים עד למחיקת החשבון. לא מופעל חיוב כספי או חיוב על שימוש בבינה מלאכותית."),p("לפני השקת יכולת כזו נפרסם את זרימות המידע, הספקים, מיקומי העיבוד, תקופות השמירה וכל הסכמה נדרשת. תנאי ספקים או חיוב עתידיים אינם חלק מההצעה הנוכחית בגישה המוקדמת.")] },
+    { heading: '9. משך שמירת המידע', blocks: [ul("פרויקטים ורשומות בדפדפן נשארים עד למחיקתם על ידכם או על ידי הדפדפן. מחיקת החשבון אינה מנקה את אחסון הדפדפן במכשיר כלשהו.",
+      "נתוני חשבון בשרת, לרבות פרופיל והיסטוריית הסכמות, נשמרים כל עוד החשבון קיים. ניתן לבקש מחיקה בדף החשבון ולבטל כל עוד הבקשה ממתינה. מנגנון התחזוקה הממומש משתמש כברירת מחדל בתקופת המתנה של 7 ימים, ולאחריה מוחק קובצי ענן שנשמרו, אם ישנם, לפני מחיקת חשבון האימות והפרופיל, היסטוריית ההסכמות, פרטי החיוב ויתר רשומות החשבון המקושרות. ההשלמה מתבצעת בריצת תחזוקה מוצלחת, ולא אוטומטית בסוף ההמתנה. [[אימות פריסת מנגנון המחיקה, התזמון ותקופת ההמתנה]]",
+      "רשומות ביקורת על מחיקה שומרות מזהה משתמש פנימי, פעולה ומועד; הן אינן אנונימיות. בקוד אין מחיקה אוטומטית שלהן לאחר תקופה קצובה. [[אישור ומימוש תקופת שמירת רשומות ביקורת מחיקה]]",
+      "יומני אימות ואבטחה וגיבויים אצל ספקים עשויים להישמר לאחר המחיקה ממסד הנתונים הפעיל. [[אימות תקופות שמירת יומנים וגיבויים ומגבלות המחיקה אצל הספקים]] אין התחייבות למועד מחיקה מוחלט עד לאימות הגדרות אלה.",
+      "אם קיימות רשומות תשלום היסטוריות, המחיקה מסירה את הקישור שלהן לחשבון אך משמרת אותן; גם רשומות אירועי תשלום עשויות להישאר. לא נגבים תשלומים חדשים בגישה המוקדמת. [[אימות רשומות היסטוריות והשמירה או הניקוי הנדרשים]]")] },
+    { heading: '10. הזכויות שלכם', blocks: [p('לפי הדין בישראל באפשרותכם לבקש לעיין במידע האישי שאנו מחזיקים עליכם, ולבקש לתקן או למחוק מידע שאינו נכון, שלם, ברור או מעודכן. תוכלו גם לבקש מחיקת חשבון מדף החשבון כמתואר בסעיף 9 ולשנות את שם התצוגה. בקשות יש לשלוח אל [[כתובת פעילה לתמיכה ולפרטיות]]; נשיב בתוך התקופה הקבועה בדין. אם אתם באיחוד האירופי, ייתכן שיש לכם זכויות נוספות לפי ה-GDPR.')] },
+    { heading: '11. אבטחת מידע', blocks: [p('האפליקציה מוגדרת להשתמש ב-HTTPS לשירותי חשבון מרוחקים, בכללי גישה לנתוני החשבון לפי משתמש ובמדיניות אבטחת תוכן. אמצעים אלה מפחיתים סיכון אך אינם מבטיחים אבטחה; הגדרות האבטחה אצל הספקים והגישה הניהולית טעונות אימות תפעולי. התוכניות נשארות במכשירכם, ולכן אבטחתן תלויה גם במכשיר ובדפדפן שלכם. אין מערכת מאובטחת לחלוטין; אם אירוע אבטחה ישפיע על המידע שלכם, נפעל כנדרש בדין.')] },
     { heading: '12. גיל', blocks: [p('BetterCalc מיועדת למשתמשים בני 18 ומעלה.')] },
-    { heading: '13. שינויים', blocks: [p('שינויים יפורסמו בדף זה עם תאריך וגרסה חדשים. על שינויים מהותיים נודיע למשתמשים מחוברים באפליקציה [[או בדוא״ל]] לפני כניסתם לתוקף, ונבקש הסכמה מחודשת במקום שנדרש.')] },
+    { heading: '13. שינויים', blocks: [p("מסמכים מעודכנים יפורסמו עם גרסה ומועד תחולה חדשים. כאשר גרסה חדשה נכנסת לתוקף, האפליקציה דורשת הסכמה מפורשת מחודשת ממשתמשי חשבון ומאורחים לפני המשך השימוש בשירות. תקלה זמנית בשירות החשבון אינה יוצרת הסכמה בחשבון: שימוש מקומי מחייב אישור מקומי עדכני או הסכמה שאומתה בעבר. כיום אין מנגנון אוטומטי להודעה מוקדמת בדוא״ל.")] },
   ],
 };
 
 // ===================================================================================== Terms, Hebrew
 const termsHe: LegalDocument = {
   title: 'תנאי שימוש',
-  meta: 'עדכון אחרון: [[תאריך]] · גרסה: [[גרסה]]',
+  meta: 'טיוטת גישה מוקדמת · גרסה: pending · טרם נכנסה לתוקף',
   notice: {
     title: 'הודעה לשימוש מקצועי. יש לקרוא לפני השימוש ב-BetterCalc',
     points: [
@@ -275,15 +245,15 @@ const termsHe: LegalDocument = {
   },
   sections: [
     { heading: '1. המפעיל והסכמה', blocks: [
-      p('BetterCalc (“השירות”) מופעלת על ידי **[[שם משפטי מלא של הבעלים]]**, אדם פרטי (יחיד) תושב ישראל, הפועל כעוסק פטור, ת.ז. / מס’ עוסק [[מספר]], מען להודעות: [[כתובת]], דוא״ל: [[דוא״ל]] (“המפעיל”). המפעיל אינו חברה או תאגיד.', '1.1'),
-      p('בשימוש בשירות, עם חשבון או בלעדיו, אתם מסכימים לתנאים אלה ולמדיניות הפרטיות. אם אינכם מסכימים, אל תשתמשו בשירות.', '1.2'),
+      p('BetterCalc (“השירות”) מופעלת על ידי **[[שי אטיאס — לאימות השם המשפטי הרשום]]**, אדם פרטי (יחיד), הפועל כעוסק עצמאי בישראל, דוא״ל: [[כתובת פעילה לתמיכה ולפרטיות]] (“המפעיל”). המפעיל אינו חברה או תאגיד.', '1.1'),
+      p("לפני השימוש בשירות נדרשת הסכמה מפורשת לתנאים אלה ולמדיניות הפרטיות, בחשבון או בגישת אורח. אם אינכם מסכימים, אל תשתמשו בשירות.", '1.2'),
       p('עליכם להיות בני 18 לפחות ובעלי כשרות משפטית. אם אתם משתמשים בשירות עבור עסק, אתם מאשרים שאתם מוסמכים לחייב אותו, ו“אתם” כולל אותו.', '1.3'),
       p('השירות מיועד לשימוש מקצועי בתחום הבנייה. אם אתם צרכנים כמשמעותם בחוק הגנת הצרכן, התשמ״א-1981, אין בתנאים אלה כדי לגרוע מזכויות שחוק זה מקנה לכם ושאין לוותר עליהן.', '1.4'),
     ] },
     { heading: '2. מהות השירות', status: 'active', blocks: [
       p('השירות הוא **כלי עזר לחישוב כמויות בלבד**, המבוסס על תוכניות PDF. הוא פועל בדפדפן ומבצע חישובים על בסיס התוכניות, קני המידה, הכיול, הבחירות וההגדרות ש**אתם** מספקים.', '2.1'),
-      p('השירות ניתן **ללא תשלום** [[בתקופת השקה / בטא]]. המפעיל אינו בודק את התוכניות, הנתונים או התוצאות שלכם ואינו מייעץ לכם, ולא נוצרים בינכם לבין המפעיל יחסי ייעוץ מקצועי, שליחות, עבודה או נאמנות.', '2.2'),
-      p('שום אמירה באתר, בשיווק, בשירות או בתמיכה אינה התחייבות או מצג לדיוק, אלא אם נעשתה במסמך בכתב חתום על ידי המפעיל.', '2.3'),
+      p("כלי המדידה הידניים, חישוב הכמויות, השוואת הגרסאות החזותית והייצוא והגיבוי המקומיים ניתנים **ללא תשלום בתקופת הגישה המוקדמת**. המפעיל אינו בודק את התוכניות, הנתונים או התוצאות שלכם ואינו מספק ייעוץ מקצועי. לא נוצרים יחסי ייעוץ מקצועי, שליחות, עבודה או נאמנות.", '2.2'),
+      p("תיאורים ופניות תמיכה אינם מחליפים אימות עצמאי של התוצאות או ייעוץ מקצועי. אין בסעיף זה כדי לפטור מאחריות למצגים מטעים או לגרוע מזכויות שאין לגרוע מהן לפי דין.", '2.3'),
     ] },
     { heading: '3. אי-דיוק מובנה; אין התחייבות', status: 'active', blocks: [
       p('מדידות מתוך תוכניות PDF **כרוכות מטבען באי-דיוקים**, בין היתר בשל: תוכניות שאינן בקנה מידה, מעוותות, סרוקות, חתוכות, לא מעודכנות או חסרות; כיול שגוי או לא מדויק; הבדלי תצוגת PDF; עובי קווים ודיוק הסמן; רכיבים ששורטטו, זוהו או סווגו באופן שגוי; הגדרות כגון גבהים, פחת, ניכויים, מרווחים, כיסוי או אורכי חפייה; עיגול; ותקלות תוכנה.', '3.1'),
@@ -308,25 +278,25 @@ const termsHe: LegalDocument = {
       p('השירות ניתן לכם בלבד. המפעיל אינו מתכוון שאדם אחר יסתמך על השירות או על הדוחות, ובמידה שהדין מתיר אינו נוטל כל חובה או אחריות כלפי צד שלישי.', '6.3'),
     ] },
     { heading: '7. מידע השמור במכשירכם', status: 'active', blocks: [
-      p('תוכניות, פרויקטים ודוחות נשמרים רק באחסון הדפדפן ובמכשיר שלכם. המפעיל אינו מקבל, מחזיק או מגבה אותם, ואינו יכול לגשת אליהם, לשחזר או לשקם אותם.', '7.1'),
-      p('אחסון הדפדפן עלול להימחק על ידי הדפדפן, בניקוי נתוני אתר, בגלישה פרטית, בתקלה או בהחלפת מכשיר, או בעדכוני תוכנה. **האחריות לשמירת גיבויים עדכניים** באמצעות כלי הייצוא והגיבוי שבשירות היא שלכם.', '7.2'),
+      p('בתהליך העבודה הרגיל בגישה המוקדמת, תוכניות ופרויקטים נשמרים בדפדפן, וייצואים וגיבויים מקומיים נשמרים במכשיר. המפעיל אינו מקבל או מגבה תוכן פרויקטים בתהליך זה ואינו יכול לשחזרו מתוך חשבון. נתוני חשבון מעובדים בנפרד כמתואר במדיניות הפרטיות.', '7.1'),
+      p('אחסון הדפדפן עלול להימחק על ידי הדפדפן, בניקוי נתוני אתר, בגלישה פרטית, בתקלה או בהחלפת מכשיר, או בעדכוני תוכנה. **האחריות לשמירת גיבויים עדכניים** באמצעות כלי הייצוא והגיבוי המקומיים שבשירות היא שלכם; גיבוי בענן אינו זמין.', '7.2'),
       p('במידה שהדין מתיר, המפעיל אינו אחראי לאובדן, לשיבוש או לאי-זמינות של מידע השמור במכשירכם, לרבות כתוצאה מתקלת תוכנה, למעט כאמור בסעיף 12.4.', '7.3'),
     ] },
     { heading: '8. חשבונות', status: 'active', blocks: [
-      p('חשבון הוא אופציונלי ונפתח בהתחברות עם Google. שמרו על אבטחת חשבון Google שלכם; אתם אחראים לפעילות בחשבונכם.', '8.1'),
-      p('ניתן למחוק את החשבון בכל עת כמתואר במדיניות הפרטיות. מחיקתו אינה מוחקת מידע במכשיריכם.', '8.2'),
+      p('הרשמה ב־Google היא חינמית, ללא פרטי תשלום, ופותחת שימוש בלתי מוגבל בכלים הידניים. לאחר הפעלת הניסיון, כל דפדפן אורח מקבל שבעה ימים מהשימוש הראשון שלו בשירות, ולא ממועד ההשקה הכללי. לאחר סיום הניסיון, צפייה, ייצוא וגיבוי מקומיים ומחיקת פרויקטים זמינים; יצירה ועריכה מחייבות הרשמה. הניסיון נשמר מקומית, אינו מוגן לחלוטין משינוי, וניקוי נתוני הדפדפן עשוי להתחילו מחדש. שמרו על אבטחת חשבון Google שלכם; אתם אחראים לפעילות בחשבונכם.', '8.1'),
+      p('ניתן לבקש מחיקת חשבון בכל עת, בכפוף לתקופת ההמתנה ולעיבוד המתוארים במדיניות הפרטיות. מחיקתו אינה מוחקת מידע במכשיריכם.', '8.2'),
     ] },
     { heading: '9. שימוש מותר', status: 'active', blocks: [p('אסור: לשבש, להעמיס, לבחון או לעקוף את האבטחה או המגבלות של השירות; לגשת למידע של משתמשים אחרים; לבצע הנדסה לאחור אלא במידה שהדין מתיר; להשתמש באמצעים אוטומטיים לניצול לרעה; או להשתמש בשירות שלא כדין או עם תוכן שאין לכם זכות להשתמש בו.')] },
     { heading: '10. התוכן שלכם והקניין הרוחני של המפעיל', status: 'active', blocks: [
       p('התוכניות, הפרויקטים, המדידות והדוחות שלכם שייכים לכם. המפעיל אינו טוען לבעלות עליהם.', '10.1'),
       p('אתם מצהירים שיש לכם הזכויות וההרשאות הנדרשות לשימוש בתוכניות שאתם טוענים, לרבות לפי דיני זכויות יוצרים וחובות סודיות או מכרז.', '10.2'),
-      p('אם יכולת עתידית שתבחרו (כגון גיבוי בענן או בינה מלאכותית) תחייב את המפעיל לשמור או לעבד את התוכן שלכם, אתם מעניקים למפעיל רישיון מוגבל ולא בלעדי לעשות זאת אך ורק לשם מתן אותה יכולת לכם.', '10.3'),
-      p('התוכנה, העיצוב והשם “BetterCalc” שייכים למפעיל או למעניקי הרישיון שלו. רכיבי קוד פתוח כפופים לרישיונותיהם, המפורטים ב-[[דף רישיונות]]. אתם מקבלים זכות אישית, שאינה ניתנת להעברה וניתנת לביטול, להשתמש בשירות לפי תנאים אלה.', '10.4'),
-      p('המפעיל רשאי להשתמש במשוב שתשלחו ללא התחייבות, ובסטטיסטיקות מצטברות שאינן כוללות את התוכן שלכם.', '10.5'),
+      p("עיבוד בבינה מלאכותית וגיבוי בענן אינם זמינים בגישה המוקדמת. תנאים אלה אינם מתירים העלאת תוכן הפרויקטים שלכם לשירות עתידי; תנאים חלים וכל הסכמה נדרשת יוצגו לפני הפעלת יכולת כזו.", '10.3'),
+      p("התוכנה, העיצוב והשם “BetterCalc” שייכים למפעיל או לנותני הרישיון שלו. רכיבי קוד פתוח כפופים לרישיונותיהם. הודעות הרישיון ותנאיהן זמינות בכתובת /licenses/index.html. ניתנת לכם זכות אישית שאינה ניתנת להעברה להשתמש בשירות בכפוף לתנאים אלה ולדין החל.", '10.4'),
+      p("המפעיל רשאי להשתמש במשוב שתבחרו לשלוח כדי לשפר את השירות. אנליטיקת השימוש במוצר כבויה בגישה המוקדמת; הטיפול ברשומות חשבון טכניות וברשומות ספקים מתואר במדיניות הפרטיות.", '10.5'),
     ] },
     { heading: '11. השירות ניתן “כמות שהוא” (AS IS)', blocks: [
       p('השירות ניתן ללא תשלום, ככלי עזר כללי, על בסיס נתונים שבשליטתכם ועם תוצאות שעליכם לאמת. לכן הוא ניתן **“כמות שהוא” (AS IS) ו“כפי שהוא זמין”**. במידה שהדין מתיר, המפעיל אינו נותן כל מצג או התחייבות, מפורשים או משתמעים, בדבר דיוק, שלמות, אמינות, זמינות, פעולה ללא תקלות או התאמה למטרה מסוימת.', '11.1'),
-      p('המפעיל רשאי לשנות, להשעות או להפסיק יכולת כלשהי. אם השירות כולו יופסק, המפעיל ישתדל לתת הודעה של [[30]] ימים לפחות כדי שתוכלו לייצא את המידע.', '11.2'),
+      p("יכולות הגישה המוקדמת עשויות להשתנות, להיפסק זמנית או להיסגר. יש לשמור גיבויים מקומיים עצמאיים. ככל שניתן באופן סביר, נמסור הודעה מוקדמת על סגירת השירות כולו כדי לאפשר ייצוא; אין בכך לגרוע מחובות הודעה מחייבות לפי דין.", '11.2'),
     ] },
     { heading: '12. פטור מאחריות', blocks: [
       p('**נזקים כספיים.** במידה המרבית שהדין מתיר, המפעיל אינו אחראי לכל הפסד או נזק כספי, **ישיר או עקיף**, הנובע מהשימוש בשירות, מאי-היכולת להשתמש בו או מהסתמכות עליו או על תוצאה או דוח כלשהם, או הקשור לכך, לרבות:', '12.1'),
@@ -334,20 +304,20 @@ const termsHe: LegalDocument = {
       p('**תביעות צד שלישי.** במידה המרבית שהדין מתיר, המפעיל אינו אחראי כלפיכם לכל תביעה שתוגש נגדכם על ידי צד שלישי בקשר לתוצאה או לדוח. ביחסים בינכם לבין המפעיל, האחריות לכל תביעה כזו היא שלכם (ראו גם סעיף 13).', '12.2'),
       p('**הבסיס לפטור.** אתם מאשרים כי: השירות הוא כלי עזר חינמי; מדידה מתוך PDF אינה מדויקת מטבעה; אתם, ולא המפעיל, בוחרים את התוכניות, קני המידה והנתונים; ביכולתכם ועליכם לאמת את כל התוצאות לפני הסתמכות עליהן; למפעיל אין גישה לתוכניות או לפרויקטים שלכם; והמפעיל אינו גובה תמורה בעבור הסיכון של החלטותיכם העסקיות ואינו יכול לשאת בו. סעיף זה הוא בסיס יסודי שעליו השירות מוצע ללא תשלום.', '12.3'),
       p('**מה אינו מוחרג.** אין בתנאים אלה כדי לפטור או להגביל את אחריות המפעיל: (א) לזדון, תרמית או הטעיה; (ב) לרשלנות רבתי; (ג) למוות או לנזק גוף שנגרמו ברשלנות; (ד) לכל חובה או אחריות שאין לפטור ממנה או להגבילה לפי הדין בישראל, לרבות חובות מחייבות לפי דיני הגנת הפרטיות; או (ה) לכל זכות שלכם כצרכנים שאין לוותר עליה.', '12.4'),
-      p('**הוראת גיבוי אם הפטור לא יאוכף.** אם, על אף האמור בסעיף 12.1, ייקבע כי המפעיל אחראי לנזק, אזי במידה שהדין מתיר: (א) האחריות תוגבל לנזק ישיר שהיה צפוי באופן סביר בעת שהתחלתם להשתמש בשירות ושהוכח על ידיכם; (ב) היא תופחת בהתאם לחלקכם בגרימת הנזק, לרבות אי-אימות התוצאות כנדרש בסעיף 4; (ג) עליכם לנקוט צעדים סבירים להקטנת הנזק; ו-(ד) לא יחולו פיצויים עונשיים.', '12.5'),
+      p('**הוראת גיבוי אם הפטור לא יאוכף.** אם, על אף האמור בסעיף 12.1, ייקבע כי המפעיל אחראי לנזק, אזי במידה שהדין מתיר: (א) האחריות תוגבל לנזק ישיר שהיה צפוי באופן סביר בעת שהתחלתם להשתמש בשירות ושהוכח על ידיכם; (ב) היא תופחת בהתאם לחלקכם בגרימת הנזק, לרבות אי-אימות התוצאות כנדרש בסעיף 4; (ג) עליכם לנקוט צעדים סבירים להקטנת הנזק; ו-(ד) כל הגבלה על פיצויים כפופה לדין המחייב ולסמכויות בית המשפט. הגבלות אלה הן חלוקת סיכונים חוזית מוצעת, ולא הבטחה לחסינות, והן כפופות לסעיף 12.4 ולביקורת שיפוטית.', '12.5'),
       p('**על מי חלה ההגנה.** סעיף זה מגן על המפעיל באופן אישי ועל כל מי שפועל מטעמו, הרשאים להסתמך עליו.', '12.6'),
-      p('**הודעה על טענה.** אם לדעתכם קמה לכם טענה, אנא הודיעו למפעיל בכתב ב-[[דוא״ל]] בהקדם, ובכל מקרה בתוך [[6/12]] חודשים מהיום שנודע לכם עליה, כדי שניתן יהיה לבדוק את הבעיה ובמידת האפשר לתקנה.', '12.7'),
+      p("אם לדעתכם קמה לכם טענה, אנא פנו למפעיל בהקדם כדי שניתן יהיה לבדוק את העניין. בקשה זו אינה מקצרת תקופת התיישנות, אינה ויתור על סעד ואינה מתנה את מימוש זכויותיכם במתן הודעה.", '12.7'),
     ] },
-    { heading: '13. שיפוי (משתמשים עסקיים)', blocks: [p('אם אתם משתמשים בשירות במסגרת עסק, תשפו את המפעיל בגין עלויות, הפסדים ושכר טרחה סבירים הנובעים מתביעת צד שלישי שנגרמה בשל: (א) תוכן שטענתם ללא זכות; (ב) דוח או תוצאה שמסרתם לצד שלישי, או השימוש שעשה בהם; או (ג) הפרת תנאים אלה. המפעיל יודיע לכם על התביעה בהקדם ויאפשר לכם להשתתף בהגנה. סעיף זה לא יחול במידה שהתביעה נובעת מעניין המנוי בסעיף 12.4(א)–(ג).')] },
-    { heading: '14. יכולות שאינן זמינות עדיין', status: 'soon', blocks: [p('סיוע בינה מלאכותית, גיבוי בענן, תוכניות בתשלום, קרדיטים ותשלומים **אינם מוצעים היום**, ושום סכום אינו מחויב. לפני שאחת מהן תהיה זמינה, המפעיל יפרסם את התנאים הספציפיים שלה, ותידרשו לאשר אותם לפני השימוש. התנאים יכללו מחיר, חיוב, חידוש, ביטול והחזרים, ולגבי בינה מלאכותית את הספק ואת אופן בדיקת התוצאות. המפעיל הוא עוסק פטור, ולכן מחיריו לא יכללו מע״מ. הפטורים שבסעיף 12 ייבחנו מחדש לגבי יכולות בתשלום לפני השקתן.')] },
+    { heading: '13. שיפוי (משתמשים עסקיים)', blocks: [p('אם אתם משתמשים בשירות במסגרת עסק, תשפו את המפעיל בגין עלויות, הפסדים ושכר טרחה סבירים הנובעים מתביעת צד שלישי שנגרמה בשל: (א) תוכן שטענתם ללא זכות; (ב) דוח או תוצאה שמסרתם לצד שלישי, או השימוש שעשה בהם; או (ג) הפרת תנאים אלה. המפעיל יודיע לכם על התביעה בהקדם ויאפשר לכם להשתתף בהגנה. סעיף זה לא יחול במידה שהתביעה נובעת מעניין המנוי בסעיף 12.4.')] },
+    { heading: '14. יכולות שאינן זמינות עדיין', status: 'soon', blocks: [p("גישה לבינה מלאכותית, גיבוי בענן, מנויים בתשלום, רכישת קרדיטים ותשלומים **כבויים בתקופת הגישה המוקדמת**. אפשר להשוות תוכניות והקצאות קרדיטים בתצוגה מקדימה בלבד; מחירי התצוגה עשויים להשתנות ואינם רכישה או זכאות. אין אפשרות לתשלום או להפעלת מנוי. לפני השקה מסחרית יש להשלים תנאים ומידע על פרטיות, לרבות מחירים, מיסים, חידוש, ביטול והחזרים החלים, ככל שרלוונטי.")] },
     { heading: '15. שינויים בתנאים', blocks: [
-      p('שינויים יפורסמו עם תאריך וגרסה חדשים. על שינויים מהותיים תימסר הודעה למשתמשים מחוברים באפליקציה [[ובדוא״ל]] לפחות [[14/30]] ימים לפני כניסתם לתוקף. שינויים הנדרשים לפי דין או מטעמי אבטחה עשויים להיכנס לתוקף מוקדם יותר.', '15.1'),
-      p('אם אינכם מסכימים, תוכלו להפסיק את השימוש ולמחוק את החשבון. המשך שימוש לאחר מועד התחולה מהווה הסכמה. שינויים לא יחולו על טענות שקמו לפני כניסתם לתוקף.', '15.2'),
+      p("שינויים יפורסמו באפליקציה עם גרסת מסמכים ומועד תחולה חדשים. כאשר גרסה מעודכנת נכנסת לתוקף, המשך השימוש מחייב הסכמה מפורשת מחודשת. חובת הודעה מוקדמת לפי הדין החל נשמרת.", '15.1'),
+      p("אם אינכם מסכימים, תוכלו להפסיק את השימוש ולבקש מחיקת חשבון. המשך שימוש כשלעצמו אינו מחליף את שלב ההסכמה המפורשת. שינויים אינם חלים למפרע על טענות שקמו לפני מועד תחולתם.", '15.2'),
     ] },
     { heading: '16. סיום', blocks: [p('אתם רשאים להפסיק להשתמש בשירות בכל עת. המפעיל רשאי להשעות או להפסיק את גישתכם אם הפרתם תנאים אלה הפרה מהותית או אם הדין מחייב זאת, בהודעה מראש במקום שהדבר סביר. סעיפים 3–7, 10–13 ו-17–18 יחולו גם לאחר הסיום.')] },
     { heading: '17. דין חל וסמכות שיפוט', blocks: [
       p('על תנאים אלה יחולו דיני מדינת ישראל.', '17.1'),
-      p('הסמכות נתונה לבתי המשפט המוסמכים בישראל. [[אפשרות למשתמשים עסקיים בלבד: סמכות ייחודית לבתי המשפט המוסמכים במחוז …]] לא תיכפה סמכות ייחודית על צרכנים.', '17.2'),
+      p("סמכות השיפוט תיקבע לפי הדין החל בבתי המשפט המוסמכים בישראל. תנאים אלה אינם קובעים מחוז בלעדי ואינם גורעים מזכויות צרכנים מחייבות בעניין מקום השיפוט.", '17.2'),
     ] },
     { heading: '18. כללי', blocks: [
       p('**שינוי במקום ביטול.** אם בית משפט יקבע שהוראה כלשהי, לרבות הוראה בסעיף 12, בטלה או אינה ניתנת לאכיפה, כולה או חלקה, היא תחול במידה המרבית המותרת. סעיף 12.5 ויתר התנאים יעמדו בתוקפם.', '18.1'),
@@ -355,7 +325,7 @@ const termsHe: LegalDocument = {
       p('**הסכם מלא.** תנאים אלה ומדיניות הפרטיות הם ההסכם המלא בנוגע לשירות.', '18.3'),
       p('**אי-ויתור.** אי-אכיפה של זכות אינה ויתור עליה.', '18.4'),
       p('**שפה.** התנאים מתפרסמים בעברית ובאנגלית. במקרה של סתירה, הנוסח העברי גובר.', '18.5'),
-      p('**הודעות.** המפעיל רשאי להודיע לכם באפליקציה או בדוא״ל של חשבונכם. הודעות למפעיל: [[דוא״ל]] / [[כתובת]].', '18.6'),
+      p('**הודעות.** המפעיל רשאי להודיע לכם באפליקציה או בדוא״ל של חשבונכם. הודעות למפעיל: [[כתובת פעילה לתמיכה ולפרטיות]].', '18.6'),
     ] },
   ],
 };

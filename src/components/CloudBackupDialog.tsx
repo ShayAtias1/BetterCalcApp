@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { formatDate, useT } from '../i18n';
 import { confirmDialog, notify } from '../lib/appDialogs';
 import { listProjects, type ProjectWithPlans } from '../db/database';
+import { CLOUD_BACKUP_ENABLED } from '../lib/access/accessPolicy';
 import { getSupabase } from '../lib/supabase/client';
 import {
   CloudBackupError,
@@ -47,6 +48,7 @@ export default function CloudBackupDialog({ onClose }: { onClose: () => void }) 
   }, []);
 
   useEffect(() => {
+    if (!CLOUD_BACKUP_ENABLED) return;
     let alive = true;
     void (async () => {
       try {
@@ -113,6 +115,12 @@ export default function CloudBackupDialog({ onClose }: { onClose: () => void }) 
 
   const percent = status && status.quotaBytes > 0 ? Math.min(100, Math.floor((status.usedBytes / status.quotaBytes) * 100)) : 0;
   const toggle = (id: string) => setSelected((cur) => { const next = new Set(cur); if (!next.delete(id)) next.add(id); return next; });
+
+  if (!CLOUD_BACKUP_ENABLED) return (
+    <AppModal title={t('cloud.title')} onCancel={onClose} showClose className="auth-dialog">
+      <p className="acct-note">{t('cloud.earlyAccessUnavailable')}</p>
+    </AppModal>
+  );
 
   return (
     <AppModal title={t('cloud.title')} onCancel={onClose} showClose wide className="cloud-dialog">

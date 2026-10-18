@@ -55,7 +55,9 @@ test('the texts match the app: Google sign-in, language kept in the browser, 7-d
   assert.match(privacy, /Google password/);
   assert.match(privacy, /language choice is kept in your browser/);
   assert.match(privacy, /7-day waiting period/);
-  assert.ok(!/anonymous/i.test(privacy), 'statistics are pseudonymous, not anonymous');
+  assert.match(privacy, /does not run product analytics/);
+  assert.match(privacy, /not anonymous/, 'internal deletion IDs must not be described as anonymised');
+  assert.match(privacy, /successful maintenance run/);
 });
 
 test('a published version has no placeholder left; until then the version stays "pending"', () => {
@@ -63,4 +65,24 @@ test('a published version has no placeholder left; until then the version stays 
   if (LEGAL_DOC_VERSION !== LEGAL_DOC_VERSION_PENDING) assert.deepEqual(remaining, [], 'cannot publish with placeholders');
   assert.equal(LEGAL_IS_DRAFT, LEGAL_DOC_VERSION === LEGAL_DOC_VERSION_PENDING);
   assert.ok(remaining.length > 0 ? LEGAL_IS_DRAFT : true);
+});
+
+
+test('Early Access drafts require a real contact, do not publish a fake mailbox and retain pending status', () => {
+  assert.equal(LEGAL_DOC_VERSION, 'pending');
+  for (const kind of KINDS) for (const lang of LANGS) {
+    const doc = LEGAL_CONTENT[kind][lang];
+    const text = legalDocumentStrings(doc).join('\n');
+    assert.match(doc.meta, /pending/);
+    assert.doesNotMatch(text, /support@bettercalc\.invalid/);
+    assert.match(text, lang === 'en' ? /active support and privacy contact/ : /כתובת פעילה לתמיכה ולפרטיות/);
+    assert.doesNotMatch(text, /VAT-exempt|עוסק פטור/);
+  }
+});
+
+test('publishing also requires removal of the development-only contact placeholder', () => {
+  if (LEGAL_IS_DRAFT) return;
+  for (const kind of KINDS) for (const lang of LANGS) {
+    assert.doesNotMatch(legalDocumentStrings(LEGAL_CONTENT[kind][lang]).join('\n'), /support@bettercalc\.invalid/);
+  }
 });

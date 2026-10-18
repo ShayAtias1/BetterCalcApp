@@ -17,6 +17,9 @@ export const ACCOUNTS_ENABLED = true;
 /** Emailed one-time codes stay implemented (authService, authStore, the form below) but hidden: Google is the only visible method for now. */
 export const EMAIL_OTP_ENABLED = false;
 
+/** Early Access: keep the cloud UI unavailable even if legacy entitlements exist. */
+export const CLOUD_BACKUP_ENABLED = false;
+
 /**
  * - full: registered (signed in); full manual access.
  * - trial: guest inside the 7 days.

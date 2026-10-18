@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { loadTrial, trialStatus, TRIAL_STORAGE_KEY, TRIAL_DAYS, TRIAL_NOT_BEFORE } from '../../src/lib/access/trial.ts';
-import { evaluateAccess, ACCESS_ENFORCEMENT_ENABLED, ACCOUNTS_ENABLED } from '../../src/lib/access/accessPolicy.ts';
+import { loadTrial, trialStatus, TRIAL_STORAGE_KEY, TRIAL_DAYS, TRIAL_ACTIVATION_ID, TRIAL_RECORD_VERSION } from '../../src/lib/access/trial.ts';
+import { evaluateAccess, ACCESS_ENFORCEMENT_ENABLED, ACCOUNTS_ENABLED, CLOUD_BACKUP_ENABLED } from '../../src/lib/access/accessPolicy.ts';
 import { createAccessSync } from '../../src/lib/access/accessSync.ts';
 import { createStore } from 'zustand/vanilla';
 
@@ -27,17 +27,18 @@ test('the trial starts on first use and lasts exactly 7 days', () => {
   assert.equal(JSON.parse(storage.data.get(TRIAL_STORAGE_KEY)!).startedAt, T0);
 });
 
-test('pre-launch records never consume trial days: old-format and pre-launch records restart the clock', () => {
-  const LAUNCH = T0;
-  const legacy = memory({ [TRIAL_STORAGE_KEY]: JSON.stringify({ v: 1, startedAt: T0 - 30 * DAY }) });
-  const fresh = loadTrial(legacy, T0 + 2 * DAY)!;
-  assert.equal(fresh.expired, false);
-  assert.equal(fresh.daysLeft, TRIAL_DAYS);
-  assert.equal(JSON.parse(legacy.data.get(TRIAL_STORAGE_KEY)!).startedAt, T0 + 2 * DAY);
-  const early = memory({ [TRIAL_STORAGE_KEY]: JSON.stringify({ v: 2, startedAt: LAUNCH - DAY }) });
-  assert.equal(loadTrial(early, LAUNCH + DAY, LAUNCH)!.daysLeft, TRIAL_DAYS);
-  const after = memory({ [TRIAL_STORAGE_KEY]: JSON.stringify({ v: 2, startedAt: LAUNCH + DAY }) });
-  assert.equal(loadTrial(after, LAUNCH + 3 * DAY, LAUNCH)!.daysLeft, 5);
+test('prelaunch records are ignored and every visitor starts a full personal trial on first use', () => {
+  for (const record of [{ v: 1, startedAt: T0 - 30 * DAY }, { v: 2, startedAt: T0 - DAY },
+    { v: TRIAL_RECORD_VERSION, activation: 'prelaunch', startedAt: T0 - 30 * DAY }]) {
+    const storage = memory({ [TRIAL_STORAGE_KEY]: JSON.stringify(record) });
+    assert.equal(loadTrial(storage, T0 + 20 * DAY)!.daysLeft, TRIAL_DAYS);
+    assert.equal(JSON.parse(storage.data.get(TRIAL_STORAGE_KEY)!).startedAt, T0 + 20 * DAY);
+  }
+  const visitorA = memory(), visitorB = memory();
+  loadTrial(visitorA, T0);
+  loadTrial(visitorB, T0 + 10 * DAY);
+  assert.equal(loadTrial(visitorA, T0 + 10 * DAY)!.expired, true);
+  assert.equal(loadTrial(visitorB, T0 + 10 * DAY)!.daysLeft, 7);
 });
 
 test('the trial cannot be tracked when storage is unavailable, so it never restricts', () => {
@@ -80,7 +81,8 @@ test('accounts unavailable or still loading never restrict, even after the trial
 test('restrictions stay off while accounts are being tested', () => {
   assert.equal(ACCESS_ENFORCEMENT_ENABLED, false);
   assert.equal(ACCOUNTS_ENABLED, true);
-  assert.equal(TRIAL_NOT_BEFORE, null);
+  assert.equal(CLOUD_BACKUP_ENABLED, false);
+  assert.equal(TRIAL_ACTIVATION_ID, 'early-access-1');
 });
 
 function sync(enforce: boolean, storage = memory(), now = T0) {
@@ -91,6 +93,7 @@ function sync(enforce: boolean, storage = memory(), now = T0) {
     storage,
     now: () => now,
     enforce,
+    schedule: () => () => {},
     setEditingAllowed: (a) => void allowed.push(a),
   });
   return { auth, allowed, s, storage };
@@ -109,7 +112,7 @@ test('with enforcement off the trial never starts: storage is not read or writte
 });
 
 test('with enforcement off even a stale expired record restricts nothing', () => {
-  const storage = memory({ [TRIAL_STORAGE_KEY]: JSON.stringify({ v: 2, startedAt: T0 - 20 * DAY }) });
+  const storage = memory({ [TRIAL_STORAGE_KEY]: JSON.stringify({ v: TRIAL_RECORD_VERSION, activation: TRIAL_ACTIVATION_ID, startedAt: T0 - 20 * DAY }) });
   const { s, allowed } = sync(false, storage);
   s.start();
   assert.equal(s.store.getState().canCreateOrEdit, true);
@@ -117,10 +120,11 @@ test('with enforcement off even a stale expired record restricts nothing', () =>
 });
 
 test('with enforcement on, an expired guest is restricted and signing in lifts it without touching the trial record', () => {
-  const record = JSON.stringify({ v: 2, startedAt: T0 - 20 * DAY });
+  const record = JSON.stringify({ v: TRIAL_RECORD_VERSION, activation: TRIAL_ACTIVATION_ID, startedAt: T0 - 20 * DAY });
   const storage = memory({ [TRIAL_STORAGE_KEY]: record });
   const { s, allowed, auth } = sync(true, storage);
   s.start();
+  s.beginUse();
   assert.equal(allowed.at(-1), false);
   auth.setState({ status: 'signedIn' });
   assert.equal(s.store.getState().level, 'full');
@@ -147,4 +151,49 @@ test('the AI header button state follows the account only, and the low-credit st
   assert.equal(aiAccountState({ ...base, auth: 'signedIn', subscription: { status: 'active' }, credits: 3, lowThreshold: 5 }), 'low-credits');
   assert.equal(aiAccountState({ ...base, accountsAvailable: false }), 'free'); // purely local build: nothing to sign in to
   assert.equal(LOW_CREDIT_THRESHOLD, null);
+});
+
+
+test('welcome, legal screens and registered sessions do not start a guest trial', () => {
+  const { s, storage, auth } = sync(true);
+  const stop = s.start();
+  assert.equal(storage.data.size, 0);
+  s.refresh();
+  assert.equal(storage.data.size, 0);
+  auth.setState({ status: 'signedIn' });
+  s.beginUse();
+  assert.equal(storage.data.size, 0);
+  auth.setState({ status: 'signedOut' });
+  assert.equal(JSON.parse(storage.data.get(TRIAL_STORAGE_KEY)!).startedAt, T0);
+  stop();
+});
+
+test('trial persistence survives new app instances and unrelated refreshes; active tabs expire at seven days', () => {
+  const storage = memory();
+  let now = T0;
+  let expiry: (() => void) | undefined;
+  let delay = 0;
+  const auth = createStore<any>()(() => ({ status: 'signedOut' }));
+  const make = () => createAccessSync({ auth, storage, now: () => now, enforce: true,
+    setEditingAllowed() {}, schedule(callback, ms) { expiry = callback; delay = ms; return () => { expiry = undefined; }; } });
+  const first = make();
+  const stop = first.start(); first.beginUse();
+  const record = storage.data.get(TRIAL_STORAGE_KEY);
+  first.refresh(); first.beginUse();
+  assert.equal(storage.data.get(TRIAL_STORAGE_KEY), record);
+  assert.equal(delay, 7 * DAY);
+  stop();
+  now += 7 * DAY - 1;
+  const reopened = make(); const stopAgain = reopened.start(); reopened.beginUse();
+  assert.equal(reopened.store.getState().canCreateOrEdit, true);
+  assert.equal(delay, 1);
+  now += 1; expiry!();
+  assert.equal(reopened.store.getState().level, 'expired');
+  assert.equal(reopened.store.getState().canView, true);
+  assert.equal(reopened.store.getState().canExport, true);
+  assert.equal(reopened.store.getState().canCreateOrEdit, false);
+  assert.equal(storage.data.get(TRIAL_STORAGE_KEY), record);
+  auth.setState({ status: 'signedIn' });
+  assert.equal(reopened.store.getState().canCreateOrEdit, true);
+  stopAgain();
 });

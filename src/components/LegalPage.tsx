@@ -82,6 +82,7 @@ export default function LegalPage({ kind }: { kind: LegalKind }) {
         ))}
       </main>
       <footer className="legal-page-footer">
+        <a href="/licenses/index.html">{t('legalPage.licenses')}</a>
         <a href={LEGAL_PATH[other]}>{t(`legalPage.other.${other}`)}</a>
         <a href="/">{t('legalPage.back')}</a>
       </footer>

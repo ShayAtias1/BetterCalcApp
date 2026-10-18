@@ -36,6 +36,7 @@ const { accountStore } = await import('../../src/store/accountStore.ts');
 const { FLAGS_OFF } = await import('../../src/lib/account/accountApi.ts');
 const { AuthForm } = await import('../../src/components/AuthDialog.tsx');
 const { default: Gate } = await import('../../src/components/LegalAccessGate.tsx');
+const { default: CloudBackupDialog } = await import('../../src/components/CloudBackupDialog.tsx');
 const { default: AccountPage } = await import('../../src/components/AccountPage.tsx');
 const { useAccountUi } = await import('../../src/store/accountUi.ts');
 const { translate } = await import('../../src/i18n/index.ts');
@@ -80,4 +81,11 @@ test('temporary verification failure keeps local controls mounted with one non-m
   assert.match(html, /local-project-controls/);
   assert.doesNotMatch(html, /<dialog/);
   assert.equal((html.match(/class="access-notice"/g) ?? []).length, 1);
+});
+
+
+test('Early Access cloud backup stays unavailable without mounting upload or restore controls', () => {
+  const html = render(CloudBackupDialog, { onClose() {} });
+  assert.ok(html.includes(translate('he', 'cloud.earlyAccessUnavailable')));
+  assert.doesNotMatch(html, /<input|<progress|type="checkbox"/);
 });
