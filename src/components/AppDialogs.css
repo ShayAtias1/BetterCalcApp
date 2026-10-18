@@ -6,6 +6,9 @@
 .app-dialog::backdrop { background: rgba(20, 24, 36, .4); }
 .app-dialog h2 { font: var(--t-title); font-size: 16px; margin: 0 0 12px; }
 .app-dialog-message { white-space: pre-line; line-height: 1.6; margin: 0 0 16px; color: var(--text); }
+.app-dialog-toggle { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; cursor: pointer; color: var(--text); line-height: 1.4; }
+.app-dialog-toggle input { inline-size: 18px; block-size: 18px; margin: 0; flex: none; accent-color: var(--accent); cursor: pointer; }
+.app-dialog-warning { padding: 10px 12px; border-radius: var(--r-md, 8px); border: 1px solid var(--danger); color: var(--danger); font-weight: 600; }
 .app-dialog-input { width: 100%; box-sizing: border-box; }
 .app-dialog .app-dialog-danger { background: var(--danger); color: var(--bg-surface); border-color: var(--danger); }
 .app-dialog-wide { width: min(1100px, calc(100vw - 32px)); }

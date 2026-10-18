@@ -46,7 +46,7 @@ declare
   configured jsonb := (select s.value from public.commercial_settings s where s.key = 'legal_version');
   expected text := case when jsonb_typeof(configured) = 'string' then configured #>> '{}' else 'pending' end;
   accepted_at timestamptz;
-  recorded integer;
+  privacy_at timestamptz;
 begin
   if uid is null then raise exception 'not_authenticated' using errcode = '28000'; end if;
   if clean is null then raise exception 'invalid_name' using errcode = 'P0001'; end if;
@@ -56,21 +56,20 @@ begin
   perform 1 from public.profiles where id = uid for update;
   if not found then raise exception 'profile_missing' using errcode = 'P0001'; end if;
   -- The profile row lock above serialises concurrent calls of one user; the unique index is the backstop.
-  -- A repeat acceptance of the same version keeps the original server timestamps and adds no row.
-  accepted_at := clock_timestamp();
+  -- A repeat acceptance of a version already accepted adds no row and reuses that record's original server
+  -- timestamps. That also covers a rollback (v1 -> v2 -> v1): the profile points at v1 again, with v1's own
+  -- acceptance time, so the user is not asked to accept the same version twice.
   insert into public.legal_consents (user_id, document_version, terms_accepted_at, privacy_accepted_at, source)
-    values (uid, expected, accepted_at, accepted_at, 'explicit')
+    values (uid, expected, clock_timestamp(), clock_timestamp(), 'explicit')
     on conflict (user_id, document_version) where source = 'explicit' do nothing;
-  get diagnostics recorded = row_count;
-  if recorded > 0 then
-    update public.profiles
-       set display_name = clean, terms_version = expected,
-           terms_accepted_at = accepted_at, privacy_accepted_at = accepted_at,
-           onboarding_completed_at = coalesce(onboarding_completed_at, accepted_at)
-     where id = uid;
-  else
-    update public.profiles set display_name = clean where id = uid;
-  end if;
+  select c.terms_accepted_at, c.privacy_accepted_at into accepted_at, privacy_at
+    from public.legal_consents c
+   where c.user_id = uid and c.document_version = expected and c.source = 'explicit';
+  update public.profiles
+     set display_name = clean, terms_version = expected,
+         terms_accepted_at = accepted_at, privacy_accepted_at = privacy_at,
+         onboarding_completed_at = coalesce(onboarding_completed_at, accepted_at)
+   where id = uid;
 end $$;
 revoke execute on function public.complete_onboarding(text, text) from public, anon;
 grant execute on function public.complete_onboarding(text, text) to authenticated;

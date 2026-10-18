@@ -55,7 +55,7 @@ export function initialsOf(name: string | null, email: string | null): string {
 }
 
 // ---------------------------------------------------------------- name shown before the profile has loaded
-const NAME_CACHE_KEY = 'bettercalc.profile-name';
+export const NAME_CACHE_KEY = 'bettercalc.profile-name';
 type NameStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
 /** The last saved display name of this user on this device, so the header can show it at once on the next visit. */

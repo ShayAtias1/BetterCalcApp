@@ -8,17 +8,39 @@ import { useAccessPrompt } from '../lib/access/editGuard';
 import { accessSync } from '../lib/access/accessSync';
 import { ACCESS_ENFORCEMENT_ENABLED, ACCOUNTS_ENABLED } from '../lib/access/accessPolicy';
 import { initialsOf, planName, readCachedName } from '../lib/account/accountApi';
-import { confirmDialog, notify } from '../lib/appDialogs';
+import { confirmDialog, confirmDialogWithToggle, notify } from '../lib/appDialogs';
+import { clearLocalData } from '../lib/account/localDataWipe';
+import { markLocalDataCleared } from '../lib/account/clearedNote';
+import { deleteLocalDatabase } from '../db/database';
 import ResponsivePopover from './ResponsivePopover';
 import './Account.css';
 
-/** Signs out after the confirmation. Projects stay in this browser either way. */
+/**
+ * Signs out after the confirmation. Projects stay in this browser unless the user switches on "clear local data"
+ * and confirms a second, separate warning; nothing is ever deleted otherwise, and cloud data is never touched.
+ */
 export async function confirmSignOut(t: ReturnType<typeof useT>): Promise<void> {
-  if (!await confirmDialog(t('acct.signOutConfirm'), { title: t('acct.signOutTitle'), confirmLabel: t('account.signOut'), destructive: true })) return;
-  if ((await authStore.getState().signOut()).ok) {
-    useAccountUi.getState().closePage();
+  const { confirmed, toggled } = await confirmDialogWithToggle(t('acct.signOutConfirm'), {
+    title: t('acct.signOutTitle'), confirmLabel: t('account.signOut'), destructive: true,
+    toggleLabel: t('acct.clearLocalLabel'), toggleWarning: t('acct.clearLocalWarning'), toggleConfirmLabel: t('acct.clearLocalAction'),
+  });
+  if (!confirmed) return;
+  if (toggled && !await confirmDialog(t('acct.clearLocalConfirm'), { title: t('acct.clearLocalConfirmTitle'), confirmLabel: t('acct.clearLocalAction'), destructive: true })) return;
+  if (!(await authStore.getState().signOut()).ok) return;
+  useAccountUi.getState().closePage();
+  if (!toggled) {
     notify(t('acct.signedOutNote'), { label: t('account.signIn'), run: () => useAccessPrompt.getState().show('account') });
+    return;
   }
+  const cleared = await clearLocalData({
+    deleteDatabase: deleteLocalDatabase,
+    local: typeof localStorage === 'undefined' ? null : localStorage,
+    session: typeof sessionStorage === 'undefined' ? null : sessionStorage,
+  });
+  if (!cleared) { notify(t('acct.clearFailedNote')); return; }
+  // In-memory plans must not outlive the deleted database (or be saved back by autosave): start from a clean page.
+  markLocalDataCleared();
+  window.location.reload();
 }
 
 /**

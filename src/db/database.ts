@@ -89,6 +89,25 @@ function getDb(): Promise<IDBPDatabase<QtoDB>> {
   return dbPromise;
 }
 
+/**
+ * Permanently deletes the whole local project database (plans, folders, comparisons, PDFs, AI records).
+ * Only the explicit "clear local data on sign out" flow calls this. Afterwards every database call fails
+ * until the page is reloaded, so a late autosave cannot silently recreate a plan.
+ * Resolves false when another tab keeps the database open.
+ */
+export async function deleteLocalDatabase(): Promise<boolean> {
+  const open = dbPromise;
+  dbPromise = Promise.reject(new Error('local data was cleared; reload the page'));
+  dbPromise.catch(() => undefined);
+  try { (await open)?.close(); } catch { /* it never opened */ }
+  return new Promise<boolean>((resolve) => {
+    const request = indexedDB.deleteDatabase(DB_NAME);
+    request.onsuccess = () => resolve(true);
+    request.onerror = () => resolve(false);
+    request.onblocked = () => resolve(false);
+  });
+}
+
 // ---------- plan-dependent records ----------
 
 /** Stores whose records belong to a plan through a `planId` field (no index): deleted with the plan. */

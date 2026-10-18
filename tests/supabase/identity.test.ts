@@ -117,6 +117,26 @@ test('adversarial: hundreds of repeated and concurrent acceptances leave one row
   } finally { await setLegalVersion(null); }
 });
 
+test('rollback v1 -> v2 -> v1 reuses the v1 acceptance: profile consistent, no extra row, no consent loop', async () => {
+  try {
+    await setLegalVersion('v1');
+    await as(A, () => db.exec("select public.complete_onboarding('Dana', 'v1')"));
+    const v1 = (await q(`select terms_accepted_at, privacy_accepted_at from public.profiles where id = '${A}'`))[0];
+    await setLegalVersion('v2');
+    await as(A, () => db.exec("select public.complete_onboarding('Dana', 'v2')"));
+    assert.equal((await q(`select terms_version from public.profiles where id = '${A}'`))[0].terms_version, 'v2');
+    await setLegalVersion('v1');
+    await as(A, () => db.exec("select public.complete_onboarding('Dana', 'v1')"));
+    await as(A, () => db.exec("select public.complete_onboarding('Dana', 'v1')")); // and idempotent afterwards
+    const p = (await q(`select terms_version, terms_accepted_at, privacy_accepted_at from public.profiles where id = '${A}'`))[0];
+    assert.equal(p.terms_version, 'v1');
+    assert.equal(p.terms_accepted_at.getTime(), v1.terms_accepted_at.getTime());
+    assert.equal(p.privacy_accepted_at.getTime(), v1.privacy_accepted_at.getTime());
+    const rows = await q(`select document_version from public.legal_consents where user_id = '${A}' order by terms_accepted_at`);
+    assert.deepEqual(rows.map((r) => r.document_version), ['v1', 'v2']); // history intact, nothing added
+  } finally { await setLegalVersion(null); }
+});
+
 test('the migration preserves legacy versions and timestamps without fabricating missing evidence', async () => {
   const legacy = new PGlite();
   try {
