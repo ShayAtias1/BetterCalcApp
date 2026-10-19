@@ -8,10 +8,8 @@ import { useT } from '../i18n';
 import { useAccountUi } from '../store/accountUi';
 import { useAiAccountState } from '../lib/access/useAiAccountState';
 import { LockIcon } from './AiComingSoonDialog';
+import { LOCAL_AI_TOOLS } from '../lib/access/localAiTools';
 import './Account.css';
-
-/** The live detection tools (they call the local AI proxy) are a deliberate opt-in; otherwise dev shows the same locked rows as production. */
-const DEV_AI_TOOLS = import.meta.env.DEV && import.meta.env.VITE_AI_DEV_TOOLS === 'true';
 
 /**
  * The header's AI menu: reviewing saved results (free, nothing is sent) above running a new detection
@@ -52,13 +50,13 @@ export default function AiMenu({ openId, setOpenId }: { openId: MenuId | null; s
         className={`top-bar-ai-btn ai-state-${accountState} ${open || mode ? 'active' : ''}`}
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        title={accountState === 'guest' ? t('acct.aiStateGuest') : accountState === 'free' ? t('acct.aiStateFree') : accountState === 'low-credits' ? t('acct.aiStateLow', { count: credits }) : undefined}
+        title={LOCAL_AI_TOOLS ? undefined : accountState === 'guest' ? t('acct.aiStateGuest') : accountState === 'free' ? t('acct.aiStateFree') : accountState === 'low-credits' ? t('acct.aiStateLow', { count: credits }) : undefined}
         // A guest is asked for an account, unless there are saved results to review (those stay reachable).
-        onClick={() => (accountState === 'guest' && !savedResults ? setAiDialog('guest') : setOpenId(open ? null : 'ai'))}
+        onClick={() => (!LOCAL_AI_TOOLS && accountState === 'guest' && !savedResults ? setAiDialog('guest') : setOpenId(open ? null : 'ai'))}
       >
         {t('aiMenu.button')}
         {/* Everything that decorates "AI" follows the text, so it sits on the left in Hebrew and on the right in English. */}
-        {(accountState === 'guest' || accountState === 'free') && <LockIcon />}
+        {!LOCAL_AI_TOOLS && (accountState === 'guest' || accountState === 'free') && <LockIcon />}
         {accountState === 'low-credits' && <span className="ai-credit-chip">{credits}</span>}
         {pending > 0 && <span className="top-bar-ai-count" aria-label={t('aiMenu.pendingLabel', { count: pending })}>{pending}</span>}
       </button>
@@ -70,7 +68,7 @@ export default function AiMenu({ openId, setOpenId }: { openId: MenuId | null; s
             {row('spaces', t('aiReviewWorkspace.title'), t('aiReviewWorkspace.progress', { resolved: spaces.resolved, total: spaces.total }), spaces.pending, spaces.available)}
             {row('openings', t('openingAiReview.title'), t('openingAiReview.progress', { resolved: openings.resolved, total: openings.total }), openings.pending, openings.available)}
           </div>
-          {DEV_AI_TOOLS ? <div className="ai-menu-section ai-menu-run">
+          {LOCAL_AI_TOOLS ? <div className="ai-menu-section ai-menu-run">
             <p className="ai-menu-title">{t('aiMenu.runNew')}</p>
             <AiSpaceDetectionPanel />
           </div> : <div className="ai-menu-section ai-menu-run">

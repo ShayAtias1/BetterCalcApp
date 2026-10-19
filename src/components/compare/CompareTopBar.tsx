@@ -1,6 +1,7 @@
 import { CompareHeaderCalibration } from './CompareContextBar';
 import { useAiAccountState } from '../../lib/access/useAiAccountState';
 import { LockIcon } from '../AiComingSoonDialog';
+import { LOCAL_AI_TOOLS } from '../../lib/access/localAiTools';
 import '../Account.css';
 import { useEffect, useState } from 'react';
 import { compareScaleFor, selectCompareSaveState, useCompareStore } from '../../store/compareStore';
@@ -242,7 +243,7 @@ export default function CompareTopBar({
           title={t('revisionAi.intro')}
         >
           {t('revisionAi.topBarButton')}
-          {(accountState === 'guest' || accountState === 'free') && <LockIcon />}
+          {!LOCAL_AI_TOOLS && (accountState === 'guest' || accountState === 'free') && <LockIcon />}
         </button>
 
         <LanguageSwitch />

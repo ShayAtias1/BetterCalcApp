@@ -15,6 +15,7 @@ import { isOpeningDifference, openingImpact, openingImpactReady, openingWallThic
 import { openingGeometryNeedsVerification, openingFootprint, setOpeningThickness, rotateOpening90, EDIT_TYPES, editTypeOf, familyOf, hasUnplacedLines, removeElement, retypeChange, setOpeningHeight, sidesOf, isAiWallChange, wallGeometryNeedsVerification, wallHasFootprint } from '../../lib/revision/changeEdit';
 import {
   applyApprovedChanges,
+  runAiPageAnalysis,
   swapSelectedChange,
   focusChange,
   revertRevisionApplication,
@@ -30,6 +31,7 @@ import { revisionTypeLabelKey } from './revisionTerminology';
 import { useAiAccountState } from '../../lib/access/useAiAccountState';
 import { useAccountUi } from '../../store/accountUi';
 import { LockIcon } from '../AiComingSoonDialog';
+import { LOCAL_AI_TOOLS } from '../../lib/access/localAiTools';
 import '../Account.css';
 import './RevisionDetect.css';
 import Select from '../Select';
@@ -571,6 +573,7 @@ function DetectTools({ readOnly }: { readOnly: boolean }) {
   const setContext = useCompareStore((s) => s.setComparisonContext);
   const setBase = useCompareStore((s) => s.setRevisionBase);
   const detecting = useRevisionUi((s) => s.detecting);
+  const aiBusy = useRevisionUi((s) => s.aiBusy);
   const progress = useRevisionUi((s) => s.progress);
   const step = useRevisionUi((s) => s.step);
   const { analysis } = useActiveAnalysis();
@@ -607,9 +610,9 @@ function DetectTools({ readOnly }: { readOnly: boolean }) {
 
       <section className="revision-section">
         {!readOnly && (
-          // AI is not available yet: the action is locked and explains why (nothing runs, nothing is spent).
-          <button className="btn-primary small" title={`${t('revisionAi.intro')}\n${t('revisionAi.page.intro')}`} disabled={!revision} onClick={() => setAiDialog(accountState === 'guest' ? 'guest' : 'soon')}>
-            <Icon name="scan" size={13} /> {t('revisionAi.page.run')} <span className="soon-badge">{t('acct.soon')}<LockIcon /></span>
+          // Local development uses the existing consent/cost-protected workflow; production remains locked.
+          <button className="btn-primary small" title={`${t('revisionAi.intro')}\n${t('revisionAi.page.intro')}`} disabled={!revision || (LOCAL_AI_TOOLS && (aiBusy || detecting))} onClick={() => { if (LOCAL_AI_TOOLS) void runAiPageAnalysis(); else setAiDialog(accountState === 'guest' ? 'guest' : 'soon'); }}>
+            <Icon name="scan" size={13} /> {t('revisionAi.page.run')} {!LOCAL_AI_TOOLS && <span className="soon-badge">{t('acct.soon')}<LockIcon /></span>}
           </button>
         )}
         {detecting && step && (
