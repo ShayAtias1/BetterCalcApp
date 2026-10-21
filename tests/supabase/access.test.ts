@@ -78,8 +78,8 @@ test('accounts unavailable or still loading never restrict, even after the trial
   }
 });
 
-test('restrictions stay off while accounts are being tested', () => {
-  assert.equal(ACCESS_ENFORCEMENT_ENABLED, false);
+test('public Early Access enables the personal trial with accounts available and cloud backup off', () => {
+  assert.equal(ACCESS_ENFORCEMENT_ENABLED, true);
   assert.equal(ACCOUNTS_ENABLED, true);
   assert.equal(CLOUD_BACKUP_ENABLED, false);
   assert.equal(TRIAL_ACTIVATION_ID, 'early-access-1');

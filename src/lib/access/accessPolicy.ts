@@ -2,10 +2,10 @@ import type { AuthStatus } from '../../store/authStore';
 import type { TrialStatus } from './trial';
 
 /**
- * Master switch for restrictions. Off until the sign-in screens exist (Phase 1D): an expired guest could
- * not register, so nothing may lock editing before then. The policy below is computed either way.
+ * Public Early Access restrictions. Enabled only after public Google registration/sign-in was verified.
+ * Registered users retain unlimited free manual access; expired guests keep view/export/local backup.
  */
-export const ACCESS_ENFORCEMENT_ENABLED = false;
+export const ACCESS_ENFORCEMENT_ENABLED = true;
 
 /**
  * Master switch for accounts in the running app: sign-in screens, the account menu, notices, session
