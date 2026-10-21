@@ -1,5 +1,10 @@
 # Early Access legal drafts — owner review required
 
+Historical draft review, superseded by the finalized `ea-2026-10-18-v1` documents
+and [the current launch checkpoint](../LAUNCH-2026-10-22.md). The pending-version,
+identity/contact and unapplied-migration statements below describe the earlier
+review stage, not the current release state. Do not repeat completed migrations.
+
 The Hebrew and English Terms and Privacy Policy in `src/lib/legal/legalContent.ts`
 remain drafts, version `pending`. No publication/effective date is assigned. This
 review checks repository behavior, not production deployment or provider dashboards.

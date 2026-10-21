@@ -1,5 +1,9 @@
 # Netlify and Google OAuth — launch checkpoint
 
+Historical 18 October preparation record. See [LAUNCH-2026-10-22.md](LAUNCH-2026-10-22.md)
+for the current account-transfer audit and release gates. Migrations 23/24 were
+subsequently applied on 18 October and verified again on 22 October; never rerun them.
+
 Updated 18 October 2026. Safe configuration preparation was authorized by the owner.
 No push, deployment, OAuth publication, trial activation or production migration.
 A free read-only logical backup and isolated SQL restore are now verified; see the
@@ -75,12 +79,11 @@ Published provider policies do not by themselves establish the operator's legal 
    are added; liability/indemnity and retention match the approved basis. The
    previously stated legal-review risks remain; no immunity or fixed deletion-success
    deadline is promised.
-3. SQL backup and isolated recovery passed (checkpoint below). Before migrations
-   23/24, confirm the approved affected-object recovery procedure and refresh the
-   checkpoint if production data changed. No permanent password reset or migration
-   was performed; the owner explicitly approved a temporary read-only CLI login.
-4. Obtain one consolidated final release approval before migrations (only after
-   recovery), push/deploy, OAuth publication and public trial activation.
+3. SQL backup and isolated recovery passed (checkpoint below). Migrations 23/24
+   were subsequently completed. Refresh recovery evidence if production data changed;
+   the 22 October audit detected updated auth data after the account transfer.
+4. Obtain one consolidated final release approval before legal metadata cutover,
+   push/deploy, OAuth publication and public trial activation.
 
 
 ## Verified free database recovery checkpoint
@@ -113,8 +116,8 @@ Published provider policies do not by themselves establish the operator's legal 
 
 1. Resolve blockers above. Run production release preflight with the actual hosting
    variables and finalized immutable legal version; keep commercial flags false.
-2. Apply 23 then 24 transactionally through normal migration tooling only after
-   recovery verification and explicit authority. Coordinate backend/client version.
+2. Do not reapply 23/24. Coordinate only the prepared legal metadata cutover with
+   publication of the matching client, after recovery verification and approval.
 3. Deploy policies-stage build with guest enforcement off. Verify current HTTPS,
    legal routes, headers and absence of analytics network requests on that new build.
 4. Finish Google's support-email/brand/domain requirements and publish only with

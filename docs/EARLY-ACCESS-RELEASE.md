@@ -1,5 +1,9 @@
 # BetterCalc Early Access — release checkpoint
 
+Current launch audit: [LAUNCH-2026-10-22.md](LAUNCH-2026-10-22.md). Migrations 23 and
+24 were applied and verified on 18 October and remain present after the account
+transfer. **Do not reapply them.** Older baseline observations below are historical.
+
 Status: **prepared locally, not approved or deployed**. No production action below
 is authorized until the owner explicitly approves the final release sequence.
 Never print secrets, invoke production deletion for a smoke test, or edit user projects.
@@ -16,7 +20,7 @@ Never print secrets, invoke production deletion for a smoke test, or edit user p
   enforcement is intentionally not tamper-proof. Do not reset the activation ID later.
 - Consent history, immutable API access, fresh acceptance timestamps, billing write
   restrictions and offline/race fixes are in commit `0cbcfb6`; production migration
-  `20261023000000_early_access_legal_consent.sql` is still pending.
+  `20261023000000_early_access_legal_consent.sql` and migration 24 are already applied.
 - Netlify configuration pins Node 24, builds `dist`, and runs `release:check` before
   building. It intentionally rejects pending legal documents, unresolved facts,
   development contacts, tracking variables, unsafe public keys and unapproved trial
@@ -99,8 +103,8 @@ Current applied Netlify/Google preparation and remaining release blockers:
    Public URLs must work before completing OAuth publication. Do not use fake contact.
 3. Confirm database backup/recovery arrangements. Review migration diff and dependencies
    (existing 20261016–22 schema, billing policies, profile/consent RPC). Run local SQL
-   regression tests. With approved release authority, apply pending 20261023 and then 20261024
-   through the normal migration process, each transactionally. Migration 24 tightens
+   regression evidence. Migrations 20261023 and 20261024 were applied on 18 October;
+   verify their recorded presence without executing them again. Migration 24 tightens
    completed-backup reads and API sequence permissions without enabling cloud access. Migration 23 adds/backfills history without fabricating
    missing legacy evidence, preserves invoice data and original onboarding timestamp,
    and does not enable AI, payments, credit purchases or cloud entitlements.
