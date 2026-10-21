@@ -196,3 +196,39 @@ test('the name the provider put in the session is available at once, trimmed and
   await store.getState().init();
   assert.equal(store.getState().user?.metaName, 'שי אטיאס');
 });
+
+test('a stalled session refresh stops blocking local use and can recover later', async () => {
+  let finish!: (value: unknown) => void;
+  const pending = new Promise((resolve) => { finish = resolve; });
+  const f = fakeAuth({ getSession: () => pending });
+  const { removed, storage } = storageSpy();
+  const store = createAuthStore({ loadAuth: async () => f.auth, storage: () => storage, returnUrl: () => '', initTimeoutMs: 5 });
+  await store.getState().init();
+  assert.equal(store.getState().status, 'signedOut');
+  assert.equal(store.getState().networkIssue, true);
+  assert.deepEqual(removed, []);
+  finish({ data: { session }, error: null });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(store.getState().status, 'signedIn');
+  assert.equal(store.getState().networkIssue, false);
+});
+
+test('a delayed initial session cannot undo a newer sign-out', async () => {
+  let finish!: (value: unknown) => void;
+  const f = fakeAuth({ getSession: () => new Promise((resolve) => { finish = resolve; }) });
+  const store = createAuthStore({ loadAuth: async () => f.auth, storage: () => null, returnUrl: () => '', initTimeoutMs: 5 });
+  await store.getState().init();
+  f.emit('SIGNED_IN', session);
+  f.emit('SIGNED_OUT');
+  finish({ data: { session }, error: null });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(store.getState().status, 'signedOut');
+  assert.equal(store.getState().user, null);
+});
+
+test('SDK loading failure also settles initialization', async () => {
+  const store = createAuthStore({ loadAuth: async () => { throw new TypeError('Failed to fetch'); }, storage: () => null, returnUrl: () => '' });
+  await store.getState().init();
+  assert.equal(store.getState().status, 'signedOut');
+  assert.equal(store.getState().networkIssue, true);
+});

@@ -43,6 +43,8 @@ export interface AuthDeps {
   returnUrl: () => string;
   /** A CAPTCHA token for the code request, or undefined while CAPTCHA is inactive. */
   captchaToken?: () => Promise<string | undefined>;
+  /** Stop blocking local use while the SDK retries an unavailable session refresh. */
+  initTimeoutMs?: number;
 }
 
 const metaNameOf = (session: Session): string | null => {
@@ -74,24 +76,49 @@ export function createAuthStore(deps: AuthDeps) {
 
     init() {
       initialized ??= (async () => {
-        const auth = await deps.loadAuth();
-        if (!auth) return set({ status: 'unconfigured' });
-        // Callbacks only set state: calling the SDK from inside one can deadlock it.
-        auth.onAuthStateChange((event, session) => {
-          if (event === 'SIGNED_OUT') {
-            const wasSignedIn = get().status === 'signedIn';
-            set({ status: 'signedOut', user: null, sessionExpired: wasSignedIn && !signingOut });
-          } else if (session) {
-            set({ status: 'signedIn', user: toUser(session), sessionExpired: false, networkIssue: false });
+        let authRevision = 0;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const restore = (async () => {
+          try {
+            const auth = await deps.loadAuth();
+            if (!auth) return set({ status: 'unconfigured', networkIssue: false });
+            // Callbacks only set state: calling the SDK from inside one can deadlock it.
+            auth.onAuthStateChange((event, session) => {
+              if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && !session)) {
+                authRevision++;
+                const wasSignedIn = get().status === 'signedIn';
+                set({ status: 'signedOut', user: null, sessionExpired: wasSignedIn && !signingOut });
+              } else if (session) {
+                authRevision++;
+                set({ status: 'signedIn', user: toUser(session), sessionExpired: false, networkIssue: false });
+              }
+            });
+            const revision = authRevision;
+            const { data, error } = await auth.getSession();
+            // A newer auth event wins over a delayed initial session read.
+            if (revision !== authRevision) return;
+            if (data.session) set({ status: 'signedIn', user: toUser(data.session), networkIssue: false });
+            else set({ status: 'signedOut', user: null, networkIssue: !!error && classifyAuthError(error) === 'network' });
+          } catch (error) {
+            if (get().status === 'loading') {
+              set({ status: 'signedOut', user: null, networkIssue: classifyAuthError(error) === 'network' });
+            }
           }
-        });
+        })();
+        // Keep the SDK/session intact: a late verified session can still restore account access.
+        // Until then the existing guest/local consent and entitlement checks remain in force.
         try {
-          // Reads the persisted session; works offline while the access token or refresh can still be honoured.
-          const { data, error } = await auth.getSession();
-          if (data.session) set({ status: 'signedIn', user: toUser(data.session) });
-          else set({ status: 'signedOut', user: null, networkIssue: !!error && classifyAuthError(error) === 'network' });
-        } catch (error) {
-          set({ status: 'signedOut', user: null, networkIssue: classifyAuthError(error) === 'network' });
+          await Promise.race([
+            restore,
+            new Promise<void>((resolve) => {
+              timer = setTimeout(() => {
+                if (get().status === 'loading') set({ status: 'signedOut', user: null, networkIssue: true });
+                resolve();
+              }, deps.initTimeoutMs ?? 5_000);
+            }),
+          ]);
+        } finally {
+          clearTimeout(timer);
         }
       })();
       return initialized;
