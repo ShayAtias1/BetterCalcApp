@@ -13,6 +13,16 @@ a.link-button:hover { text-decoration: underline; }
 .legal-access-state { inline-size: min(440px, 100%); box-sizing: border-box; }
 .legal-access-state p { margin: 0; font: var(--t-body); color: var(--text-2); }
 
+.app-loading { display: flex; flex-direction: column; align-items: center; gap: var(--s-3); padding: var(--s-4); text-align: center; }
+.app-loading-mark { display: grid; place-items: center; inline-size: 72px; block-size: 72px; margin-block-end: var(--s-1); border: 1px solid var(--divider); border-radius: 22px; background: var(--bg-surface); box-shadow: 0 8px 24px rgb(15 23 42 / 4%); }
+.app-loading-mark .app-brand-symbol { inline-size: 44px; block-size: 22px; }
+.app-loading-name { color: var(--text-h); font: 600 18px/1.4 var(--sans); letter-spacing: -0.4px; }
+.app-loading-label { color: var(--text-2); font: var(--t-meta); }
+.app-loading-track { position: relative; overflow: hidden; inline-size: 112px; block-size: 3px; margin-block-start: var(--s-2); border-radius: var(--r-pill); background: var(--divider); }
+.app-loading-track::after { content: ''; position: absolute; inset-block: 0; left: 0; inline-size: 40%; border-radius: inherit; background: var(--accent); animation: app-loading-slide 1.5s ease-in-out infinite alternate; }
+@keyframes app-loading-slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+@media (prefers-reduced-motion: reduce) { .app-loading-track::after { animation: none; left: 30%; } }
+
 /* ---------------------------------------------------------------- sign-in / registration dialog */
 .auth-dialog { width: min(420px, calc(100vw - 32px)); }
 .auth-dialog .app-dialog-header, .ai-soon-dialog .app-dialog-header { position: static; margin: 0 0 var(--s-2); padding: 0; border: 0; }

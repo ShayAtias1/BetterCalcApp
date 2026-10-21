@@ -9,6 +9,7 @@ import { welcomeStore } from '../lib/access/welcome';
 import { accountStore } from '../store/accountStore';
 import { authStore } from '../store/authStore';
 import { useGuestConsent } from '../store/guestConsentStore';
+import BrandLogo from './BrandLogo';
 import GuestAckDialog from './GuestAckDialog';
 import OnboardingDialog from './OnboardingDialog';
 import WelcomeScreen from './WelcomeScreen';
@@ -53,11 +54,21 @@ export default function LegalAccessGate({ children }: { children: ReactNode }) {
   if (state === 'welcome') return <WelcomeScreen />;
   if (state === 'guest' || state === 'local-consent') return <GuestAckDialog localAccess={state === 'local-consent'} />;
   if (state === 'account') return <OnboardingDialog key={auth.user?.id} />;
+  if (state === 'wait') return (
+    <div className="legal-access-screen">
+      <section className="app-loading" role="status" aria-live="polite" aria-busy="true">
+        <div className="app-loading-mark"><BrandLogo /></div>
+        <span className="app-loading-name" dir="ltr" aria-hidden="true">BetterCalc</span>
+        <span className="app-loading-label">{t('common.loading')}</span>
+        <span className="app-loading-track" aria-hidden="true" />
+      </section>
+    </div>
+  );
   return (
     <div className="legal-access-screen">
       <section className="acct-card legal-access-state" role="status">
-        <p>{state === 'wait' ? t('common.loading') : t(state === 'version-mismatch' ? 'acct.consentVersionMismatch' : 'acct.consentUnavailable')}</p>
-        {state !== 'wait' && <>
+        <p>{t(state === 'version-mismatch' ? 'acct.consentVersionMismatch' : 'acct.consentUnavailable')}</p>
+        <>
           <nav className="acct-actions">
             <a className="link-button" href={LEGAL_PATH.terms} target="_blank" rel="noopener noreferrer">{t('acct.terms')}</a>
             <a className="link-button" href={LEGAL_PATH.privacy} target="_blank" rel="noopener noreferrer">{t('acct.privacy')}</a>
@@ -66,7 +77,7 @@ export default function LegalAccessGate({ children }: { children: ReactNode }) {
             <button type="button" className="btn-primary" disabled={account.loading} onClick={() => { if (state === 'version-mismatch') window.location.reload(); else void accountStore.getState().refresh(); }}>{t('acct.consentRetry')}</button>
             <button type="button" className="btn-secondary" onClick={() => void authStore.getState().signOut()}>{t('account.signOut')}</button>
           </div>
-        </>}
+        </>
       </section>
     </div>
   );
